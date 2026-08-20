@@ -24,8 +24,7 @@ local LocalPlayer = player
 --====================================================
 local LOGO_ID = "rbxassetid://140466936910510"
 local BG_ID = "rbxassetid://73019569338667"
-local DISCORD_LINK = "https://discord.gg/EKPb7BRDH8"
-local CORRECT_KEY = "Arin_&-_manjiro-key4"
+local DISCORD_LINK = "https://discord.gg/BbAtU5hRV"
 
 -- Platform detect: Mobile if touch and no keyboard
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
@@ -86,7 +85,7 @@ local keyTitle = Instance.new("TextLabel", KeyFrame)
 keyTitle.Size = UDim2.new(1, 0, 0, 36)
 keyTitle.Position = UDim2.new(0, 0, 0, 14)
 keyTitle.BackgroundTransparency = 1
-keyTitle.Text = "KHUB by Arin Kiyeon"
+keyTitle.Text = "KHUB by Arin Kiyeon | Animal Restaurant"
 keyTitle.Font = Enum.Font.GothamBold
 keyTitle.TextSize = 17
 keyTitle.TextColor3 = Color3.fromRGB(255, 165, 195)
@@ -124,7 +123,7 @@ copyBtn.Size = UDim2.new(1, -30, 0, 36)
 copyBtn.Position = UDim2.new(0, 15, 0, 135)
 copyBtn.BackgroundColor3 = Color3.fromRGB(180, 100, 30)
 copyBtn.BackgroundTransparency = 0.25
-copyBtn.Text = "Copy Discord Link (Get Key)"
+copyBtn.Text = "Get Key from Discord"
 copyBtn.Font = Enum.Font.GothamBold
 copyBtn.TextSize = 12
 copyBtn.TextColor3 = Color3.new(1, 1, 1)
@@ -163,17 +162,44 @@ keyStatus.TextColor3 = Color3.fromRGB(255, 120, 140)
 keyStatus.ZIndex = 5
 
 local keyPassed = false
+local function VerifyKey(inputKey)
+    local parts = string.split(inputKey, "-")
+    if #parts < 6 then return false, "Invalid key format!" end
+    local expTimestamp = tonumber(parts[#parts])
+    if not expTimestamp then return false, "Invalid key!" end
+    if os.time() > expTimestamp then return false, "Key expired! Get a new one." end
+    return true, "Key Verified!"
+end
+
 redeemBtn.MouseButton1Click:Connect(function()
-    if keyBox.Text == CORRECT_KEY then
+    local input = keyBox.Text
+    if not input or input == "" then
+        keyStatus.Text = "Please enter a key!"
+        keyStatus.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return
+    end
+    keyStatus.Text = "Verifying..."
+    keyStatus.TextColor3 = Color3.fromRGB(255, 200, 80)
+    task.wait(0.5)
+    local valid, message = VerifyKey(input)
+    if valid then
         keyPassed = true
-        keyStatus.Text = "Key Verified!"
-        keyStatus.TextColor3 = Color3.fromRGB(80, 255, 140)
-        task.wait(0.55)
+        keyStatus.Text = message
+        keyStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
+        redeemBtn.BackgroundColor3 = Color3.fromRGB(30, 100, 30)
+        redeemBtn.Text = "UNLOCKED"
+        redeemBtn.Interactable = false
+        keyBox.TextEditable = false
+        task.wait(0.8)
         KeyFrame:Destroy()
     else
-        keyStatus.Text = "Wrong Key"
-        keyStatus.TextColor3 = Color3.fromRGB(255, 80, 100)
+        keyStatus.Text = message
+        keyStatus.TextColor3 = Color3.fromRGB(255, 80, 80)
     end
+end)
+
+keyBox.FocusLost:Connect(function(enter)
+    if enter then redeemBtn.MouseButton1Click:Fire() end
 end)
 
 repeat task.wait(0.1) until keyPassed
