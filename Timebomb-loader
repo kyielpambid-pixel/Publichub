@@ -22,7 +22,7 @@ player.CharacterAdded:Connect(function(newChar) character = newChar end)
 
 local LOGO_ID = "rbxassetid://133992821244808"
 local BG_ID = "rbxassetid://73019569338667"
-local DISCORD_LINK = "https://discord.gg/BbAtU5hRV"
+local DISCORD_LINK = "https://discord.gg/EKPb7BRDH8"
 
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
@@ -270,7 +270,7 @@ keyStatus.TextColor3 = Color3.fromRGB(255, 120, 140)
 keyStatus.ZIndex = 5
 
 local isUnlocked = false
-local KEY_FILE = "KHUB_Public_Key.txt"
+local KEY_FILE = "KHUB_Public_TimebombHitbox_Key.txt"
 local savedKeyString = nil
 local keyExpiryTime = 0 -- unix timestamp
 
