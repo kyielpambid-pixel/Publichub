@@ -26,7 +26,7 @@ local isMobile = UserInputService.TouchEnabled and not UserInputService.Keyboard
 --====================================================
 local LOGO_ID = "rbxassetid://140466936910510"
 local BG_ID = "rbxassetid://73019569338667"
-local DISCORD_LINK = "https://discord.gg/BbAtU5hRV"
+local DISCORD_LINK = "https://discord.gg/EKPb7BRDH8"
 
 local ParentTarget = (gethui and gethui()) or player:WaitForChild("PlayerGui")
 pcall(function()
@@ -172,6 +172,30 @@ local function VerifyKey(inputKey)
     return true, "Key Verified!"
 end
 
+local KEY_FILE = "KHUB_Karinderya_Key.txt"
+local function SaveKey(key)
+    pcall(function() if writefile then writefile(KEY_FILE, key) end end)
+end
+local function LoadSavedKey()
+    local ok, data = pcall(function()
+        if isfile and isfile(KEY_FILE) and readfile then return readfile(KEY_FILE) end
+        return nil
+    end)
+    if ok and data and data ~= "" then
+        local valid = VerifyKey(data)
+        if valid then return data end
+        pcall(function() if delfile and isfile(KEY_FILE) then delfile(KEY_FILE) end end)
+    end
+    return nil
+end
+local function ClearSavedKey()
+    pcall(function()
+        if isfile and isfile(KEY_FILE) and delfile then delfile(KEY_FILE)
+        elseif writefile then writefile(KEY_FILE, "") end
+    end)
+end
+
+
 redeemBtn.MouseButton1Click:Connect(function()
     local input = keyBox.Text
     if not input or input == "" then
@@ -184,7 +208,8 @@ redeemBtn.MouseButton1Click:Connect(function()
     task.wait(0.5)
     local valid, message = VerifyKey(input)
     if valid then
-        keyPassed = true
+        SaveKey(input)
+		keyPassed = true
         keyStatus.Text = message
         keyStatus.TextColor3 = Color3.fromRGB(100, 255, 100)
         redeemBtn.BackgroundColor3 = Color3.fromRGB(30, 100, 30)
