@@ -1,8 +1,8 @@
 --[[
     ╔══════════════════════════════════════════════╗
     ║   KHUB Premium  |  by- arin kiyeon           ║
-    ║   Animal Restaurant + FluentPro              ║
-    ║   Key + Loading + Floating Icon + NoClip     ║
+    ║   Animal Restaurant                          ║
+    ║   PC = FluentPro  |  Mobile = Custom UI      ║
     ╚══════════════════════════════════════════════╝
 ]]
 
@@ -27,10 +27,17 @@ local BG_ID = "rbxassetid://73019569338667"
 local DISCORD_LINK = "https://discord.gg/EKPb7BRDH8"
 local CORRECT_KEY = "Arin_&-_manjiro-key4"
 
+-- Platform detect: Mobile if touch and no keyboard
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
 local ParentTarget = (gethui and gethui()) or player:WaitForChild("PlayerGui")
 pcall(function()
     local old = ParentTarget:FindFirstChild("KHUB_KeySystem")
     if old then old:Destroy() end
+    local old2 = ParentTarget:FindFirstChild("KHUB_AnimalRestaurant")
+    if old2 then old2:Destroy() end
+    local old3 = ParentTarget:FindFirstChild("KHUB_FloatIcon")
+    if old3 then old3:Destroy() end
 end)
 
 local KeyGui = Instance.new("ScreenGui")
@@ -41,7 +48,7 @@ pcall(function() KeyGui.Parent = CoreGui end)
 if not KeyGui.Parent then KeyGui.Parent = player:WaitForChild("PlayerGui") end
 
 --====================================================
--- 1. KEY SYSTEM
+-- 1. KEY SYSTEM (shared)
 --====================================================
 local KeyFrame = Instance.new("Frame")
 KeyFrame.Size = UDim2.new(0, 400, 0, 280)
@@ -254,7 +261,7 @@ task.spawn(function()
     SkipBtn.Visible = true
     local steps = {
         {text = "Loading assets...", from = 0, to = 0.25},
-        {text = "Preparing UI...", from = 0.25, to = 0.5},
+        {text = isMobile and "Preparing Mobile UI..." or "Preparing FluentPro...", from = 0.25, to = 0.5},
         {text = "Almost ready...", from = 0.5, to = 1},
     }
     for _, step in ipairs(steps) do
@@ -285,9 +292,308 @@ end)
 repeat task.wait(0.1) until not Intro.Parent
 
 --====================================================
--- 3. LOAD FLUENTPRO
+-- SHARED GAME LOGIC (Animal Restaurant)
 --====================================================
-local Fluent = loadstring([==[
+local S = {
+    AutoSeat = true, AutoReject = false, AutoAnswerRequests = true,
+    AutoTakeOrder = true, AutoClaimOrder = true, AutoPickupFood = true,
+    AutoServe = true, AutoCollectDish = true, AutoWashDishes = true,
+    AutoCollectBill = true, AutoCook = true, TeleportMode = true,
+    AnomalyServeGuard = true, NoClip = false,
+}
+
+local function getHRP()
+    local c = LocalPlayer.Character
+    return c and (c:FindFirstChild("HumanoidRootPart") or c.PrimaryPart)
+end
+local function getHumanoid()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+local function isDowned()
+    local hum = getHumanoid()
+    return hum and (hum.Health <= 0 or hum:GetAttribute("Downed") == true)
+end
+local function getPromptPos(prompt)
+    if not prompt then return nil end
+    local p = prompt.Parent
+    if p:IsA("BasePart") then return p.Position end
+    local att = prompt:FindFirstChildOfClass("Attachment")
+    if att then return att.WorldPosition end
+    for _, child in prompt:GetDescendants() do
+        if child:IsA("BasePart") then return child.Position end
+    end
+    return nil
+end
+local function firePrompt(prompt)
+    if not prompt then return end
+    pcall(function()
+        if fireproximityprompt then fireproximityprompt(prompt) return end
+        prompt:InputHoldBegin()
+        task.wait(math.max(prompt.HoldDuration, 0.05))
+        prompt:InputHoldEnd()
+    end)
+end
+local function teleportTo(pos, offset)
+    local hrp = getHRP()
+    if not hrp or not pos then return false end
+    offset = offset or Vector3.new(0, 0, 0)
+    if S.TeleportMode then hrp.CFrame = CFrame.new(pos + offset) return true end
+    return false
+end
+local function tryTeleportAndFire(prompt, offset)
+    if not prompt then return false end
+    local pos = getPromptPos(prompt)
+    if pos then teleportTo(pos, offset or Vector3.new(0, 0, 2)) end
+    task.wait(0.15)
+    firePrompt(prompt)
+    return true
+end
+local function isAnomalyModel(model)
+    if not model then return false end
+    local at = model:GetAttribute("Anomaly")
+    if at ~= nil then return at end
+    local n = model.Name:lower()
+    return n:find("anomaly") or n:find("slime") or n:find("glitch")
+end
+local function ownerOf(prompt)
+    if not prompt then return nil end
+    local p = prompt.Parent
+    if p:IsA("Model") and p:FindFirstChild("Owner") then return p end
+    return nil
+end
+local function looksLikeRequest(prompt)
+    if not prompt then return false end
+    local name = prompt.Name:lower()
+    return name:find("customerrequest") or name:find("guestrequest") or name:find("request")
+end
+local function tryNearestPrompt(pattern, offset)
+    local hrp = getHRP()
+    if not hrp then return false end
+    local best, bestDist = nil, math.huge
+    local root = Workspace:FindFirstChild("Customers") or Workspace
+    for _, v in root:GetDescendants() do
+        if v:IsA("ProximityPrompt") and v.Enabled then
+            if pattern and not v.Name:match(pattern) then continue end
+            local pos = getPromptPos(v)
+            if pos then
+                local d = (pos - hrp.Position).Magnitude
+                if d < bestDist then bestDist, best = d, v end
+            end
+        end
+    end
+    if best then return tryTeleportAndFire(best, offset) end
+    return false
+end
+local function getInteractablePrompt(groupName, promptName)
+    local grp = Workspace:FindFirstChild(groupName)
+    if not grp then return nil end
+    for _, v in grp:GetDescendants() do
+        if v:IsA("ProximityPrompt") and v.Enabled and v.Name == promptName then return v end
+    end
+    return nil
+end
+
+local CustomersFolder = Workspace:FindFirstChild("Customers")
+local seatWarnAt = 0
+local holdFood = false
+local foodCount = 0
+
+local noclipConn
+local function setNoClip(on)
+    S.NoClip = on
+    if noclipConn then pcall(function() noclipConn:Disconnect() end) noclipConn = nil end
+    if on then
+        noclipConn = RunService.Stepped:Connect(function()
+            if not S.NoClip then return end
+            local char = LocalPlayer.Character
+            if not char then return end
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then part.CanCollide = false end
+            end
+        end)
+    else
+        local char = LocalPlayer.Character
+        if char then
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                    if part.Name == "Head" or part.Name:find("Torso") or part.Name:find("Arm") or part.Name:find("Leg") or part.Name:find("Hand") or part.Name:find("Foot") then
+                        part.CanCollide = true
+                    end
+                end
+            end
+        end
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    local hrp = getHRP()
+    if not hrp or isDowned() then return end
+    local searchRoot = CustomersFolder or Workspace
+    if S.AutoSeat then
+        local best, bestDist, anomalyWaiting = nil, math.huge, false
+        for _, v in searchRoot:GetDescendants() do
+            if not (v:IsA("ProximityPrompt") and v.Enabled and v.Name:match("^SeatPrompt")) then continue end
+            local top = v:FindFirstAncestorWhichIsA("Model")
+            while top and top.Parent and top.Parent ~= searchRoot do
+                top = top.Parent:IsA("Model") and top.Parent or top
+                if top.Parent == searchRoot then break end
+            end
+            if top and isAnomalyModel(top) then anomalyWaiting = true continue end
+            local pos = getPromptPos(v)
+            if pos then
+                local d = (pos - hrp.Position).Magnitude
+                if d < bestDist then bestDist, best = d, v end
+            end
+        end
+        if best then tryTeleportAndFire(best) task.wait(0.3)
+        elseif anomalyWaiting and not S.AutoReject then
+            if os.clock() - (seatWarnAt or 0) > 15 then
+                seatWarnAt = os.clock()
+                pcall(function()
+                    game:GetService("StarterGui"):SetCore("SendNotification", {
+                        Title = "Anomaly at the counter", Text = "Turn on Auto Reject Anomalies.", Duration = 8
+                    })
+                end)
+            end
+        end
+    end
+    if S.AutoTakeOrder then if tryNearestPrompt("^TakeOrder_") then task.wait(0.3) end end
+    if S.AutoClaimOrder and not holdFood and foodCount < 5 then
+        local p = getInteractablePrompt("OrderCounter", "OrderPrompt")
+        if p and p.Enabled then tryTeleportAndFire(p, Vector3.new(0, 0, 3)) task.wait(0.3) end
+    end
+    if S.AutoPickupFood and not holdFood and foodCount < 5 then
+        if tryNearestPrompt("^PickupFood_") then task.wait(0.3) end
+    end
+    if S.AutoCollectDish and not holdFood then
+        if tryNearestPrompt("^CollectDishesPrompt$") then task.wait(0.3) end
+    end
+    if S.AutoCollectBill then
+        if tryNearestPrompt("^CollectBillPrompt$") then task.wait(0.3) end
+    end
+end)
+
+task.spawn(function()
+    local handled = {}
+    while true do
+        task.wait(0.25)
+        local hrp = getHRP()
+        if not hrp or isDowned() then continue end
+        if not S.AutoAnswerRequests then continue end
+        local root = CustomersFolder
+        if not root then continue end
+        for _, prompt in root:GetDescendants() do
+            if not prompt:IsA("ProximityPrompt") or not prompt.Enabled then continue end
+            if not looksLikeRequest(prompt) then continue end
+            if handled[prompt] and os.clock() - handled[prompt] < 8 then continue end
+            local owner = ownerOf(prompt)
+            local anomaly = owner and isAnomalyModel(owner) or false
+            if anomaly then
+                handled[prompt] = os.clock()
+            else
+                handled[prompt] = os.clock()
+                local home = hrp.CFrame
+                local pos = getPromptPos(prompt)
+                if pos and S.TeleportMode then teleportTo(pos, Vector3.new(0, 0, 3)) task.wait(0.15) end
+                firePrompt(prompt)
+                task.wait(0.35)
+                local back = getHRP()
+                if back and home and S.TeleportMode then back.CFrame = home end
+            end
+        end
+        for p, t in pairs(handled) do
+            if not p.Parent or os.clock() - t > 30 then handled[p] = nil end
+        end
+    end
+end)
+
+task.spawn(function()
+    local ok, Networking = pcall(function()
+        return require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Shared"):WaitForChild("Networking"))
+    end)
+    if not ok or not Networking then return end
+    pcall(function() Networking:GetRemotes() end)
+    for _ = 1, 50 do
+        if Networking.InvokeHandlers and Networking.InvokeHandlers["Cooking"] and Networking.InvokeHandlers["Cooking"]["RunAction"] then break end
+        task.wait(0.2)
+    end
+    if not Networking.InvokeHandlers then Networking.InvokeHandlers = {} end
+    if not Networking.InvokeHandlers["Cooking"] then Networking.InvokeHandlers["Cooking"] = {} end
+    local orig = Networking.InvokeHandlers["Cooking"]["RunAction"]
+    Networking.InvokeHandlers["Cooking"]["RunAction"] = function(action)
+        if S.AutoCook then
+            local goal = (action and action.Goal) or 8
+            return { Completed = true, MessedUp = false, Progress = goal, Goal = goal, TimedOut = false }
+        end
+        return orig and orig(action)
+    end
+end)
+
+
+--====================================================
+-- FLOATING ICON HELPER
+--====================================================
+local function createFloatingIcon(onClick)
+    local guiParent = (gethui and gethui()) or nil
+    if not guiParent then pcall(function() guiParent = CoreGui end) end
+    if not guiParent then guiParent = LocalPlayer:WaitForChild("PlayerGui") end
+    local old = guiParent:FindFirstChild("KHUB_FloatIcon")
+    if old then old:Destroy() end
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "KHUB_FloatIcon"
+    sg.ResetOnSpawn = false
+    sg.IgnoreGuiInset = true
+    sg.DisplayOrder = 999999
+    sg.Parent = guiParent
+    local btn = Instance.new("ImageButton")
+    btn.Size = UDim2.fromOffset(52, 52)
+    btn.Position = UDim2.new(0, 16, 0.5, -26)
+    btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    btn.BackgroundTransparency = 0.4
+    btn.Image = LOGO_ID
+    btn.AutoButtonColor = false
+    btn.ScaleType = Enum.ScaleType.Fit
+    btn.ZIndex = 50
+    btn.Parent = sg
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+    local stroke = Instance.new("UIStroke", btn)
+    stroke.Thickness = 2.2
+    stroke.Color = Color3.fromRGB(220, 70, 110)
+    stroke.Transparency = 0.25
+    task.spawn(function()
+        local h = 0
+        while sg.Parent do
+            stroke.Color = Color3.fromHSV(h, 0.7, 1)
+            h = (h + 0.007) % 1
+            task.wait(0.04)
+        end
+    end)
+    local dragging, dragStart, startPos
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; dragStart = input.Position; startPos = btn.Position
+        end
+    end)
+    btn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local d = input.Position - dragStart
+            btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end)
+    btn.MouseButton1Click:Connect(function()
+        if onClick then onClick() end
+    end)
+    return sg, btn
+end
+
+function loadFluentProUI()
+    local Fluent = loadstring([==[
 local a, b = {
     {
         1,
@@ -11603,530 +11909,439 @@ local aa = {
 do local ab,ac,ad,ae,af,ag,ah,aj,c,e,f,g,h,i,j,k=task,setmetatable,error,newproxy,getmetatable,next,table,unpack,coroutine,script,type,require,pcall,getfenv,setfenv,rawget local l,m,n,o,p,s,t,u,v,w,x=ah.insert,ah.remove,ah.freeze or function(l)return l end,ab and ab.defer or function(l,...)local m=c.create(l)c.resume(m,...)return m end,'0.0.0-venv',{},{},{},{},{},{}local y,z={GetChildren=function(y)local z,A=x[y],{}for B in ag,z do l(A,B)end return A end,FindFirstChild=function(y,z)if not z then ad('Argument 1 missing or nil',2)end for A in ag,x[y]do if A.Name==z then return A end end return end,GetFullName=function(y)local z,A=y.Name,y.Parent while A do z=A.Name..'.'..z A=A.Parent end return'VirtualEnv.'..z end},{}for A,B in ag,y do z[A]=function(C,...)if not x[C]then ad("Expected ':' not '.' calling member function "..A,1)end return B(C,...)end end local C=function(C,D,E)local F,G,H,I,J=ac({},{__mode='k'}),function(F)ad(F..' is not a valid (virtual) member of '..C..' "'..D..'"',1)end,function(F)ad('Unable to assign (virtual) property '..F..'. Property is read only',1)end,(ae(true))local K=af(I)K.__index=function(L,M)if M=='ClassName'then return C elseif M=='Name'then return D elseif M=='Parent'then return E elseif C=='StringValue'and M=='Value'then return J else local N=z[M]if N then return N end end for N in ag,F do if N.Name==M then return N end end G(M)end K.__newindex=function(L,M,N)if M=='ClassName'then H(M)elseif M=='Name'then D=N elseif M=='Parent'then if N==I then return end if E~=nil then x[E][I]=nil end E=N if N~=nil then x[N][I]=true end elseif C=='StringValue'and M=='Value'then J=N else G(M)end end K.__tostring=function()return D end x[I]=F if E~=nil then x[E][I]=true end return I end local function D(E,F)local G,H,I,J=E[1],E[2],E[3],E[4]local K=m(I,1)local L=C(H,K,F)s[G]=L if I then for M,N in ag,I do L[M]=N end end if J then for M,N in ag,J do D(N,L)end end return L end local E={}for F,G in ag,a do l(E,D(G))end for H,I in ag,aa do local J=s[H]t[J]=I local K=J.ClassName if K=='LocalScript'or K=='Script'then l(v,J)end end local J=function(J)local K,L=J.ClassName,u[J]if L and K=='ModuleScript'then return aj(L)end local M=t[J]if not M then return end if K=='LocalScript'or K=='Script'then M()return else local N={M()}u[J]=N return aj(N)end end function b(K)local L=s[K]local M=t[L]if not M then return end local N,O,P,Q,R,S,T=false,n{Version=p,Script=e,Shared=w,GetScript=function()return e end,GetShared=function()return w end},L,function(N,...)if x[N]and N.ClassName=='ModuleScript'and t[N]then return J(N)end return g(N,...)end local U,V=function(U,...)if not N then T()end if f(U)=='number'and U>=0 then if U==0 then return S else U=U+1 local V,W=h(i,U)if V and W==R then return S end end end return i(U,...)end,function(U,V,...)if not N then T()end if f(U)=='number'and U>=0 then if U==0 then return j(S,V)else U=U+1 local W,X=h(i,U)if W and X==R then return j(S,V)end end end return j(U,V,...)end function T()R=i(0)local W={maui=O,script=P,require=Q,getfenv=U,setfenv=V}S=ac({},{__index=function(X,Y)local Z=k(S,Y)if Z~=nil then return Z end local _=W[Y]if _~=nil then return _ end return R[Y]end})j(M,S)N=true end return O,P,Q,U,V end for K,L in ag,v do o(J,L)end do local M for N,O in ag,E do if O.ClassName=='ModuleScript'and O.Name=='MainModule'then M=O break end end if M then return J(M)end end end
 ]==])()
 
-if not Fluent then
-    error("[KHUB] Failed to load FluentPro library!")
-end
-
---====================================================
--- ANIMAL RESTAURANT STATE
---====================================================
-local S = {
-    AutoSeat = true,
-    AutoReject = false,
-    AutoAnswerRequests = true,
-    AutoTakeOrder = true,
-    AutoClaimOrder = true,
-    AutoPickupFood = true,
-    AutoServe = true,
-    AutoCollectDish = true,
-    AutoWashDishes = true,
-    AutoCollectBill = true,
-    AutoCook = true,
-    TeleportMode = true,
-    AnomalyServeGuard = true,
-    NoClip = false,
-}
-
-local function getHRP()
-    local c = LocalPlayer.Character
-    return c and (c:FindFirstChild("HumanoidRootPart") or c.PrimaryPart)
-end
-
-local function getHumanoid()
-    local c = LocalPlayer.Character
-    return c and c:FindFirstChildOfClass("Humanoid")
-end
-
-local function isDowned()
-    local hum = getHumanoid()
-    return hum and (hum.Health <= 0 or hum:GetAttribute("Downed") == true)
-end
-
-local function getPromptPos(prompt)
-    if not prompt then return nil end
-    local p = prompt.Parent
-    if p:IsA("BasePart") then return p.Position end
-    local att = prompt:FindFirstChildOfClass("Attachment")
-    if att then return att.WorldPosition end
-    for _, child in prompt:GetDescendants() do
-        if child:IsA("BasePart") then return child.Position end
+    if not Fluent then
+        error("[KHUB] Failed to load FluentPro!")
     end
-    return nil
-end
 
-local function firePrompt(prompt)
-    if not prompt then return end
-    pcall(function()
-        if fireproximityprompt then
-            fireproximityprompt(prompt)
-            return
-        end
-        prompt:InputHoldBegin()
-        task.wait(math.max(prompt.HoldDuration, 0.05))
-        prompt:InputHoldEnd()
+    local Window = Fluent:CreateWindow({
+        Title = "KHUB",
+        SubTitle = "by- arin kiyeon | Animal Restaurant",
+        TabWidth = 160,
+        Size = UDim2.fromOffset(560, 440),
+        Acrylic = true,
+        Theme = "Blood Red",
+        MinimizeKey = Enum.KeyCode.LeftControl,
+    })
+
+    local Tabs = {
+        Home = Window:AddTab({ Title = "Home", Icon = "home" }),
+        Auto = Window:AddTab({ Title = "Auto", Icon = "zap" }),
+        Movement = Window:AddTab({ Title = "Movement", Icon = "move" }),
+        Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
+    }
+
+    Tabs.Home:AddSection("Welcome")
+    Tabs.Home:AddParagraph({
+        Title = "KHUB Premium",
+        Content = "Welcome, " .. player.DisplayName .. "\nMode: PC (FluentPro)\nGame: Animal Restaurant\nby- arin kiyeon"
+    })
+
+    Tabs.Auto:AddSection("Customer Automation")
+    Tabs.Auto:AddToggle("AutoSeat", { Title = "Auto Seat Customers", Default = S.AutoSeat, Callback = function(v) S.AutoSeat = v end })
+    Tabs.Auto:AddToggle("AutoReject", { Title = "Auto Reject Anomalies", Default = S.AutoReject, Callback = function(v) S.AutoReject = v end })
+    Tabs.Auto:AddToggle("AutoAnswerRequests", { Title = "Auto Answer Requests", Default = S.AutoAnswerRequests, Callback = function(v) S.AutoAnswerRequests = v end })
+    Tabs.Auto:AddToggle("AutoTakeOrder", { Title = "Auto Take Orders", Default = S.AutoTakeOrder, Callback = function(v) S.AutoTakeOrder = v end })
+    Tabs.Auto:AddToggle("AutoClaimOrder", { Title = "Auto Claim Orders", Default = S.AutoClaimOrder, Callback = function(v) S.AutoClaimOrder = v end })
+    Tabs.Auto:AddToggle("AutoPickupFood", { Title = "Auto Pickup Food", Default = S.AutoPickupFood, Callback = function(v) S.AutoPickupFood = v end })
+    Tabs.Auto:AddToggle("AutoServe", { Title = "Auto Serve Food", Default = S.AutoServe, Callback = function(v) S.AutoServe = v end })
+    Tabs.Auto:AddToggle("AutoCollectDish", { Title = "Auto Collect Dishes", Default = S.AutoCollectDish, Callback = function(v) S.AutoCollectDish = v end })
+    Tabs.Auto:AddToggle("AutoWashDishes", { Title = "Auto Wash Dishes", Default = S.AutoWashDishes, Callback = function(v) S.AutoWashDishes = v end })
+    Tabs.Auto:AddToggle("AutoCollectBill", { Title = "Auto Collect Bills", Default = S.AutoCollectBill, Callback = function(v) S.AutoCollectBill = v end })
+    Tabs.Auto:AddToggle("AutoCook", { Title = "Auto Cook (Perfect)", Default = S.AutoCook, Callback = function(v) S.AutoCook = v end })
+    Tabs.Auto:AddToggle("TeleportMode", { Title = "Teleport Mode", Default = S.TeleportMode, Callback = function(v) S.TeleportMode = v end })
+    Tabs.Auto:AddToggle("AnomalyServeGuard", { Title = "Anomaly Serve Guard", Default = S.AnomalyServeGuard, Callback = function(v) S.AnomalyServeGuard = v end })
+
+    Tabs.Movement:AddSection("Movement")
+    Tabs.Movement:AddToggle("NoClip", {
+        Title = "NoClip (Walk Through Walls)",
+        Description = "ON = tatagos sa pader | OFF = normal",
+        Default = false,
+        Callback = function(v)
+            setNoClip(v)
+            Fluent:Notify({ Title = "KHUB", Content = v and "NoClip ON" or "NoClip OFF", Duration = 3 })
+        end,
+    })
+
+    if Fluent.SaveManager then
+        Fluent.SaveManager:SetLibrary(Fluent)
+        Fluent.SaveManager:SetFolder("KHUB_AnimalRestaurant")
+        pcall(function() Fluent.SaveManager:BuildConfigSection(Tabs.Settings) end)
+    end
+    if Fluent.InterfaceManager then
+        Fluent.InterfaceManager:SetLibrary(Fluent)
+        Fluent.InterfaceManager:SetFolder("KHUB_AnimalRestaurant")
+        pcall(function() Fluent.InterfaceManager:BuildInterfaceSection(Tabs.Settings) end)
+    end
+    Tabs.Settings:AddButton({
+        Title = "Unload KHUB",
+        Callback = function() setNoClip(false) Fluent:Destroy() end,
+    })
+
+    createFloatingIcon(function()
+        pcall(function() if Window and Window.Minimize then Window:Minimize() end end)
     end)
+
+    pcall(function() Window:SelectTab(1) end)
+    Fluent:Notify({ Title = "KHUB Premium", Content = "PC mode (FluentPro) loaded!", Duration = 5 })
+    if Fluent.SaveManager then pcall(function() Fluent.SaveManager:LoadAutoloadConfig() end) end
+    print("[KHUB] Animal Restaurant PC (FluentPro) loaded!")
 end
 
-local function teleportTo(pos, offset)
-    local hrp = getHRP()
-    if not hrp or not pos then return false end
-    offset = offset or Vector3.new(0, 0, 0)
-    if S.TeleportMode then
-        hrp.CFrame = CFrame.new(pos + offset)
-        return true
+--====================================================
+-- MOBILE UI (complete rewrite of function)
+--====================================================
+function loadMobileUI()
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "KHUB_AnimalRestaurant"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.IgnoreGuiInset = true
+    pcall(function() ScreenGui.Parent = CoreGui end)
+    if not ScreenGui.Parent then ScreenGui.Parent = player:WaitForChild("PlayerGui") end
+
+    local Main = Instance.new("Frame")
+    Main.Size = UDim2.new(0, 520, 0, 380)
+    Main.Position = UDim2.new(0.5, -260, 0.5, -190)
+    Main.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Main.BackgroundTransparency = 1
+    Main.BorderSizePixel = 0
+    Main.ClipsDescendants = true
+    Main.Parent = ScreenGui
+    Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
+
+    local bgImage = Instance.new("ImageLabel", Main)
+    bgImage.Size = UDim2.new(1, 0, 1, 0)
+    bgImage.BackgroundTransparency = 1
+    bgImage.Image = BG_ID
+    bgImage.ImageTransparency = 0.15
+    bgImage.ScaleType = Enum.ScaleType.Crop
+    bgImage.ZIndex = 0
+    Instance.new("UICorner", bgImage).CornerRadius = UDim.new(0, 12)
+
+    local overlay = Instance.new("Frame", Main)
+    overlay.Size = UDim2.new(1, 0, 1, 0)
+    overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    overlay.BackgroundTransparency = 0.45
+    overlay.BorderSizePixel = 0
+    overlay.ZIndex = 1
+    Instance.new("UICorner", overlay).CornerRadius = UDim.new(0, 12)
+
+    Instance.new("UIStroke", Main).Color = Color3.fromRGB(180, 50, 80)
+    local mainStroke = Main:FindFirstChildOfClass("UIStroke")
+    if mainStroke then mainStroke.Thickness = 1.5 mainStroke.Transparency = 0.45 end
+
+    local Top = Instance.new("Frame", Main)
+    Top.Size = UDim2.new(1, 0, 0, 40)
+    Top.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Top.BackgroundTransparency = 0.55
+    Top.BorderSizePixel = 0
+    Top.ZIndex = 10
+
+    local titleLabel = Instance.new("TextLabel", Top)
+    titleLabel.Size = UDim2.new(0, 320, 1, 0)
+    titleLabel.Position = UDim2.new(0, 14, 0, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "KHUB by Arin Kiyeon (Mobile)"
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 13
+    titleLabel.TextColor3 = Color3.fromRGB(255, 170, 195)
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.ZIndex = 11
+
+    local Close = Instance.new("TextButton", Top)
+    Close.Size = UDim2.new(0, 30, 0, 22)
+    Close.Position = UDim2.new(1, -40, 0.5, -11)
+    Close.BackgroundColor3 = Color3.fromRGB(200, 40, 60)
+    Close.BackgroundTransparency = 0.35
+    Close.Text = "X"
+    Close.Font = Enum.Font.GothamBold
+    Close.TextSize = 12
+    Close.TextColor3 = Color3.new(1, 1, 1)
+    Close.ZIndex = 11
+    Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 5)
+
+    local Sidebar = Instance.new("Frame", Main)
+    Sidebar.Size = UDim2.new(0, 130, 1, -40)
+    Sidebar.Position = UDim2.new(0, 0, 0, 40)
+    Sidebar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Sidebar.BackgroundTransparency = 0.5
+    Sidebar.BorderSizePixel = 0
+    Sidebar.ZIndex = 10
+
+    local TabScroll = Instance.new("ScrollingFrame", Sidebar)
+    TabScroll.Size = UDim2.new(1, 0, 1, 0)
+    TabScroll.BackgroundTransparency = 1
+    TabScroll.BorderSizePixel = 0
+    TabScroll.ScrollBarThickness = 3
+    TabScroll.ScrollBarImageColor3 = Color3.fromRGB(180, 60, 100)
+    TabScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    TabScroll.ZIndex = 10
+    Instance.new("UIListLayout", TabScroll).Padding = UDim.new(0, 6)
+    local tabPad = Instance.new("UIPadding", TabScroll)
+    tabPad.PaddingTop = UDim.new(0, 12)
+    tabPad.PaddingLeft = UDim.new(0, 10)
+    tabPad.PaddingRight = UDim.new(0, 10)
+
+    local TabButtons, Pages = {}, {}
+    local function CreatePage(name)
+        local page = Instance.new("ScrollingFrame", Main)
+        page.Size = UDim2.new(1, -130, 1, -48)
+        page.Position = UDim2.new(0, 130, 0, 44)
+        page.BackgroundTransparency = 1
+        page.BorderSizePixel = 0
+        page.ScrollBarThickness = 4
+        page.ScrollBarImageColor3 = Color3.fromRGB(200, 80, 120)
+        page.Visible = false
+        page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        page.ZIndex = 10
+        Instance.new("UIListLayout", page).Padding = UDim.new(0, 10)
+        local pad = Instance.new("UIPadding", page)
+        pad.PaddingTop = UDim.new(0, 10)
+        pad.PaddingLeft = UDim.new(0, 12)
+        pad.PaddingRight = UDim.new(0, 12)
+        pad.PaddingBottom = UDim.new(0, 14)
+        Pages[name] = page
+        return page
     end
-    return false
-end
-
-local function tryTeleportAndFire(prompt, offset)
-    if not prompt then return false end
-    local pos = getPromptPos(prompt)
-    if pos then teleportTo(pos, offset or Vector3.new(0, 0, 2)) end
-    task.wait(0.15)
-    firePrompt(prompt)
-    return true
-end
-
-local function isAnomalyModel(model)
-    if not model then return false end
-    local at = model:GetAttribute("Anomaly")
-    if at ~= nil then return at end
-    local n = model.Name:lower()
-    return n:find("anomaly") or n:find("slime") or n:find("glitch")
-end
-
-local function ownerOf(prompt)
-    if not prompt then return nil end
-    local p = prompt.Parent
-    if p:IsA("Model") and p:FindFirstChild("Owner") then return p end
-    return nil
-end
-
-local function looksLikeRequest(prompt)
-    if not prompt then return false end
-    local name = prompt.Name:lower()
-    return name:find("customerrequest") or name:find("guestrequest") or name:find("request")
-end
-
-local function tryNearestPrompt(pattern, offset)
-    local hrp = getHRP()
-    if not hrp then return false end
-    local best, bestDist = nil, math.huge
-    local root = Workspace:FindFirstChild("Customers") or Workspace
-    for _, v in root:GetDescendants() do
-        if v:IsA("ProximityPrompt") and v.Enabled then
-            if pattern and not v.Name:match(pattern) then continue end
-            local pos = getPromptPos(v)
-            if pos then
-                local d = (pos - hrp.Position).Magnitude
-                if d < bestDist then bestDist, best = d, v end
-            end
+    local function SetActiveTab(btn, pageKey)
+        for _, b in pairs(TabButtons) do
+            b.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            b.BackgroundTransparency = 0.6
+            b.TextColor3 = Color3.fromRGB(200, 160, 175)
         end
-    end
-    if best then return tryTeleportAndFire(best, offset) end
-    return false
-end
-
-local function getInteractablePrompt(groupName, promptName)
-    local grp = Workspace:FindFirstChild(groupName)
-    if not grp then return nil end
-    for _, v in grp:GetDescendants() do
-        if v:IsA("ProximityPrompt") and v.Enabled and v.Name == promptName then
-            return v
+        if btn then
+            btn.BackgroundColor3 = Color3.fromRGB(140, 40, 75)
+            btn.BackgroundTransparency = 0.3
+            btn.TextColor3 = Color3.fromRGB(255, 230, 240)
         end
+        for _, p in pairs(Pages) do p.Visible = false end
+        if Pages[pageKey] then Pages[pageKey].Visible = true end
     end
-    return nil
-end
-
-local CustomersFolder = Workspace:FindFirstChild("Customers")
-local seatWarnAt = 0
-local holdFood = false
-local foodCount = 0
-
--- NoClip (real wall-pass)
-local noclipConn
-local function setNoClip(on)
-    S.NoClip = on
-    if noclipConn then
-        pcall(function() noclipConn:Disconnect() end)
-        noclipConn = nil
+    local function CreateTab(displayName, pageKey, order)
+        local btn = Instance.new("TextButton", TabScroll)
+        btn.Size = UDim2.new(1, 0, 0, 34)
+        btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        btn.BackgroundTransparency = 0.6
+        btn.Text = displayName
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 12
+        btn.TextColor3 = Color3.fromRGB(200, 160, 175)
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.ZIndex = 11
+        btn.LayoutOrder = order
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 7)
+        Instance.new("UIPadding", btn).PaddingLeft = UDim.new(0, 12)
+        TabButtons[pageKey] = btn
+        btn.MouseButton1Click:Connect(function() SetActiveTab(btn, pageKey) end)
+        return btn
     end
-    if on then
-        noclipConn = RunService.Stepped:Connect(function()
-            if not S.NoClip then return end
-            local char = LocalPlayer.Character
-            if not char then return end
-            for _, part in pairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
-                end
+    local function CreateToggle(parent, text, callback, default)
+        local frame = Instance.new("Frame", parent)
+        frame.Size = UDim2.new(1, 0, 0, 40)
+        frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        frame.BackgroundTransparency = 0.6
+        frame.ZIndex = 11
+        Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+        local label = Instance.new("TextLabel", frame)
+        label.Size = UDim2.new(1, -60, 1, 0)
+        label.Position = UDim2.new(0, 12, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text = text
+        label.Font = Enum.Font.GothamBold
+        label.TextSize = 12
+        label.TextColor3 = Color3.fromRGB(240, 210, 225)
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.ZIndex = 12
+        local toggleBg = Instance.new("Frame", frame)
+        toggleBg.Size = UDim2.new(0, 40, 0, 20)
+        toggleBg.Position = UDim2.new(1, -50, 0.5, -10)
+        toggleBg.BackgroundColor3 = Color3.fromRGB(45, 22, 40)
+        toggleBg.ZIndex = 12
+        Instance.new("UICorner", toggleBg).CornerRadius = UDim.new(1, 0)
+        local knob = Instance.new("Frame", toggleBg)
+        knob.Size = UDim2.new(0, 16, 0, 16)
+        knob.Position = UDim2.new(0, 2, 0.5, -8)
+        knob.BackgroundColor3 = Color3.fromRGB(180, 80, 130)
+        knob.ZIndex = 13
+        Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+        local btn = Instance.new("TextButton", toggleBg)
+        btn.Size = UDim2.new(1, 0, 1, 0)
+        btn.BackgroundTransparency = 1
+        btn.Text = ""
+        btn.ZIndex = 14
+        local state = default or false
+        if state then
+            knob.Position = UDim2.new(1, -18, 0.5, -8)
+            knob.BackgroundColor3 = Color3.fromRGB(255, 140, 180)
+            toggleBg.BackgroundColor3 = Color3.fromRGB(130, 40, 85)
+        end
+        btn.MouseButton1Click:Connect(function()
+            state = not state
+            TweenService:Create(knob, TweenInfo.new(0.15), {
+                Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8),
+                BackgroundColor3 = state and Color3.fromRGB(255, 140, 180) or Color3.fromRGB(180, 80, 130)
+            }):Play()
+            TweenService:Create(toggleBg, TweenInfo.new(0.15), {
+                BackgroundColor3 = state and Color3.fromRGB(130, 40, 85) or Color3.fromRGB(45, 22, 40)
+            }):Play()
+            callback(state)
+        end)
+    end
+    local function CreateButton(parent, text, callback)
+        local btn = Instance.new("TextButton", parent)
+        btn.Size = UDim2.new(1, 0, 0, 36)
+        btn.BackgroundColor3 = Color3.fromRGB(140, 40, 80)
+        btn.BackgroundTransparency = 0.4
+        btn.Text = text
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 12
+        btn.TextColor3 = Color3.new(1, 1, 1)
+        btn.ZIndex = 11
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+        btn.MouseButton1Click:Connect(callback)
+    end
+    local function CreateLabel(parent, text)
+        local lbl = Instance.new("TextLabel", parent)
+        lbl.Size = UDim2.new(1, 0, 0, 22)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = text
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 14
+        lbl.TextColor3 = Color3.fromRGB(255, 200, 215)
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = 11
+    end
+
+    local HomePage = CreatePage("Home")
+    local homeTab = CreateTab("Home", "Home", 1)
+    local welcomeCard = Instance.new("Frame", HomePage)
+    welcomeCard.Size = UDim2.new(1, 0, 0, 150)
+    welcomeCard.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    welcomeCard.BackgroundTransparency = 0.5
+    welcomeCard.ZIndex = 11
+    Instance.new("UICorner", welcomeCard).CornerRadius = UDim.new(0, 10)
+    local av = Instance.new("ImageLabel", welcomeCard)
+    av.Size = UDim2.new(0, 65, 0, 65)
+    av.Position = UDim2.new(0, 14, 0.5, -32)
+    av.BackgroundColor3 = Color3.fromRGB(45, 20, 36)
+    av.Image = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. player.UserId .. "&width=150&height=150&format=png"
+    av.ZIndex = 12
+    Instance.new("UICorner", av).CornerRadius = UDim.new(1, 0)
+    local function ml(parent, text, y, size, color)
+        local l = Instance.new("TextLabel", parent)
+        l.Size = UDim2.new(1, -95, 0, 18)
+        l.Position = UDim2.new(0, 90, 0, y)
+        l.BackgroundTransparency = 1
+        l.Text = text
+        l.Font = Enum.Font.Gotham
+        l.TextSize = size or 12
+        l.TextColor3 = color or Color3.fromRGB(220, 190, 205)
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.ZIndex = 12
+        return l
+    end
+    ml(welcomeCard, "Welcome, " .. player.DisplayName .. "!", 14, 15, Color3.fromRGB(255, 220, 235))
+    ml(welcomeCard, "@" .. player.Name, 40, 12)
+    ml(welcomeCard, "Mode: Mobile UI", 60, 11, Color3.fromRGB(255, 140, 180))
+    local liveTime = ml(welcomeCard, "Time: --:--:--", 90, 12, Color3.fromRGB(255, 180, 210))
+    local liveDate = ml(welcomeCard, "Date: -------", 112, 12, Color3.fromRGB(255, 180, 210))
+    task.spawn(function()
+        while ScreenGui.Parent do
+            local now = os.time()
+            liveTime.Text = "Time: " .. os.date("%I:%M:%S %p", now)
+            liveDate.Text = "Date: " .. os.date("%A, %B %d", now)
+            task.wait(1)
+        end
+    end)
+
+    local AutoPage = CreatePage("Auto")
+    CreateTab("Auto", "Auto", 2)
+    CreateLabel(AutoPage, "Automation")
+    CreateToggle(AutoPage, "Auto Seat Customers", function(v) S.AutoSeat = v end, S.AutoSeat)
+    CreateToggle(AutoPage, "Auto Reject Anomalies", function(v) S.AutoReject = v end, S.AutoReject)
+    CreateToggle(AutoPage, "Auto Answer Requests", function(v) S.AutoAnswerRequests = v end, S.AutoAnswerRequests)
+    CreateToggle(AutoPage, "Auto Take Orders", function(v) S.AutoTakeOrder = v end, S.AutoTakeOrder)
+    CreateToggle(AutoPage, "Auto Claim Orders", function(v) S.AutoClaimOrder = v end, S.AutoClaimOrder)
+    CreateToggle(AutoPage, "Auto Pickup Food", function(v) S.AutoPickupFood = v end, S.AutoPickupFood)
+    CreateToggle(AutoPage, "Auto Serve Food", function(v) S.AutoServe = v end, S.AutoServe)
+    CreateToggle(AutoPage, "Auto Collect Dishes", function(v) S.AutoCollectDish = v end, S.AutoCollectDish)
+    CreateToggle(AutoPage, "Auto Wash Dishes", function(v) S.AutoWashDishes = v end, S.AutoWashDishes)
+    CreateToggle(AutoPage, "Auto Collect Bills", function(v) S.AutoCollectBill = v end, S.AutoCollectBill)
+    CreateToggle(AutoPage, "Auto Cook (Perfect)", function(v) S.AutoCook = v end, S.AutoCook)
+    CreateToggle(AutoPage, "Teleport Mode", function(v) S.TeleportMode = v end, S.TeleportMode)
+    CreateToggle(AutoPage, "Anomaly Serve Guard", function(v) S.AnomalyServeGuard = v end, S.AnomalyServeGuard)
+
+    local MovePage = CreatePage("Movement")
+    CreateTab("Movement", "Movement", 3)
+    CreateLabel(MovePage, "Movement")
+    CreateToggle(MovePage, "NoClip (Walk Through Walls)", function(v) setNoClip(v) end, false)
+
+    local SettingsPage = CreatePage("Settings")
+    CreateTab("Settings", "Settings", 4)
+    CreateLabel(SettingsPage, "Settings")
+    CreateButton(SettingsPage, "Load FluentPro UI (PC Style)", function()
+        ScreenGui:Destroy()
+        local float = (gethui and gethui() or CoreGui):FindFirstChild("KHUB_FloatIcon")
+        if float then float:Destroy() end
+        pcall(function()
+            local pg = player:FindFirstChild("PlayerGui")
+            if pg then local f = pg:FindFirstChild("KHUB_FloatIcon") if f then f:Destroy() end end
+        end)
+        loadFluentProUI()
+    end)
+    CreateButton(SettingsPage, "Unload KHUB", function()
+        setNoClip(false)
+        ScreenGui:Destroy()
+        pcall(function()
+            local targets = { CoreGui, player:FindFirstChild("PlayerGui") }
+            if gethui then table.insert(targets, gethui()) end
+            for _, t in pairs(targets) do
+                if t then local f = t:FindFirstChild("KHUB_FloatIcon") if f then f:Destroy() end end
             end
         end)
-    else
-        -- restore collision on character parts
-        local char = LocalPlayer.Character
-        if char then
-            for _, part in pairs(char:GetDescendants()) do
-                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                    -- leave HRP; other parts get default collide back for body
-                    if part.Name == "Head" or part.Name:find("Torso") or part.Name:find("Arm") or part.Name:find("Leg") or part.Name:find("Hand") or part.Name:find("Foot") then
-                        part.CanCollide = true
-                    end
-                end
-            end
-        end
-    end
-end
-
--- Main automation heartbeat
-RunService.Heartbeat:Connect(function()
-    local hrp = getHRP()
-    if not hrp or isDowned() then return end
-    local searchRoot = CustomersFolder or Workspace
-
-    if S.AutoSeat then
-        local best, bestDist, anomalyWaiting = nil, math.huge, false
-        for _, v in searchRoot:GetDescendants() do
-            if not (v:IsA("ProximityPrompt") and v.Enabled and v.Name:match("^SeatPrompt")) then continue end
-            local top = v:FindFirstAncestorWhichIsA("Model")
-            while top and top.Parent and top.Parent ~= searchRoot do
-                top = top.Parent:IsA("Model") and top.Parent or top
-                if top.Parent == searchRoot then break end
-            end
-            if top and isAnomalyModel(top) then
-                anomalyWaiting = true
-                continue
-            end
-            local pos = getPromptPos(v)
-            if pos then
-                local d = (pos - hrp.Position).Magnitude
-                if d < bestDist then bestDist, best = d, v end
-            end
-        end
-        if best then
-            tryTeleportAndFire(best)
-            task.wait(0.3)
-        elseif anomalyWaiting and not S.AutoReject then
-            if os.clock() - (seatWarnAt or 0) > 15 then
-                seatWarnAt = os.clock()
-                pcall(function()
-                    game:GetService("StarterGui"):SetCore("SendNotification", {
-                        Title = "Anomaly at the counter",
-                        Text = "Not seating it. Turn on Auto Reject Anomalies.",
-                        Duration = 8
-                    })
-                end)
-            end
-        end
-    end
-
-    if S.AutoTakeOrder then
-        if tryNearestPrompt("^TakeOrder_") then task.wait(0.3) end
-    end
-
-    if S.AutoClaimOrder and not holdFood and foodCount < 5 then
-        local p = getInteractablePrompt("OrderCounter", "OrderPrompt")
-        if p and p.Enabled then
-            tryTeleportAndFire(p, Vector3.new(0, 0, 3))
-            task.wait(0.3)
-        end
-    end
-
-    if S.AutoPickupFood and not holdFood and foodCount < 5 then
-        if tryNearestPrompt("^PickupFood_") then task.wait(0.3) end
-    end
-
-    if S.AutoCollectDish and not holdFood then
-        if tryNearestPrompt("^CollectDishesPrompt$") then task.wait(0.3) end
-    end
-
-    if S.AutoCollectBill then
-        if tryNearestPrompt("^CollectBillPrompt$") then task.wait(0.3) end
-    end
-end)
-
--- Auto Answer Guest Requests
-task.spawn(function()
-    local handled = {}
-    while true do
-        task.wait(0.25)
-        if Fluent.Unloaded then break end
-        local hrp = getHRP()
-        if not hrp or isDowned() then continue end
-        if not S.AutoAnswerRequests then continue end
-        local root = CustomersFolder
-        if not root then continue end
-        for _, prompt in root:GetDescendants() do
-            if not prompt:IsA("ProximityPrompt") or not prompt.Enabled then continue end
-            if not looksLikeRequest(prompt) then continue end
-            if handled[prompt] and os.clock() - handled[prompt] < 8 then continue end
-            local owner = ownerOf(prompt)
-            local anomaly = owner and isAnomalyModel(owner) or false
-            local label = ("%s / %s"):format(tostring(prompt.ObjectText), tostring(prompt.ActionText))
-            if anomaly then
-                handled[prompt] = os.clock()
-                pcall(function()
-                    game:GetService("StarterGui"):SetCore("SendNotification", {
-                        Title = "Request DENIED (anomaly)",
-                        Text = label,
-                        Duration = 6
-                    })
-                end)
-            else
-                handled[prompt] = os.clock()
-                local home = hrp.CFrame
-                local pos = getPromptPos(prompt)
-                if pos and S.TeleportMode then
-                    teleportTo(pos, Vector3.new(0, 0, 3))
-                    task.wait(0.15)
-                end
-                firePrompt(prompt)
-                task.wait(0.35)
-                local back = getHRP()
-                if back and home and S.TeleportMode then back.CFrame = home end
-            end
-        end
-        for p, t in pairs(handled) do
-            if not p.Parent or os.clock() - t > 30 then handled[p] = nil end
-        end
-    end
-end)
-
--- Auto Cook Hook
-task.spawn(function()
-    local ok, Networking = pcall(function()
-        return require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Shared"):WaitForChild("Networking"))
-    end)
-    if not ok or not Networking then
-        warn("[KHUB] Could not require Networking module")
-        return
-    end
-    pcall(function() Networking:GetRemotes() end)
-    for _ = 1, 50 do
-        if Networking.InvokeHandlers and Networking.InvokeHandlers["Cooking"] and Networking.InvokeHandlers["Cooking"]["RunAction"] then
-            break
-        end
-        task.wait(0.2)
-    end
-    if not Networking.InvokeHandlers then Networking.InvokeHandlers = {} end
-    if not Networking.InvokeHandlers["Cooking"] then Networking.InvokeHandlers["Cooking"] = {} end
-    local orig = Networking.InvokeHandlers["Cooking"]["RunAction"]
-    Networking.InvokeHandlers["Cooking"]["RunAction"] = function(action)
-        if S.AutoCook then
-            local goal = (action and action.Goal) or 8
-            return { Completed = true, MessedUp = false, Progress = goal, Goal = goal, TimedOut = false }
-        end
-        return orig and orig(action)
-    end
-end)
-
---====================================================
--- FLUENTPRO WINDOW
---====================================================
-local Window = Fluent:CreateWindow({
-    Title = "KHUB",
-    SubTitle = "by- arin kiyeon | Animal Restaurant",
-    TabWidth = 160,
-    Size = UDim2.fromOffset(560, 440),
-    Acrylic = true,
-    Theme = "Blood Red",
-    MinimizeKey = Enum.KeyCode.LeftControl,
-})
-
-local Tabs = {
-    Home     = Window:AddTab({ Title = "Home", Icon = "home" }),
-    Auto     = Window:AddTab({ Title = "Auto", Icon = "zap" }),
-    Movement = Window:AddTab({ Title = "Movement", Icon = "move" }),
-    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
-}
-
--- HOME
-Tabs.Home:AddSection("Welcome")
-Tabs.Home:AddParagraph({
-    Title = "KHUB Premium",
-    Content = "Welcome, " .. player.DisplayName .. " (@" .. player.Name .. ")\n\nGame: Animal Restaurant\nStatus: Premium Active\n\nby- arin kiyeon"
-})
-
--- AUTO
-Tabs.Auto:AddSection("Customer Automation")
-Tabs.Auto:AddToggle("AutoSeat", {
-    Title = "Auto Seat Customers", Default = S.AutoSeat,
-    Callback = function(v) S.AutoSeat = v end,
-})
-Tabs.Auto:AddToggle("AutoReject", {
-    Title = "Auto Reject Anomalies", Default = S.AutoReject,
-    Callback = function(v) S.AutoReject = v end,
-})
-Tabs.Auto:AddToggle("AutoAnswerRequests", {
-    Title = "Auto Answer Requests", Default = S.AutoAnswerRequests,
-    Callback = function(v) S.AutoAnswerRequests = v end,
-})
-Tabs.Auto:AddToggle("AutoTakeOrder", {
-    Title = "Auto Take Orders", Default = S.AutoTakeOrder,
-    Callback = function(v) S.AutoTakeOrder = v end,
-})
-Tabs.Auto:AddToggle("AutoClaimOrder", {
-    Title = "Auto Claim Orders", Default = S.AutoClaimOrder,
-    Callback = function(v) S.AutoClaimOrder = v end,
-})
-Tabs.Auto:AddToggle("AutoPickupFood", {
-    Title = "Auto Pickup Food", Default = S.AutoPickupFood,
-    Callback = function(v) S.AutoPickupFood = v end,
-})
-Tabs.Auto:AddToggle("AutoServe", {
-    Title = "Auto Serve Food", Default = S.AutoServe,
-    Callback = function(v) S.AutoServe = v end,
-})
-Tabs.Auto:AddToggle("AutoCollectDish", {
-    Title = "Auto Collect Dishes", Default = S.AutoCollectDish,
-    Callback = function(v) S.AutoCollectDish = v end,
-})
-Tabs.Auto:AddToggle("AutoWashDishes", {
-    Title = "Auto Wash Dishes", Default = S.AutoWashDishes,
-    Callback = function(v) S.AutoWashDishes = v end,
-})
-Tabs.Auto:AddToggle("AutoCollectBill", {
-    Title = "Auto Collect Bills", Default = S.AutoCollectBill,
-    Callback = function(v) S.AutoCollectBill = v end,
-})
-Tabs.Auto:AddToggle("AutoCook", {
-    Title = "Auto Cook (Perfect)", Default = S.AutoCook,
-    Callback = function(v) S.AutoCook = v end,
-})
-Tabs.Auto:AddToggle("TeleportMode", {
-    Title = "Teleport Mode", Default = S.TeleportMode,
-    Callback = function(v) S.TeleportMode = v end,
-})
-Tabs.Auto:AddToggle("AnomalyServeGuard", {
-    Title = "Anomaly Serve Guard", Default = S.AnomalyServeGuard,
-    Callback = function(v) S.AnomalyServeGuard = v end,
-})
-
--- MOVEMENT (NoClip)
-Tabs.Movement:AddSection("Movement")
-Tabs.Movement:AddToggle("NoClip", {
-    Title = "NoClip (Walk Through Walls)",
-    Description = "ON = tatagos sa pader | OFF = normal collision",
-    Default = false,
-    Callback = function(v)
-        setNoClip(v)
-        Fluent:Notify({
-            Title = "KHUB",
-            Content = v and "NoClip ON - you can walk through walls" or "NoClip OFF",
-            Duration = 3
-        })
-    end,
-})
-
--- SETTINGS
-if Fluent.SaveManager then
-    Fluent.SaveManager:SetLibrary(Fluent)
-    Fluent.SaveManager:SetFolder("KHUB_AnimalRestaurant")
-    pcall(function() Fluent.SaveManager:BuildConfigSection(Tabs.Settings) end)
-end
-if Fluent.InterfaceManager then
-    Fluent.InterfaceManager:SetLibrary(Fluent)
-    Fluent.InterfaceManager:SetFolder("KHUB_AnimalRestaurant")
-    pcall(function() Fluent.InterfaceManager:BuildInterfaceSection(Tabs.Settings) end)
-end
-
-Tabs.Settings:AddButton({
-    Title = "Unload KHUB",
-    Callback = function()
-        setNoClip(false)
-        Fluent:Destroy()
-    end,
-})
-
---====================================================
--- FLOATING ICON
---====================================================
-local function createFloatingIcon()
-    local guiParent
-    if typeof(gethui) == "function" then
-        local ok, r = pcall(gethui)
-        if ok and r then guiParent = r end
-    end
-    if not guiParent then pcall(function() guiParent = game:GetService("CoreGui") end) end
-    if not guiParent then guiParent = LocalPlayer:WaitForChild("PlayerGui") end
-
-    local old = guiParent:FindFirstChild("KHUB_FloatIcon")
-    if old then old:Destroy() end
-
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "KHUB_FloatIcon"
-    sg.ResetOnSpawn = false
-    sg.IgnoreGuiInset = true
-    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    sg.DisplayOrder = 999999
-    sg.Parent = guiParent
-
-    local btn = Instance.new("ImageButton")
-    btn.Name = "FloatBtn"
-    btn.Size = UDim2.fromOffset(52, 52)
-    btn.Position = UDim2.new(0, 16, 0.5, -26)
-    btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    btn.BackgroundTransparency = 0.4
-    btn.Image = LOGO_ID
-    btn.AutoButtonColor = false
-    btn.ScaleType = Enum.ScaleType.Fit
-    btn.ZIndex = 50
-    btn.Parent = sg
-
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
-    local stroke = Instance.new("UIStroke", btn)
-    stroke.Thickness = 2.2
-    stroke.Color = Color3.fromRGB(220, 70, 110)
-    stroke.Transparency = 0.25
-
-    task.spawn(function()
-        local h = 0
-        while sg.Parent do
-            stroke.Color = Color3.fromHSV(h, 0.7, 1)
-            h = (h + 0.007) % 1
-            task.wait(0.04)
-        end
     end)
 
-    local dragging, dragStart, startPos
-    btn.InputBegan:Connect(function(input)
+    SetActiveTab(homeTab, "Home")
+
+    local OpenBtn
+    local _, btn = createFloatingIcon(function()
+        Main.Visible = not Main.Visible
+        if OpenBtn then OpenBtn.Visible = not Main.Visible end
+    end)
+    OpenBtn = btn
+    OpenBtn.Visible = false
+
+    Close.MouseButton1Click:Connect(function()
+        Main.Visible = false
+        OpenBtn.Visible = true
+    end)
+
+    -- Drag Main
+    local draggingMain, dragStart, startPos
+    Top.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = btn.Position
+            draggingMain = true; dragStart = input.Position; startPos = Main.Position
         end
     end)
-    btn.InputEnded:Connect(function(input)
+    Top.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
+            draggingMain = false
         end
     end)
     UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        if draggingMain and dragStart and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local d = input.Position - dragStart
+            Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
         end
     end)
 
-    btn.MouseButton1Click:Connect(function()
-        pcall(function()
-            if Window and Window.Minimize then Window:Minimize() end
-        end)
-    end)
+    print("[KHUB] Animal Restaurant Mobile UI loaded!")
 end
 
-createFloatingIcon()
-
-pcall(function() Window:SelectTab(1) end)
-
-Fluent:Notify({
-    Title = "KHUB Premium",
-    Content = "Animal Restaurant loaded! by- arin kiyeon",
-    Duration = 5
-})
-
-if Fluent.SaveManager then
-    pcall(function() Fluent.SaveManager:LoadAutoloadConfig() end)
+--====================================================
+-- BOOT: pick UI by platform
+--====================================================
+if isMobile then
+    loadMobileUI()
+else
+    loadFluentProUI()
 end
-
-print("[KHUB] Animal Restaurant by- arin kiyeon loaded!")
