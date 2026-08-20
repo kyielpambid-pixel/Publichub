@@ -319,37 +319,50 @@ repeat task.wait(0.1) until isUnlocked
 -- SHARED FEATURES STATE
 --====================================================
 local hitboxEnabled = false
-local hitboxSize = 7
+local hitboxSize = 7 -- recommended max ~7 for Timebomb (10+ flings)
 local transparentPlayers = true
 local espEnabled = true
 local hitboxData = {}
 local espData = {}
 
-local isAimbotEnabled = false
-local isAutoWallhopEnabled = false
-local isInfJumpEnabled = false
-local isAntiDetectionEnabled = false
-local autoWalk = false
-local wallHop = false
-local jumpCount = 0
-local lastJump = 0
-local isCurrentlyTouchingWall = false
-local isWallhopOnCooldown = false
-local isInfJumpOnCooldown = false
-
-local originalLighting = {
-    GlobalShadows = Lighting.GlobalShadows,
-    FogEnd = Lighting.FogEnd,
-    Brightness = Lighting.Brightness,
-    EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
-    EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+-- Body parts to expand (R6 + R15)
+local EXPAND_PARTS = {
+    "Head", "Torso", "UpperTorso", "LowerTorso",
+    "Left Arm", "Right Arm", "Left Leg", "Right Leg",
+    "LeftUpperArm", "LeftLowerArm", "LeftHand",
+    "RightUpperArm", "RightLowerArm", "RightHand",
+    "LeftUpperLeg", "LeftLowerLeg", "LeftFoot",
+    "RightUpperLeg", "RightLowerLeg", "RightFoot",
+    "HumanoidRootPart",
 }
 
 local function clearChar(char)
-    if hitboxData[char] then hitboxData[char] = nil end
+    if hitboxData[char] then
+        -- restore originals
+        local data = hitboxData[char]
+        if type(data) == "table" and data.parts then
+            for part, orig in pairs(data.parts) do
+                if part and part.Parent then
+                    pcall(function()
+                        part.Size = orig.Size
+                        part.Transparency = orig.Transparency
+                        part.Massless = orig.Massless
+                        part.CanCollide = orig.CanCollide
+                    end)
+                end
+            end
+        end
+        hitboxData[char] = nil
+    end
     if espData[char] then
         pcall(function() espData[char].bb:Destroy() end)
         espData[char] = nil
+    end
+    -- remove visual box
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        local vis = hrp:FindFirstChild("KHUB_HitboxVis")
+        if vis then vis:Destroy() end
     end
 end
 
@@ -357,22 +370,78 @@ local function applyHitbox(char, plr)
     if not char or not char.Parent then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
+
     clearChar(char)
-    if not hrp:GetAttribute("OrigSize") then
-        hrp:SetAttribute("OrigSize", hrp.Size)
-    end
-    hrp.Size = Vector3.new(hitboxSize, hitboxSize * 1.15, hitboxSize)
-    hrp.Transparency = 1
-    for _, part in ipairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
+
+    local size = math.clamp(hitboxSize, 3, 9) -- hard cap 9, recommend 7
+    local partsBackup = {}
+
+    for _, name in ipairs(EXPAND_PARTS) do
+        local part = char:FindFirstChild(name)
+        if part and part:IsA("BasePart") then
+            if not part:GetAttribute("KHUB_OrigSize") then
+                part:SetAttribute("KHUB_OrigSize", part.Size)
+                part:SetAttribute("KHUB_OrigTrans", part.Transparency)
+                part:SetAttribute("KHUB_OrigMassless", part.Massless)
+                part:SetAttribute("KHUB_OrigCollide", part.CanCollide)
+            end
+            local origSize = part:GetAttribute("KHUB_OrigSize") or part.Size
+            partsBackup[part] = {
+                Size = origSize,
+                Transparency = part:GetAttribute("KHUB_OrigTrans") or 0,
+                Massless = part:GetAttribute("KHUB_OrigMassless") or false,
+                CanCollide = part:GetAttribute("KHUB_OrigCollide") ~= false,
+            }
+
+            -- Scale relative to original, clamp extreme growth
+            local scale = size / 2
             if part.Name == "Head" then
-                part.Transparency = 0
-            elseif part.Name ~= "HumanoidRootPart" then
-                part.Transparency = 0.97
+                part.Size = Vector3.new(size * 0.85, size * 0.85, size * 0.85)
+            elseif part.Name == "HumanoidRootPart" then
+                part.Size = Vector3.new(size, size * 1.1, size)
+            else
+                -- limbs / torso: enlarge but keep proportions roughly
+                local o = typeof(origSize) == "Vector3" and origSize or Vector3.new(1, 1, 1)
+                part.Size = Vector3.new(
+                    math.max(o.X * scale, size * 0.4),
+                    math.max(o.Y * scale, size * 0.5),
+                    math.max(o.Z * scale, size * 0.4)
+                )
+            end
+
+            -- Massless reduces fling physics
+            part.Massless = true
+
+            -- Transparency: body almost invisible, head slightly visible, HRP ghost for size guide
+            if transparentPlayers then
+                if part.Name == "Head" then
+                    part.Transparency = 0.15 -- head still readable
+                elseif part.Name == "HumanoidRootPart" then
+                    part.Transparency = 0.75 -- soft ghost hitbox (slightly visible)
+                else
+                    part.Transparency = 0.92 -- arms/torso/legs almost gone
+                end
+            else
+                if part.Name == "HumanoidRootPart" then
+                    part.Transparency = 0.7
+                end
             end
         end
     end
-    hitboxData[char] = true
+
+    -- Soft visual outline box on HRP (no red SelectionBox lines)
+    local vis = Instance.new("BoxHandleAdornment")
+    vis.Name = "KHUB_HitboxVis"
+    vis.Adornee = hrp
+    vis.AlwaysOnTop = true
+    vis.ZIndex = 5
+    vis.Size = hrp.Size
+    vis.Transparency = 0.82 -- slightly visible so you know size
+    vis.Color3 = Color3.fromRGB(255, 120, 180)
+    vis.Parent = hrp
+
+    hitboxData[char] = { parts = partsBackup }
+
     if espEnabled then
         local bb = Instance.new("BillboardGui")
         bb.Name = "KHUB_ESP"
@@ -406,20 +475,31 @@ local function updateAll()
             if hitboxEnabled then
                 applyHitbox(plr.Character, plr)
             else
-                local char = plr.Character
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp and hrp:GetAttribute("OrigSize") then
-                    hrp.Size = hrp:GetAttribute("OrigSize")
-                    hrp.Transparency = 1
-                end
-                for _, part in ipairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") then part.Transparency = 0 end
-                end
-                clearChar(char)
+                clearChar(plr.Character)
             end
         end
     end
 end
+
+local isAimbotEnabled = false
+local isAutoWallhopEnabled = false
+local isInfJumpEnabled = false
+local isAntiDetectionEnabled = false
+local autoWalk = false
+local wallHop = false
+local jumpCount = 0
+local lastJump = 0
+local isCurrentlyTouchingWall = false
+local isWallhopOnCooldown = false
+local isInfJumpOnCooldown = false
+
+local originalLighting = {
+    GlobalShadows = Lighting.GlobalShadows,
+    FogEnd = Lighting.FogEnd,
+    Brightness = Lighting.Brightness,
+    EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
+    EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+}
 
 local function checkWallTouch()
     local hrp = character and character:FindFirstChild("HumanoidRootPart")
@@ -594,20 +674,36 @@ local function createFloatingIcon(onClick)
     sg.DisplayOrder = 999999
     sg.Parent = guiParent
     local btn = Instance.new("ImageButton")
-    btn.Size = UDim2.fromOffset(52, 52)
-    btn.Position = UDim2.new(0, 16, 0.5, -26)
-    btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    btn.BackgroundTransparency = 0.4
+    btn.Size = UDim2.fromOffset(54, 54)
+    btn.Position = UDim2.new(0, 16, 0.5, -27)
+    btn.BackgroundColor3 = Color3.fromRGB(20, 12, 32)
+    btn.BackgroundTransparency = 0.25
     btn.Image = LOGO_ID
+    btn.ImageTransparency = 0
     btn.AutoButtonColor = false
     btn.ScaleType = Enum.ScaleType.Fit
     btn.ZIndex = 50
     btn.Parent = sg
     Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
     local stroke = Instance.new("UIStroke", btn)
-    stroke.Thickness = 2.2
+    stroke.Thickness = 2.4
     stroke.Color = Color3.fromRGB(180, 70, 255)
-    stroke.Transparency = 0.25
+    stroke.Transparency = 0.15
+    -- Fallback if image fails
+    local fb = Instance.new("TextLabel", btn)
+    fb.Size = UDim2.new(1, 0, 1, 0)
+    fb.BackgroundTransparency = 1
+    fb.Text = "KH"
+    fb.Font = Enum.Font.GothamBold
+    fb.TextSize = 16
+    fb.TextColor3 = Color3.fromRGB(255, 160, 255)
+    fb.ZIndex = 51
+    fb.Visible = false
+    task.delay(1.5, function()
+        if btn.Parent and (btn.Image == "" or btn.ImageTransparency >= 1) then
+            fb.Visible = true
+        end
+    end)
     task.spawn(function()
         local h = 0
         while sg.Parent do stroke.Color = Color3.fromHSV(h, 0.7, 1) h = (h + 0.007) % 1 task.wait(0.04) end
@@ -11990,7 +12086,7 @@ do local ab,ac,ad,ae,af,ag,ah,aj,c,e,f,g,h,i,j,k=task,setmetatable,error,newprox
         Callback = function(v) espEnabled = v if hitboxEnabled then updateAll() end end,
     })
     Tabs.Hitbox:AddSlider("HitboxSize", {
-        Title = "Hitbox Size", Default = 7, Min = 3, Max = 18, Rounding = 1,
+        Title = "Hitbox Size (rec. 7)", Default = 7, Min = 3, Max = 9, Rounding = 1,
         Callback = function(v) hitboxSize = v if hitboxEnabled then updateAll() end end,
     })
 
