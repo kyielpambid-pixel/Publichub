@@ -669,23 +669,27 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-pcall(function()
-    local mt = getrawmetatable and getrawmetatable(game)
-    if mt then
-        setreadonly(mt, false)
-        local oldNamecall = mt.__namecall
-        mt.__namecall = newcclosure(function(self, ...)
-            local method = getnamecallmethod()
-            if isAntiDetectionEnabled and (method == "Kick" or method == "kick") then
-                if self == player then
-                    warn("[KHUB Anti-Detection]: Prevented kick.")
-                    return
-                end
-            end
-            return oldNamecall(self, ...)
-        end)
-        setreadonly(mt, true)
-    end
+--====================================================
+-- ANTI DETECTION (your original — Kick only)
+--====================================================
+local mt = getrawmetatable and getrawmetatable(game)
+if mt then
+	setreadonly(mt, false)
+	local oldNamecall = mt.__namecall
+
+	mt.__namecall = newcclosure(function(self, ...)
+		local method = getnamecallmethod()
+		if isAntiDetectionEnabled and (method == "Kick" or method == "kick") then
+			if self == player then
+				warn("[K-Hub Anti-Detection]: Prevented a server kick attempt.")
+				return
+			end
+		end
+		return oldNamecall(self, ...)
+	end)
+	setreadonly(mt, true)
+end
+
 end)
 
 local function setFPSBoost(state)
