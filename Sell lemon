@@ -1,0 +1,1787 @@
+--[[
+    KHUB Sell Lemons - By Arin & KHUB
+    Obsidian UI + Generate Key + Upmazing
+    Place: Sell Lemons (BloxByte)
+]]
+
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+
+local LOGO_ID = "rbxassetid://140466936910510"
+local BG_ID = "rbxassetid://73019569338667"
+local DISCORD_LINK = "https://discord.gg/EKPb7BRDH8"
+local KEY_FILE = "KHUB_SellLemons_Key.txt"
+
+-- Upmazing + Key
+local KeyGui = Instance.new("ScreenGui")
+KeyGui.Name = "KHUB_KeySystem"
+KeyGui.ResetOnSpawn = false
+KeyGui.IgnoreGuiInset = true
+pcall(function() KeyGui.Parent = (gethui and gethui()) or CoreGui end)
+if not KeyGui.Parent then KeyGui.Parent = player:WaitForChild("PlayerGui") end
+
+local Intro = Instance.new("Frame")
+Intro.Size = UDim2.new(1,0,1,0)
+Intro.BackgroundTransparency = 1
+Intro.Parent = KeyGui
+Intro.ZIndex = 200
+local introBg = Instance.new("ImageLabel", Intro)
+introBg.Size = UDim2.new(1,0,1,0)
+introBg.BackgroundTransparency = 1
+introBg.Image = BG_ID
+introBg.ImageTransparency = 0.1
+introBg.ScaleType = Enum.ScaleType.Crop
+introBg.ZIndex = 200
+local titleIntro = Instance.new("TextLabel", Intro)
+titleIntro.Size = UDim2.new(1,0,0,40)
+titleIntro.Position = UDim2.new(0,0,0.4,0)
+titleIntro.BackgroundTransparency = 1
+titleIntro.Text = "KHUB Sell Lemons"
+titleIntro.Font = Enum.Font.GothamBlack
+titleIntro.TextSize = 24
+titleIntro.TextColor3 = Color3.fromRGB(255, 220, 80)
+titleIntro.ZIndex = 202
+local barBg = Instance.new("Frame", Intro)
+barBg.Size = UDim2.new(0,260,0,6)
+barBg.Position = UDim2.new(0.5,-130,0.55,0)
+barBg.BackgroundColor3 = Color3.fromRGB(40,30,10)
+barBg.ZIndex = 202
+Instance.new("UICorner", barBg).CornerRadius = UDim.new(1,0)
+local barFill = Instance.new("Frame", barBg)
+barFill.Size = UDim2.new(0,0,1,0)
+barFill.BackgroundColor3 = Color3.fromRGB(255, 190, 40)
+barFill.ZIndex = 203
+Instance.new("UICorner", barFill).CornerRadius = UDim.new(1,0)
+for i = 0, 1, 0.04 do
+    barFill.Size = UDim2.new(i,0,1,0)
+    task.wait(0.02)
+end
+task.wait(0.2)
+Intro:Destroy()
+
+local KeyUI = Instance.new("Frame")
+KeyUI.Size = UDim2.new(0,400,0,260)
+KeyUI.Position = UDim2.new(0.5,-200,0.5,-130)
+KeyUI.BackgroundColor3 = Color3.fromRGB(20,15,8)
+KeyUI.Parent = KeyGui
+Instance.new("UICorner", KeyUI).CornerRadius = UDim.new(0,12)
+local ks = Instance.new("UIStroke", KeyUI)
+ks.Color = Color3.fromRGB(255, 180, 40)
+ks.Thickness = 1.5
+
+local kt = Instance.new("TextLabel", KeyUI)
+kt.Size = UDim2.new(1,0,0,36)
+kt.Position = UDim2.new(0,0,0,12)
+kt.BackgroundTransparency = 1
+kt.Text = "KHUB Sell Lemons"
+kt.Font = Enum.Font.GothamBold
+kt.TextSize = 16
+kt.TextColor3 = Color3.fromRGB(255, 200, 80)
+
+local keyBox = Instance.new("TextBox", KeyUI)
+keyBox.Size = UDim2.new(1,-30,0,40)
+keyBox.Position = UDim2.new(0,15,0,55)
+keyBox.BackgroundColor3 = Color3.fromRGB(0,0,0)
+keyBox.BackgroundTransparency = 0.4
+keyBox.PlaceholderText = "Paste key here..."
+keyBox.Text = ""
+keyBox.TextColor3 = Color3.new(1,1,1)
+keyBox.Font = Enum.Font.Gotham
+keyBox.TextSize = 13
+Instance.new("UICorner", keyBox).CornerRadius = UDim.new(0,8)
+
+local getKey = Instance.new("TextButton", KeyUI)
+getKey.Size = UDim2.new(1,-30,0,34)
+getKey.Position = UDim2.new(0,15,0,105)
+getKey.BackgroundColor3 = Color3.fromRGB(180,100,30)
+getKey.Text = "Get Key from Discord"
+getKey.Font = Enum.Font.GothamBold
+getKey.TextSize = 12
+getKey.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", getKey).CornerRadius = UDim.new(0,8)
+getKey.MouseButton1Click:Connect(function()
+    pcall(function() if setclipboard then setclipboard(DISCORD_LINK) end end)
+end)
+
+local redeem = Instance.new("TextButton", KeyUI)
+redeem.Size = UDim2.new(1,-30,0,40)
+redeem.Position = UDim2.new(0,15,0,150)
+redeem.BackgroundColor3 = Color3.fromRGB(200,130,30)
+redeem.Text = "Redeem Key"
+redeem.Font = Enum.Font.GothamBold
+redeem.TextSize = 14
+redeem.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", redeem).CornerRadius = UDim.new(0,8)
+
+local keyStatus = Instance.new("TextLabel", KeyUI)
+keyStatus.Size = UDim2.new(1,-20,0,20)
+keyStatus.Position = UDim2.new(0,10,0,205)
+keyStatus.BackgroundTransparency = 1
+keyStatus.Text = ""
+keyStatus.Font = Enum.Font.Gotham
+keyStatus.TextSize = 12
+keyStatus.TextColor3 = Color3.fromRGB(255,180,80)
+
+local isUnlocked = false
+local keyExpiryTime = 0
+
+local function VerifyKey(inputKey)
+    local parts = string.split(inputKey, "-")
+    if #parts < 6 then return false, "Invalid key format!" end
+    local exp = tonumber(parts[#parts])
+    if not exp then return false, "Invalid key!" end
+    if os.time() > exp then return false, "Key expired!" end
+    return true, "Key Verified!", exp
+end
+
+local function SaveKey(key)
+    pcall(function() if writefile then writefile(KEY_FILE, key) end end)
+end
+
+local function ClearSavedKey()
+    pcall(function()
+        if isfile and isfile(KEY_FILE) and delfile then delfile(KEY_FILE)
+        elseif writefile then writefile(KEY_FILE, "") end
+    end)
+end
+
+local function LoadSavedKey()
+    local ok, data = pcall(function()
+        if isfile and isfile(KEY_FILE) and readfile then return readfile(KEY_FILE) end
+    end)
+    if ok and data and data ~= "" then
+        local valid, _, exp = VerifyKey(data)
+        if valid then return data, exp end
+        ClearSavedKey()
+    end
+    return nil, nil
+end
+
+do
+    local sk, exp = LoadSavedKey()
+    if sk then
+        keyExpiryTime = exp
+        isUnlocked = true
+        pcall(function() KeyUI:Destroy() KeyGui:Destroy() end)
+    end
+end
+
+if not isUnlocked then
+    redeem.MouseButton1Click:Connect(function()
+        local input = keyBox.Text
+        local valid, msg, exp = VerifyKey(input or "")
+        if valid then
+            SaveKey(input)
+            keyExpiryTime = exp
+            isUnlocked = true
+            keyStatus.Text = msg .. " (Saved)"
+            keyStatus.TextColor3 = Color3.fromRGB(100,255,100)
+            task.wait(0.5)
+            pcall(function() KeyUI:Destroy() KeyGui:Destroy() end)
+        else
+            keyStatus.Text = msg or "Invalid"
+            keyStatus.TextColor3 = Color3.fromRGB(255,80,80)
+        end
+    end)
+    repeat task.wait(0.1) until isUnlocked
+end
+
+-- Floating icon
+task.spawn(function()
+    local parent = (gethui and gethui()) or CoreGui
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "KHUB_FloatIcon"
+    sg.ResetOnSpawn = false
+    sg.IgnoreGuiInset = true
+    sg.DisplayOrder = 999999
+    pcall(function() sg.Parent = parent end)
+    if not sg.Parent then sg.Parent = player:WaitForChild("PlayerGui") end
+    local btn = Instance.new("ImageButton", sg)
+    btn.Size = UDim2.fromOffset(52,52)
+    btn.Position = UDim2.new(0,16,0.5,-26)
+    btn.BackgroundColor3 = Color3.fromRGB(40,28,8)
+    btn.Image = LOGO_ID
+    btn.AutoButtonColor = false
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(1,0)
+    local st = Instance.new("UIStroke", btn)
+    st.Color = Color3.fromRGB(255,180,40)
+    st.Thickness = 2
+    local drag, ds, sp
+    btn.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            drag = true ds = i.Position sp = btn.Position
+        end
+    end)
+    btn.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then drag = false end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if drag and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            local d = i.Position - ds
+            btn.Position = UDim2.new(sp.X.Scale, sp.X.Offset+d.X, sp.Y.Scale, sp.Y.Offset+d.Y)
+        end
+    end)
+end)
+
+--==============================================================
+-- ORIGINAL SELL LEMONS LOGIC (KHUB branded)
+--==============================================================
+
+
+yung sa timebomb pewede mo lagyan ng slide bar yung pewede nila e increased yung hitbox haggang 12 lng highest or 13
+
+
+then my nagong tayo script nagagawan
+sell lemons 
+Gawin mo nlng KHUb
+
+
+--!nocheck
+-- khub-sell-lemons.lua  --  KHUB | Sell Lemons  (place 79268393072444, BloxByte Games)
+--
+-- Rebrand of the measured Sell Lemons automation. Game logic is unchanged;
+-- the UI layer is Obsidian (deividcomsono) with KHUB branding and the five
+-- required tabs: Main, Earnings, Boosts, Rebirth, Settings.
+--
+-- Orchard is gated behind Config.Orchard.UnlockCashPrice = 1e25 and was never
+-- executed live. Treat orchard reports as claims, not measurements.
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
+
+local plr = Players.LocalPlayer
+
+--------------------------------------------------------------------------------
+-- Obsidian UI (load FIRST so failures surface clearly)
+--------------------------------------------------------------------------------
+
+local function httpGet(url)
+	local ok, body = pcall(function()
+		return game:HttpGet(url)
+	end)
+	if ok and type(body) == "string" and #body > 0 then
+		return body
+	end
+	-- fallbacks some executors prefer
+	if syn and syn.request then
+		local r = syn.request({ Url = url, Method = "GET" })
+		if r and r.Body then return r.Body end
+	end
+	if http and http.request then
+		local r = http.request({ Url = url, Method = "GET" })
+		if r and r.Body then return r.Body end
+	end
+	if request then
+		local r = request({ Url = url, Method = "GET" })
+		if r and r.Body then return r.Body end
+	end
+	error("HttpGet failed for " .. tostring(url) .. " :: " .. tostring(body))
+end
+
+local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+
+local Library, ThemeManager, SaveManager
+do
+	local okLib, libOrErr = pcall(function()
+		return loadstring(httpGet(repo .. "Library.lua"))()
+	end)
+	if not okLib or not libOrErr then
+		warn("[KHUB] Failed to load Obsidian Library: " .. tostring(libOrErr)); return
+	end
+	Library = libOrErr
+
+	local okTheme, themeOrErr = pcall(function()
+		return loadstring(httpGet(repo .. "addons/ThemeManager.lua"))()
+	end)
+	if okTheme then
+		ThemeManager = themeOrErr
+	else
+		warn("[KHUB] ThemeManager failed: " .. tostring(themeOrErr))
+	end
+
+	local okSave, saveOrErr = pcall(function()
+		return loadstring(httpGet(repo .. "addons/SaveManager.lua"))()
+	end)
+	if okSave then
+		SaveManager = saveOrErr
+	else
+		warn("[KHUB] SaveManager failed: " .. tostring(saveOrErr))
+	end
+end
+
+local Options = Library.Options
+local Toggles = Library.Toggles
+
+Library.ForceCheckbox = false
+Library.ShowToggleFrameInKeybinds = true
+
+--------------------------------------------------------------------------------
+-- config / state
+--------------------------------------------------------------------------------
+
+local CONFIG = {
+	auto = false,
+
+	autoBuy = true,
+	autoUpgrade = true,
+	autoWake = true,
+	wakeSpacing = 0.15,
+
+	autoFruit = true,
+	fruitPerSweep = 30,
+	autoRace = true,
+	autoTrade = true,
+	autoDrops = true,
+	autoOffers = true,
+	offerRaises = 1,
+
+	autoPowers = true,
+	buyCosmeticPowers = false,
+	autoRebirth = false,
+	rebirthFactor = 10,
+	rebirthMinimum = 100,
+	autoEvolve = false,
+	autoAscend = false,
+
+	autoOrchard = false,
+}
+
+local STATE = {
+	note = "idle",
+	cash = -math.huge, spent = -math.huge, investors = -math.huge,
+	potential = -math.huge, tokens = 0,
+	purchased = 0, rebirths = 0, evolution = 0, ascension = 0,
+	evolveProgress = 0, ascendProgress = 0,
+	incomeRate = 0, lastCash = nil, rateAt = nil, rateRef = nil,
+	nextBuy = "-", nextBuyPrice = nil,
+	nextUpgrade = "-", nextUpgradePrice = nil, nextUpgradeCount = 1,
+	streams = {},
+	wakes = 0, buys = 0, upgrades = 0, fruits = 0, fruitRipe = 0, fruitHome = nil,
+	races = 0, trades = 0, drops = 0, offers = 0, powerBuys = 0,
+	earnedRace = 0, earnedTrade = 0, earnedDrop = 0, earnedOffer = 0, earnedFruit = 0,
+	raceIn = 0, tradeIn = 0,
+	offerValue = nil, offerRaised = 0,
+	powerLevels = {}, nextPower = "-", nextPowerPrice = nil,
+	orchardUnlocked = false, orchardNote = "off (unverified)",
+	blocked = nil,
+}
+
+_G.__KHUB_SL = (_G.__KHUB_SL or 0) + 1
+local GEN = _G.__KHUB_SL
+
+--------------------------------------------------------------------------------
+-- module access
+--------------------------------------------------------------------------------
+
+local function req(module)
+	if not module then return nil, "no module" end
+	if setthreadidentity then pcall(setthreadidentity, 2) end
+	local ok, value = pcall(require, module)
+	if not ok then return nil, tostring(value) end
+	return value
+end
+
+local function path(root, ...)
+	local node = root
+	for _, name in ipairs({ ... }) do
+		if not node then return nil end
+		node = node:FindFirstChild(name)
+	end
+	return node
+end
+
+local Huge = req(ReplicatedStorage:FindFirstChild("Modules")
+	and path(ReplicatedStorage, "Modules", "Huge"))
+local Balance = req(ReplicatedStorage:FindFirstChild("Balance"))
+local Config = req(ReplicatedStorage:FindFirstChild("Config"))
+
+if not Huge then
+	warn("[KHUB] Modules.Huge missing - wrong game or not loaded yet. UI will still open; farm loops idle until modules appear.")
+	STATE.blocked = "Modules.Huge missing (wrong game?)"
+	STATE.note = "waiting for game modules"
+end
+
+--------------------------------------------------------------------------------
+-- Huge helpers (safe when Huge is nil)
+--------------------------------------------------------------------------------
+
+local NONE = -math.huge
+
+local function isHuge(v) return type(v) == "number" end
+local function hugeIsZero(v) return (not isHuge(v)) or v == NONE or v ~= v end
+
+local function fmt(v)
+	if hugeIsZero(v) then return "0" end
+	if not Huge then return string.format("%.2f(log10)", v) end
+	local ok, text = pcall(Huge.formatAbbreviated, v)
+	if ok and text then return text end
+	return string.format("%.2f(log10)", v)
+end
+
+local function fmtTime(v)
+	if hugeIsZero(v) or not Huge then return "-" end
+	local ok, text = pcall(Huge.formatTime, v)
+	return ok and text or "-"
+end
+
+local function toNum(v)
+	if hugeIsZero(v) or not Huge then return 0 end
+	local ok, n = pcall(Huge.toNumber, v)
+	if ok and type(n) == "number" and n == n then return n end
+	return 0
+end
+
+local function toHuge(n)
+	if type(n) ~= "number" or n <= 0 or not Huge then return NONE end
+	local ok, v = pcall(Huge.toHuge, n)
+	return ok and v or NONE
+end
+
+local function atLeast(a, b)
+	if hugeIsZero(b) then return true end
+	if hugeIsZero(a) then return false end
+	return a >= b
+end
+
+local function short(n)
+	if type(n) ~= "number" or n <= 0 then return "0" end
+	return fmt(toHuge(n))
+end
+
+--------------------------------------------------------------------------------
+-- the tycoon and its components
+--------------------------------------------------------------------------------
+
+local Tycoon = req(path(ReplicatedStorage, "Modules", "Tycoon", "Tycoon"))
+local ComponentFolder = path(ReplicatedStorage, "Modules", "Tycoon", "Component")
+
+local componentCache = {}
+
+local function comp(name)
+	if componentCache[name] then return componentCache[name] end
+	if not (Tycoon and ComponentFolder) then return nil end
+	local class = req(ComponentFolder:FindFirstChild(name))
+	if not class then return nil end
+	local ok, lt = pcall(Tycoon.getLocal)
+	if not ok or not lt then return nil end
+	local ok2, instance = pcall(function() return lt:GetComponent(class) end)
+	if not ok2 or not instance then return nil end
+	componentCache[name] = instance
+	return instance
+end
+
+local function myTycoon()
+	if _G.__KHUB_SL_T and _G.__KHUB_SL_T.Parent then return _G.__KHUB_SL_T end
+	for _, folder in ipairs(Workspace:GetChildren()) do
+		if folder:IsA("Folder") and folder.Name:match("^Tycoon%d+$") then
+			local owner = folder:FindFirstChild("Owner")
+			if owner and owner:IsA("ObjectValue") and owner.Value == plr then
+				_G.__KHUB_SL_T = folder
+				return folder
+			end
+		end
+	end
+	return nil
+end
+
+local function tycoonRemote(name)
+	local t = myTycoon()
+	if not t then return nil end
+	local remotes = t:FindFirstChild("Remotes")
+	return remotes and remotes:FindFirstChild(name)
+end
+
+local function coreRequest(name)
+	return path(ReplicatedStorage, "Core", "RemoteRequest") and
+		path(ReplicatedStorage, "Core", "RemoteRequest"):FindFirstChild(name)
+end
+
+local function coreSignal(name)
+	local folder = path(ReplicatedStorage, "Core", "RemoteSignal")
+	return folder and folder:FindFirstChild(name)
+end
+
+--------------------------------------------------------------------------------
+-- oracle reads
+--------------------------------------------------------------------------------
+
+local function balances() return comp("TycoonBalances") end
+local function analyzer() return comp("TycoonAnalyzer") end
+local function income() return comp("TycoonIncome") end
+local function powers() return comp("TycoonPowers") end
+local function rebirth() return comp("TycoonRebirth") end
+local function evolution() return comp("TycoonEvolution") end
+local function ascension() return comp("TycoonAscension") end
+local function purchases() return comp("TycoonPurchases") end
+local function phoneOffers() return comp("TycoonPhoneOffers") end
+local function companions() return comp("TycoonCompanions") end
+
+local function cash()
+	local b = balances()
+	if not b then return NONE end
+	local ok, v = pcall(function() return b:GetCash() end)
+	return (ok and isHuge(v)) and v or NONE
+end
+
+local function canAfford(price)
+	if hugeIsZero(price) then return true end
+	return atLeast(cash(), price)
+end
+
+--------------------------------------------------------------------------------
+-- KAUFEN
+--------------------------------------------------------------------------------
+
+local function nextPurchase()
+	local a = analyzer()
+	if not (a and Balance and Balance.PurchaseOrder) then return nil end
+	local ok, all = pcall(function() return a:GetPurchases() end)
+	if not ok or type(all) ~= "table" then return nil end
+	for _, id in ipairs(Balance.PurchaseOrder) do
+		local entry = all[id]
+		if entry and entry.Instance and entry.Instance.Parent then
+			local inst = entry.Instance
+			if inst:GetAttribute("Enabled") and not inst:GetAttribute("Purchased") then
+				return entry, id, Balance.PurchasePrices and Balance.PurchasePrices[id]
+			end
+		end
+	end
+	return nil
+end
+
+local function stepBuy()
+	local entry, id, price = nextPurchase()
+	if not entry then
+		STATE.nextBuy, STATE.nextBuyPrice = "all bought", nil
+		return
+	end
+	STATE.nextBuy, STATE.nextBuyPrice = id, price
+	if not canAfford(price) then return end
+	local ok = pcall(function() return entry:TryPurchaseAsync() end)
+	if ok and entry.Instance:GetAttribute("Purchased") then
+		STATE.buys = STATE.buys + 1
+		STATE.note = "bought " .. tostring(id)
+	end
+end
+
+--------------------------------------------------------------------------------
+-- VERBESSERN
+--------------------------------------------------------------------------------
+
+local function earnerList()
+	local a = analyzer()
+	if not a then return {} end
+	local ok, all = pcall(function() return a:GetEarners() end)
+	return (ok and type(all) == "table") and all or {}
+end
+
+local function bestUpgrade()
+	local best, bestId, bestPrice, bestCount
+	for id, earner in pairs(earnerList()) do
+		local ok, info = pcall(function() return earner:GetNextUpgradeInfo() end)
+		if ok and type(info) == "table" and not info.Max and isHuge(info.Price) then
+			if (not bestPrice) or info.Price < bestPrice then
+				best, bestId, bestPrice, bestCount = earner, id, info.Price, info.Count or 1
+			end
+		end
+	end
+	return best, bestId, bestPrice, bestCount
+end
+
+local function stepUpgrade()
+	local earner, id, price, count = bestUpgrade()
+	if not earner then
+		STATE.nextUpgrade, STATE.nextUpgradePrice = "maxed", nil
+		return
+	end
+	STATE.nextUpgrade, STATE.nextUpgradePrice, STATE.nextUpgradeCount = id, price, count
+	if not canAfford(price) then return end
+	local ok = pcall(function() return earner:UpgradeAsync(count) end)
+	if ok then
+		STATE.upgrades = STATE.upgrades + 1
+		STATE.note = "upgraded " .. tostring(id) .. " x" .. tostring(count)
+	end
+end
+
+--------------------------------------------------------------------------------
+-- KLICKEN
+--------------------------------------------------------------------------------
+
+local function stepWake()
+	local inc = income()
+	if not inc then return end
+	for id, earner in pairs(earnerList()) do
+		if GEN ~= _G.__KHUB_SL then return end
+		local ok, auto = pcall(function() return inc:IsStreamAutomatic(id) end)
+		if ok and not auto then
+			pcall(function() earner:WakeAsync() end)
+			STATE.wakes = STATE.wakes + 1
+		end
+	end
+end
+
+local function readStreams()
+	local inc = income()
+	if not inc then return end
+	local rows = {}
+	for id in pairs(earnerList()) do
+		local function get(fn, ...)
+			local ok, v = pcall(fn, ...)
+			return ok and v or nil
+		end
+		rows[#rows + 1] = {
+			id = id,
+			auto = get(function() return inc:IsStreamAutomatic(id) end) and true or false,
+			value = get(function() return inc:GetStreamRealValue(id) end),
+			interval = get(function() return inc:GetStreamRealInterval(id) end),
+			count = get(function() return inc:GetStreamCount(id) end) or 0,
+		}
+	end
+	table.sort(rows, function(a, b)
+		return (isHuge(a.value) and a.value or NONE) > (isHuge(b.value) and b.value or NONE)
+	end)
+	STATE.streams = rows
+end
+
+--------------------------------------------------------------------------------
+-- fruit
+--------------------------------------------------------------------------------
+
+local FRUIT_REACH = 16
+local FRUIT_HOP = 0.1
+local FRUIT_SETTLE = 0.1
+
+local function humanoidRoot()
+	local char = plr.Character
+	return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function ripeFruits()
+	local out = {}
+	for _, part in ipairs(CollectionService:GetTagged("ClickFruit")) do
+		if part.Parent then
+			local clickPart = part:FindFirstChild("ClickFruitPart")
+			local detector = clickPart and clickPart:FindFirstChildOfClass("ClickDetector")
+			if detector then out[#out + 1] = { part = part, detector = detector } end
+		end
+	end
+	return out
+end
+
+local function stepFruit()
+	if not fireclickdetector then
+		STATE.blocked = "executor has no fireclickdetector - fruit harvesting off"
+		return
+	end
+	local root = humanoidRoot()
+	if not root then return end
+
+	local ripe = ripeFruits()
+	STATE.fruitRipe = #ripe
+	if #ripe == 0 then return end
+
+	local origin = root.Position
+	table.sort(ripe, function(a, b)
+		return (a.part.Position - origin).Magnitude < (b.part.Position - origin).Magnitude
+	end)
+
+	local home = root.CFrame
+	STATE.fruitHome = home
+
+	local budget = math.clamp(CONFIG.fruitPerSweep or 30, 5, 200)
+
+	for index, entry in ipairs(ripe) do
+		if GEN ~= _G.__KHUB_SL then break end
+		if not (CONFIG.auto and CONFIG.autoFruit) then break end
+		if index > budget then break end
+
+		if entry.part.Parent then
+			root = humanoidRoot()
+			if not root then break end
+
+			if (root.Position - entry.part.Position).Magnitude > FRUIT_REACH then
+				root.CFrame = CFrame.new(entry.part.Position + Vector3.new(0, 3, 0))
+				task.wait(FRUIT_HOP)
+				root = humanoidRoot()
+				if not root then break end
+			end
+
+			pcall(fireclickdetector, entry.detector)
+			STATE.fruits = STATE.fruits + 1
+			task.wait(FRUIT_SETTLE)
+		end
+	end
+
+	local back = humanoidRoot()
+	if back and home then pcall(function() back.CFrame = home end) end
+end
+
+--------------------------------------------------------------------------------
+-- minigames
+--------------------------------------------------------------------------------
+
+local function raceAvailableAt()
+	local svc = req(path(ReplicatedStorage, "Modules", "Service", "MinigameRaceService"))
+	if not svc or not svc.GetRaceAvailableTime then return math.huge end
+	local ok, t = pcall(svc.GetRaceAvailableTime)
+	return (ok and type(t) == "number") and t or math.huge
+end
+
+local function tradeAvailableAt()
+	local svc = req(path(ReplicatedStorage, "Modules", "Service", "MinigameTradeService"))
+	if not svc or not svc.GetTradingAvailableTime then return math.huge end
+	local ok, t = pcall(svc.GetTradingAvailableTime)
+	return (ok and type(t) == "number") and t or math.huge
+end
+
+local function stepRace()
+	local at = raceAvailableAt()
+	STATE.raceIn = math.max(0, at - os.time())
+	if at > os.time() then return end
+	local startRemote = coreRequest("MinigameRaceService.Start")
+	local endRemote = coreRequest("MinigameRaceService.End")
+	if not (startRemote and endRemote) then return end
+	local ok, prize = pcall(function() return startRemote:InvokeServer() end)
+	if not ok or not isHuge(prize) then return end
+	task.wait(0.3)
+	local okEnd = pcall(function() return endRemote:InvokeServer(1) end)
+	if okEnd then
+		STATE.races = STATE.races + 1
+		STATE.earnedRace = STATE.earnedRace + toNum(prize)
+		STATE.note = "race won, " .. fmt(prize)
+	end
+end
+
+local function stepTrade()
+	local at = tradeAvailableAt()
+	STATE.tradeIn = math.max(0, at - os.time())
+	if at > os.time() then return end
+	local startRemote = coreRequest("MinigameTradeService.Start")
+	local endRemote = coreRequest("MinigameTradeService.End")
+	if not (startRemote and endRemote) then return end
+	local ok, cfg = pcall(function() return startRemote:InvokeServer() end)
+	if not ok or type(cfg) ~= "table" or not isHuge(cfg.MaxEarnings) then return end
+	task.wait(0.3)
+	local okEnd = pcall(function() return endRemote:InvokeServer(cfg.MaxEarnings) end)
+	if okEnd then
+		STATE.trades = STATE.trades + 1
+		STATE.earnedTrade = STATE.earnedTrade + toNum(cfg.MaxEarnings)
+		STATE.note = "trade closed, " .. fmt(cfg.MaxEarnings)
+	end
+end
+
+--------------------------------------------------------------------------------
+-- cash drops
+--------------------------------------------------------------------------------
+
+local dropQueue = {}
+
+local function armDrops()
+	if _G.__KHUB_SL_DROPCONN then pcall(function() _G.__KHUB_SL_DROPCONN:Disconnect() end) end
+	local signal = coreSignal("DropService.New")
+	if not signal then return end
+	_G.__KHUB_SL_DROPCONN = signal.OnClientEvent:Connect(function(id)
+		if id ~= nil then dropQueue[#dropQueue + 1] = id end
+	end)
+end
+
+local function stepDrops()
+	if #dropQueue == 0 then return end
+	local redeem = coreRequest("DropService.Redeem")
+	if not redeem then return end
+	local id = table.remove(dropQueue, 1)
+	local ok, value = pcall(function() return redeem:InvokeServer(id) end)
+	if ok and isHuge(value) then
+		STATE.drops = STATE.drops + 1
+		STATE.earnedDrop = STATE.earnedDrop + toNum(value)
+		STATE.note = "drop " .. tostring(id) .. " = " .. fmt(value)
+	end
+end
+
+--------------------------------------------------------------------------------
+-- phone offers
+--------------------------------------------------------------------------------
+
+local function currentOffer()
+	local po = phoneOffers()
+	if not po then return nil end
+	local ok, v = pcall(function() return po:GetCurrentOffer() end)
+	return (ok and isHuge(v)) and v or nil
+end
+
+local function stepOffer()
+	local po = phoneOffers()
+	if not po then return end
+	local value = currentOffer()
+	STATE.offerValue = value
+	if not value then return end
+
+	local raised = 0
+	for _ = 1, math.clamp(CONFIG.offerRaises or 0, 0, 2) do
+		pcall(function() po:RaiseOffer() end)
+		task.wait(1.2)
+		local after = currentOffer()
+		if not after then
+			STATE.note = "offer lost on raise " .. (raised + 1)
+			STATE.offerValue = nil
+			return
+		end
+		raised = raised + 1
+		STATE.offerValue = after
+		value = after
+	end
+
+	local ok = pcall(function() po:AcceptOffer() end)
+	if ok then
+		STATE.offers = STATE.offers + 1
+		STATE.offerRaised = raised
+		STATE.earnedOffer = STATE.earnedOffer + toNum(value)
+		STATE.note = "offer accepted " .. fmt(value) .. (raised > 0 and (" (+" .. raised .. " raise)") or "")
+	end
+end
+
+--------------------------------------------------------------------------------
+-- powers
+--------------------------------------------------------------------------------
+
+local POWER_ORDER = { "ClickFruitValue", "UpgradeStack", "BuyNext", "AutoFruit", "Manage", "WalkSpeed" }
+local SKIP_POWERS = { Manage = true, WalkSpeed = true }
+
+local function powerState()
+	local pw = powers()
+	if not pw then return {} end
+	local ok, levels = pcall(function() return pw:GetLevels() end)
+	if not ok or type(levels) ~= "table" then return {} end
+	local out = {}
+	for name, level in pairs(levels) do
+		local okMax, max = pcall(function() return pw:GetMaxLevel(name) end)
+		local okPrice, price = pcall(function() return pw:GetUpgradePrice(name) end)
+		out[name] = {
+			level = level,
+			max = okMax and max or nil,
+			price = (okPrice and isHuge(price)) and price or nil,
+		}
+	end
+	return out
+end
+
+local function investors()
+	local b = balances()
+	if not b then return NONE end
+	local ok, v = pcall(function() return b:GetInvestors() end)
+	return (ok and isHuge(v)) and v or NONE
+end
+
+local function stepPowers()
+	local pw = powers()
+	if not pw then return end
+	local state = powerState()
+	STATE.powerLevels = state
+	local have = investors()
+
+	local firstTarget, firstPrice
+	for _, name in ipairs(POWER_ORDER) do
+		local entry = state[name]
+		local skipped = SKIP_POWERS[name] and not CONFIG.buyCosmeticPowers
+		if entry and entry.price and not skipped and (not entry.max or entry.level < entry.max) then
+			if not firstTarget then firstTarget, firstPrice = name, entry.price end
+			if atLeast(have, entry.price) then
+				local ok = pcall(function() return pw:UpgradeAsync(name) end)
+				if ok then
+					STATE.powerBuys = STATE.powerBuys + 1
+					STATE.note = "power " .. name .. " -> " .. tostring((entry.level or 0) + 1)
+				end
+				STATE.nextPower, STATE.nextPowerPrice = name, entry.price
+				return
+			end
+		end
+	end
+	STATE.nextPower = firstTarget or "all owned"
+	STATE.nextPowerPrice = firstPrice
+end
+
+--------------------------------------------------------------------------------
+-- prestige
+--------------------------------------------------------------------------------
+
+local function potentialInvestors()
+	local r = rebirth()
+	if not r then return NONE end
+	local ok, v = pcall(function() return r:GetPotentialInvestors() end)
+	return (ok and isHuge(v)) and v or NONE
+end
+
+local function shouldRebirth()
+	local potential = potentialInvestors()
+	if hugeIsZero(potential) then return false end
+	local minimum = toHuge(CONFIG.rebirthMinimum)
+	if not atLeast(potential, minimum) then return false end
+	local have = investors()
+	if hugeIsZero(have) then return true end
+	local factor = math.log10(math.max(CONFIG.rebirthFactor or 1, 1))
+	return potential >= have + factor
+end
+
+local function stepRebirth()
+	if not shouldRebirth() then return end
+	local r = rebirth()
+	if not r then return end
+	local before = potentialInvestors()
+	local ok = pcall(function() return r:RebirthAsync() end)
+	if ok then
+		STATE.note = "rebirthed for " .. fmt(before) .. " investors"
+		task.wait(2)
+	end
+end
+
+local function stepEvolve()
+	local e = evolution()
+	if not e then return end
+	local ok, progress = pcall(function() return e:GetEvolutionProgress() end)
+	if not ok or type(progress) ~= "number" then return end
+	STATE.evolveProgress = progress
+	if progress < 1 then return end
+	if pcall(function() return e:EvolveAsync() end) then
+		STATE.note = "evolved"
+		task.wait(2)
+	end
+end
+
+local function stepAscend()
+	local a = ascension()
+	if not a then return end
+	local ok, progress = pcall(function() return a:GetAscensionProgress() end)
+	if not ok or type(progress) ~= "number" then return end
+	STATE.ascendProgress = progress
+	if progress < 1 then return end
+	if pcall(function() return a:AscendAsync() end) then
+		STATE.note = "ascended"
+		task.wait(2)
+	end
+end
+
+--------------------------------------------------------------------------------
+-- companions
+--------------------------------------------------------------------------------
+
+local function stepCompanions()
+	local c = companions()
+	if not c then return end
+	local ok, pending = pcall(function() return c:GetPending() end)
+	if ok and type(pending) == "table" then
+		for _, key in ipairs(pending) do
+			pcall(function() return c:ClaimCompanionAsync(key) end)
+		end
+	end
+	local okEq, equipped = pcall(function() return c:GetEquippedCompanion() end)
+	if okEq and equipped == nil then
+		local okUn, unlocked = pcall(function() return c:GetUnlocked() end)
+		if okUn and type(unlocked) == "table" and unlocked[1] then
+			pcall(function() return c:SetEquippedAsync(unlocked[1]) end)
+		end
+	end
+end
+
+--------------------------------------------------------------------------------
+-- orchard - UNVERIFIED
+--------------------------------------------------------------------------------
+
+local PLOT_EMPTY, PLOT_TREE_GROWING, PLOT_FRUIT_GROWING, PLOT_FRUIT_READY = 0, 1, 2, 3
+
+local function orchardModule()
+	return req(path(ReplicatedStorage, "Modules", "Tycoon", "Orchard", "Orchard"))
+end
+
+local function orchardIsUnlocked()
+	local mod = orchardModule()
+	if not (mod and Tycoon) then return false end
+	local ok, lt = pcall(Tycoon.getLocal)
+	if not ok or not lt then return false end
+	local okO, orchard = pcall(function() return mod.getFromTycoon(lt) end)
+	if not okO or not orchard then return false end
+	local okU, unlocked = pcall(function() return orchard:IsUnlocked() end)
+	return okU and unlocked or false
+end
+
+local function stepOrchard()
+	STATE.orchardUnlocked = orchardIsUnlocked()
+
+	if not STATE.orchardUnlocked then
+		local price = Config and Config.Orchard and Config.Orchard.UnlockCashPrice
+		local hugePrice = price and toHuge(price) or nil
+		if hugePrice and canAfford(hugePrice) then
+			local remote = tycoonRemote("UnlockOrchard")
+			if remote and remote:IsA("RemoteFunction") then
+				if pcall(function() return remote:InvokeServer() end) then
+					STATE.orchardNote = "unlock fired (unverified)"
+				end
+			end
+		else
+			STATE.orchardNote = "locked, needs " .. (hugePrice and fmt(hugePrice) or "1e25")
+		end
+		return
+	end
+
+	local t = myTycoon()
+	local plots = t and path(t, "Orchard", "Plots")
+	if not plots then return end
+
+	local plant = coreRequest("OrchardPlot.Plant")
+	local harvest = coreRequest("OrchardPlot.Harvest")
+	local unlockPlot = tycoonRemote("UnlockPlot")
+	local ready, planted, unlockedNow = 0, 0, 0
+
+	for _, plot in ipairs(plots:GetChildren()) do
+		if GEN ~= _G.__KHUB_SL then return end
+		local state = plot:GetAttribute("State")
+		local enabled = plot:GetAttribute("Enabled")
+		local base = plot:GetAttribute("BaseUnlocked")
+
+		if not base and plot:GetAttribute("Available") and unlockPlot then
+			if pcall(function() return unlockPlot:InvokeServer(plot.Name) end) then
+				unlockedNow = unlockedNow + 1
+			end
+		elseif enabled and state == PLOT_FRUIT_READY and harvest then
+			if pcall(function() return harvest:InvokeServer(plot) end) then ready = ready + 1 end
+		elseif enabled and state == PLOT_EMPTY and plant then
+			if pcall(function() return plant:InvokeServer(plot) end) then planted = planted + 1 end
+		end
+	end
+
+	local sell = path(t, "Values", "SellFruits")
+	if sell and sell:IsA("RemoteFunction") then
+		pcall(function() return sell:InvokeServer() end)
+	end
+
+	STATE.orchardNote = string.format("unverified: %d harvested, %d planted, %d plots unlocked",
+		ready, planted, unlockedNow)
+end
+
+--------------------------------------------------------------------------------
+-- SpecialIncome
+--------------------------------------------------------------------------------
+
+local function armSpecialIncome()
+	if _G.__KHUB_SL_SICONN then pcall(function() _G.__KHUB_SL_SICONN:Disconnect() end) end
+	local remote = tycoonRemote("SpecialIncome")
+	if not remote then return end
+	_G.__KHUB_SL_SICONN = remote.OnClientEvent:Connect(function(source, amount)
+		if not isHuge(amount) then return end
+		if source == "ClickFruit" then
+			STATE.earnedFruit = STATE.earnedFruit + toNum(amount)
+		end
+	end)
+end
+
+--------------------------------------------------------------------------------
+-- state refresh
+--------------------------------------------------------------------------------
+
+local RATE_WINDOW = 8
+
+local function refresh()
+	-- re-resolve Huge if it appeared after join
+	if not Huge then
+		Huge = req(path(ReplicatedStorage, "Modules", "Huge"))
+		if Huge then
+			STATE.blocked = nil
+			STATE.note = "modules ready"
+		end
+	end
+	if not Tycoon then
+		Tycoon = req(path(ReplicatedStorage, "Modules", "Tycoon", "Tycoon"))
+	end
+	if not Balance then
+		Balance = req(ReplicatedStorage:FindFirstChild("Balance"))
+	end
+	if not Config then
+		Config = req(ReplicatedStorage:FindFirstChild("Config"))
+	end
+
+	local b, p, r, e, a = balances(), purchases(), rebirth(), evolution(), ascension()
+	if b then
+		local function get(fn)
+			local ok, v = pcall(fn)
+			return (ok and isHuge(v)) and v or NONE
+		end
+		STATE.cash = get(function() return b:GetCash() end)
+		STATE.spent = get(function() return b:GetCashSpent() end)
+		STATE.investors = get(function() return b:GetInvestors() end)
+		local okT, tokens = pcall(function() return b:GetTokens() end)
+		STATE.tokens = okT and tokens or 0
+	end
+	if p then
+		local ok, n = pcall(function() return p:GetPurchasedCount() end)
+		STATE.purchased = ok and n or STATE.purchased
+	end
+	if r then
+		STATE.potential = potentialInvestors()
+		local ok, n = pcall(function() return r:GetRebirths() end)
+		STATE.rebirths = ok and n or STATE.rebirths
+	end
+	if e then
+		local ok, v = pcall(function() return e:GetEvolutionProgress() end)
+		if ok and type(v) == "number" then STATE.evolveProgress = v end
+		local okE, n = pcall(function() return e:GetEvolution() end)
+		STATE.evolution = okE and n or STATE.evolution
+	end
+	if a then
+		local ok, v = pcall(function() return a:GetAscensionProgress() end)
+		if ok and type(v) == "number" then STATE.ascendProgress = v end
+		local okA, n = pcall(function() return a:GetAscension() end)
+		STATE.ascension = okA and n or STATE.ascension
+	end
+
+	STATE.raceIn = math.max(0, raceAvailableAt() - os.time())
+	STATE.tradeIn = math.max(0, tradeAvailableAt() - os.time())
+
+	local total = toNum(STATE.cash) + toNum(STATE.spent)
+	local now = os.clock()
+	if STATE.rateAt == nil then
+		STATE.rateAt, STATE.rateRef = now, total
+	elseif now - STATE.rateAt >= RATE_WINDOW then
+		local span = now - STATE.rateAt
+		local delta = total - (STATE.rateRef or total)
+		if delta >= 0 then STATE.incomeRate = delta / span end
+		STATE.rateAt, STATE.rateRef = now, total
+	end
+end
+
+--------------------------------------------------------------------------------
+-- loops
+--------------------------------------------------------------------------------
+
+local function loop(interval, key, fn)
+	task.spawn(function()
+		while GEN == _G.__KHUB_SL do
+			if CONFIG.auto and (key == nil or CONFIG[key]) then
+				local ok, err = pcall(fn)
+				if not ok then STATE.note = tostring(err) end
+			end
+			task.wait(interval)
+		end
+	end)
+end
+
+task.spawn(function()
+	while GEN == _G.__KHUB_SL do
+		if CONFIG.auto and CONFIG.autoWake then
+			pcall(stepWake)
+		end
+		task.wait(math.max(CONFIG.wakeSpacing or 0.15, 0.05))
+	end
+end)
+
+loop(0.3, "autoBuy", stepBuy)
+loop(0.4, "autoUpgrade", stepUpgrade)
+loop(1, "autoFruit", stepFruit)
+loop(1, "autoDrops", stepDrops)
+loop(5, "autoOffers", stepOffer)
+loop(8, "autoRace", stepRace)
+loop(8, "autoTrade", stepTrade)
+loop(4, "autoPowers", stepPowers)
+loop(6, "autoRebirth", stepRebirth)
+loop(6, "autoEvolve", stepEvolve)
+loop(10, "autoAscend", stepAscend)
+loop(20, nil, stepCompanions)
+loop(15, "autoOrchard", stepOrchard)
+
+task.spawn(function()
+	while GEN == _G.__KHUB_SL do
+		pcall(refresh)
+		pcall(readStreams)
+		task.wait(1)
+	end
+end)
+
+pcall(armDrops)
+pcall(armSpecialIncome)
+
+--------------------------------------------------------------------------------
+-- Obsidian window
+--------------------------------------------------------------------------------
+
+local Window = Library:CreateWindow({
+	Title = "KHUB | Sell Lemons",
+	Footer = "Nyxen Hub  Â·  measured automation",
+	Icon = 95816097006870,
+	NotifySide = "Right",
+	ShowCustomCursor = true,
+	Center = true,
+	AutoShow = true,
+	Resizable = true,
+})
+
+local Tabs = {
+	Main     = Window:AddTab("Main", "home"),
+	Earnings = Window:AddTab("Earnings", "coins"),
+	Boosts   = Window:AddTab("Boosts", "zap"),
+	Rebirth  = Window:AddTab("Rebirth", "refresh-cw"),
+	Settings = Window:AddTab("Settings", "settings"),
+}
+
+--------------------------------------------------------------------------------
+-- MAIN
+--------------------------------------------------------------------------------
+
+local MainLeft = Tabs.Main:AddGroupbox({
+	Side = "Left",
+	Name = "Farm",
+	IconName = "play",
+})
+
+MainLeft:AddToggle("AutoFarm", {
+	Text = "Auto Farm",
+	Default = CONFIG.auto,
+	Tooltip = "Master switch. Gates every automation loop.",
+	Callback = function(v)
+		CONFIG.auto = v
+		STATE.note = v and "running" or "stopped"
+		pcall(function()
+			Library:Notify({
+				Title = "KHUB Sell Lemons",
+				Text = v and "Auto Farm enabled" or "Auto Farm stopped",
+				Duration = 2,
+			})
+		end)
+	end,
+})
+
+MainLeft:AddToggle("AutoBuy", {
+	Text = "Auto Buy",
+	Default = CONFIG.autoBuy,
+	Tooltip = "Walks the game's own build order (453 buttons).",
+	Callback = function(v) CONFIG.autoBuy = v end,
+})
+
+MainLeft:AddToggle("AutoUpgrade", {
+	Text = "Auto Upgrade",
+	Default = CONFIG.autoUpgrade,
+	Tooltip = "Cheapest earner first, always with the allowed stack size.",
+	Callback = function(v) CONFIG.autoUpgrade = v end,
+})
+
+MainLeft:AddToggle("AutoClickEarners", {
+	Text = "Auto Click Earners",
+	Default = CONFIG.autoWake,
+	Tooltip = "Only streams without a manager â€” the rest pay by themselves.",
+	Callback = function(v) CONFIG.autoWake = v end,
+})
+
+MainLeft:AddSlider("ClickSpacing", {
+	Text = "Click Spacing",
+	Default = math.floor((CONFIG.wakeSpacing or 0.15) * 100),
+	Min = 5,
+	Max = 100,
+	Rounding = 0,
+	Suffix = " cs",
+	Tooltip = "Seconds Ã— 100 between wake sweeps (token bucket).",
+	Callback = function(v)
+		CONFIG.wakeSpacing = v / 100
+	end,
+})
+
+MainLeft:AddSlider("FruitPerSweep", {
+	Text = "Fruit Per Sweep",
+	Default = CONFIG.fruitPerSweep or 30,
+	Min = 10,
+	Max = 200,
+	Rounding = 0,
+	Tooltip = "Fruits per pass before re-scanning for regrowth.",
+	Callback = function(v)
+		CONFIG.fruitPerSweep = v
+	end,
+})
+
+local MainRight = Tabs.Main:AddGroupbox({
+	Side = "Right",
+	Name = "Status",
+	IconName = "activity",
+})
+
+MainRight:AddLabel("StatusCash", {
+	Text = "Cash: â€”",
+	DoesWrap = false,
+})
+MainRight:AddLabel("StatusRate", {
+	Text = "Income: â€”/s",
+	DoesWrap = false,
+})
+MainRight:AddLabel("StatusButtons", {
+	Text = "Buttons: 0 / 453",
+	DoesWrap = false,
+})
+MainRight:AddLabel("StatusInvestors", {
+	Text = "Investors: â€”  |  Potential: â€”",
+	DoesWrap = false,
+})
+MainRight:AddLabel("StatusPrestige", {
+	Text = "Rebirths: 0  |  Evolution: 0  |  Ascension: 0",
+	DoesWrap = false,
+})
+MainRight:AddLabel("StatusNext", {
+	Text = "Next buy: â€”",
+	DoesWrap = true,
+})
+MainRight:AddLabel("StatusNote", {
+	Text = "Note: idle",
+	DoesWrap = true,
+})
+
+--------------------------------------------------------------------------------
+-- EARNINGS
+--------------------------------------------------------------------------------
+
+local EarnLeft = Tabs.Earnings:AddGroupbox({
+	Side = "Left",
+	Name = "Collectors",
+	IconName = "coins",
+})
+
+EarnLeft:AddToggle("AutoFruit", {
+	Text = "Auto Fruit",
+	Default = CONFIG.autoFruit,
+	Tooltip = "Teleports tree to tree â€” the single biggest earner.",
+	Callback = function(v) CONFIG.autoFruit = v end,
+})
+
+EarnLeft:AddToggle("AutoRace", {
+	Text = "Auto Race",
+	Default = CONFIG.autoRace,
+	Tooltip = "Every five minutes, finished in first place.",
+	Callback = function(v) CONFIG.autoRace = v end,
+})
+
+EarnLeft:AddToggle("AutoTrade", {
+	Text = "Auto Trade",
+	Default = CONFIG.autoTrade,
+	Tooltip = "Every five minutes, a perfect round.",
+	Callback = function(v) CONFIG.autoTrade = v end,
+})
+
+EarnLeft:AddToggle("AutoCashDrops", {
+	Text = "Auto Cash Drops",
+	Default = CONFIG.autoDrops,
+	Tooltip = "Redeemed by id â€” no walking required.",
+	Callback = function(v) CONFIG.autoDrops = v end,
+})
+
+EarnLeft:AddToggle("AutoPhoneOffers", {
+	Text = "Auto Phone Offers",
+	Default = CONFIG.autoOffers,
+	Tooltip = "Accepts deal calls after optional haggling.",
+	Callback = function(v) CONFIG.autoOffers = v end,
+})
+
+local EarnRight = Tabs.Earnings:AddGroupbox({
+	Side = "Right",
+	Name = "Haggle & Stats",
+	IconName = "phone",
+})
+
+EarnRight:AddSlider("OfferRaises", {
+	Text = "Offer Raises",
+	Default = CONFIG.offerRaises or 1,
+	Min = 0,
+	Max = 2,
+	Rounding = 0,
+	Tooltip = "Raising pays more. Three raises lost the offer completely.",
+	Callback = function(v)
+		CONFIG.offerRaises = v
+	end,
+})
+
+EarnRight:AddLabel("EarnFruit", {
+	Text = "Fruit: 0 picked  |  0 ripe",
+	DoesWrap = false,
+})
+EarnRight:AddLabel("EarnRace", {
+	Text = "Race: ready  |  won 0",
+	DoesWrap = false,
+})
+EarnRight:AddLabel("EarnTrade", {
+	Text = "Trade: ready  |  closed 0",
+	DoesWrap = false,
+})
+EarnRight:AddLabel("EarnDrops", {
+	Text = "Drops: 0  |  Offers: 0",
+	DoesWrap = false,
+})
+
+--------------------------------------------------------------------------------
+-- BOOSTS
+--------------------------------------------------------------------------------
+
+local BoostLeft = Tabs.Boosts:AddGroupbox({
+	Side = "Left",
+	Name = "Powers",
+	IconName = "zap",
+})
+
+BoostLeft:AddToggle("AutoPowers", {
+	Text = "Auto Powers",
+	Default = CONFIG.autoPowers,
+	Tooltip = "Spends investors â€” fruit value first, then upgrade stack.",
+	Callback = function(v) CONFIG.autoPowers = v end,
+})
+
+BoostLeft:AddToggle("BuyCosmeticPowers", {
+	Text = "Buy Manage & WalkSpeed",
+	Default = CONFIG.buyCosmeticPowers,
+	Tooltip = "Manage only opens a HUD tab. WalkSpeed is unused (we teleport).",
+	Risky = true,
+	Callback = function(v) CONFIG.buyCosmeticPowers = v end,
+})
+
+BoostLeft:AddLabel("PowerInfo", {
+	Text = "Priority: ClickFruitValue â†’ UpgradeStack â†’ BuyNext â†’ AutoFruit",
+	DoesWrap = true,
+})
+
+local BoostRight = Tabs.Boosts:AddGroupbox({
+	Side = "Right",
+	Name = "Power Levels",
+	IconName = "layers",
+})
+
+BoostRight:AddLabel("PowerClickFruit", {
+	Text = "Click Fruit Value: â€”",
+	DoesWrap = false,
+})
+BoostRight:AddLabel("PowerUpgradeStack", {
+	Text = "Upgrade Stack: â€”",
+	DoesWrap = false,
+})
+BoostRight:AddLabel("PowerBuyNext", {
+	Text = "Buy Next: â€”",
+	DoesWrap = false,
+})
+BoostRight:AddLabel("PowerAutoFruit", {
+	Text = "Auto Fruit: â€”",
+	DoesWrap = false,
+})
+BoostRight:AddLabel("PowerManage", {
+	Text = "Manage: â€”",
+	DoesWrap = false,
+})
+BoostRight:AddLabel("PowerWalkSpeed", {
+	Text = "WalkSpeed: â€”",
+	DoesWrap = false,
+})
+BoostRight:AddLabel("PowerNext", {
+	Text = "Next: â€”",
+	DoesWrap = true,
+})
+
+--------------------------------------------------------------------------------
+-- REBIRTH
+--------------------------------------------------------------------------------
+
+local RebirthLeft = Tabs.Rebirth:AddGroupbox({
+	Side = "Left",
+	Name = "Prestige",
+	IconName = "refresh-cw",
+})
+
+RebirthLeft:AddToggle("AutoRebirth", {
+	Text = "Auto Rebirth",
+	Default = CONFIG.autoRebirth,
+	Tooltip = "Wipes the tycoon for investors. Spending is never lost.",
+	Risky = true,
+	Callback = function(v) CONFIG.autoRebirth = v end,
+})
+
+RebirthLeft:AddSlider("RebirthFactor", {
+	Text = "Rebirth Factor",
+	Default = CONFIG.rebirthFactor or 10,
+	Min = 2,
+	Max = 100,
+	Rounding = 0,
+	Suffix = "x",
+	Tooltip = "Rebirth when potential â‰¥ current investors Ã— this.",
+	Callback = function(v)
+		CONFIG.rebirthFactor = v
+	end,
+})
+
+RebirthLeft:AddSlider("RebirthMinimum", {
+	Text = "Rebirth Minimum",
+	Default = CONFIG.rebirthMinimum or 100,
+	Min = 10,
+	Max = 100000,
+	Rounding = 0,
+	Tooltip = "Never rebirth below this many potential investors.",
+	Callback = function(v)
+		CONFIG.rebirthMinimum = v
+	end,
+})
+
+RebirthLeft:AddToggle("AutoEvolve", {
+	Text = "Auto Evolve",
+	Default = CONFIG.autoEvolve,
+	Tooltip = "Ten fruit tiers, Ã—42 each. Wipes more than a rebirth.",
+	Risky = true,
+	Callback = function(v) CONFIG.autoEvolve = v end,
+})
+
+RebirthLeft:AddToggle("AutoAscend", {
+	Text = "Auto Ascend",
+	Default = CONFIG.autoAscend,
+	Tooltip = "Only once all 453 buttons are bought. Ã—7.77.",
+	Risky = true,
+	Callback = function(v) CONFIG.autoAscend = v end,
+})
+
+local RebirthRight = Tabs.Rebirth:AddGroupbox({
+	Side = "Right",
+	Name = "Orchard",
+	IconName = "tree-deciduous",
+})
+
+RebirthRight:AddToggle("AutoOrchard", {
+	Text = "Auto Orchard",
+	Default = CONFIG.autoOrchard,
+	Tooltip = "UNVERIFIED â€” unlock alone is 1e25 cash. Never reached in testing.",
+	Risky = true,
+	Callback = function(v) CONFIG.autoOrchard = v end,
+})
+
+RebirthRight:AddLabel("OrchardStatus", {
+	Text = "Orchard: off (unverified)",
+	DoesWrap = true,
+})
+
+RebirthRight:AddLabel("PrestigeProgress", {
+	Text = "Evolve: 0%  |  Ascend: 0%",
+	DoesWrap = false,
+})
+
+--------------------------------------------------------------------------------
+-- SETTINGS
+--------------------------------------------------------------------------------
+
+local MenuGroup = Tabs.Settings:AddGroupbox({
+	Side = "Left",
+	Name = "Menu",
+	IconName = "wrench",
+})
+
+MenuGroup:AddToggle("KeybindMenuOpen", {
+	Text = "Open Keybind Menu",
+	Default = false,
+	Callback = function(Value)
+		pcall(function()
+			if Library.KeybindFrame then
+				Library.KeybindFrame.Visible = Value
+			end
+		end)
+	end,
+})
+
+MenuGroup:AddToggle("ShowCustomCursor", {
+	Text = "Custom Cursor",
+	Default = true,
+	Callback = function(Value)
+		Library.ShowCustomCursor = Value
+	end,
+})
+
+MenuGroup:AddDropdown("NotificationSide", {
+	Values = { "Left", "Right" },
+	Default = "Right",
+	Text = "Notification Side",
+	Callback = function(Value)
+		pcall(function() Library:SetNotifySide(Value) end)
+	end,
+})
+
+MenuGroup:AddDropdown("DPIScale", {
+	Values = { "50%", "75%", "100%", "125%", "150%", "175%", "200%" },
+	Default = "100%",
+	Text = "DPI Scale",
+	Callback = function(Value)
+		local scale = tonumber((Value or "100%"):match("%d+")) or 100
+		pcall(function() Library:SetDPIScale(scale) end)
+	end,
+})
+
+MenuGroup:AddLabel("Menu bind")
+	:AddKeyPicker("MenuKeybind", {
+		Default = "RightShift",
+		NoUI = true,
+		Text = "Menu keybind",
+	})
+
+Library.ToggleKeybind = Options.MenuKeybind
+
+MenuGroup:AddButton({
+	Text = "Unload Nyxen",
+	Func = function()
+		Library:Unload()
+	end,
+	Tooltip = "Destroy the UI and stop all loops.",
+})
+
+local InfoGroup = Tabs.Settings:AddGroupbox({
+	Side = "Right",
+	Name = "About",
+	IconName = "info",
+})
+
+InfoGroup:AddLabel("Nyxen Hub â€” measured Sell Lemons automation.", true)
+InfoGroup:AddLabel("Place: 79268393072444 (BloxByte Games)", true)
+InfoGroup:AddLabel("Robux is never touched: no boosts, no forever purchase.", true)
+InfoGroup:AddLabel("Orchard code ships off and is unverified.", true)
+
+--------------------------------------------------------------------------------
+-- Theme + Save managers
+--------------------------------------------------------------------------------
+
+if ThemeManager and SaveManager then
+	pcall(function()
+		ThemeManager:SetLibrary(Library)
+		SaveManager:SetLibrary(Library)
+		SaveManager:IgnoreThemeSettings()
+		SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
+		ThemeManager:SetFolder("Nyxen")
+		SaveManager:SetFolder("Nyxen/SellLemons")
+		SaveManager:BuildConfigSection(Tabs.Settings)
+		ThemeManager:ApplyToTab(Tabs.Settings)
+		SaveManager:LoadAutoloadConfig()
+	end)
+end
+
+--------------------------------------------------------------------------------
+-- status refresh loop
+--------------------------------------------------------------------------------
+
+local function powerLevelText(name)
+	local s = STATE.powerLevels and STATE.powerLevels[name]
+	if not s then return name .. ": â€”" end
+	local lvl = tostring(s.level or 0)
+	local max = s.max and tostring(s.max) or "âˆž"
+	local price = s.price and ("  (" .. fmt(s.price) .. " inv)") or ""
+	return name .. ": " .. lvl .. "/" .. max .. price
+end
+
+local function setLabel(idx, text)
+	local opt = Options[idx]
+	if opt and opt.SetText then
+		pcall(function() opt:SetText(text) end)
+	end
+end
+
+task.spawn(function()
+	while GEN == _G.__KHUB_SL do
+		pcall(function()
+			setLabel("StatusCash", "Cash: " .. fmt(STATE.cash) .. "   spent " .. fmt(STATE.spent))
+			setLabel("StatusRate", "Income: " .. short(STATE.incomeRate) .. "/s")
+			setLabel("StatusButtons", string.format(
+				"Buttons: %d / 453  (%.1f%% to ascend)",
+				STATE.purchased or 0,
+				(STATE.ascendProgress or 0) * 100
+			))
+			setLabel("StatusInvestors",
+				"Investors: " .. fmt(STATE.investors) .. "  |  Potential: " .. fmt(STATE.potential)
+			)
+			setLabel("StatusPrestige", string.format(
+				"Rebirths: %d  |  Evolution: %d  |  Ascension: %d",
+				STATE.rebirths or 0,
+				STATE.evolution or 0,
+				STATE.ascension or 0
+			))
+			do
+				local buy = tostring(STATE.nextBuy or "-")
+				if STATE.nextBuyPrice then buy = buy .. "  " .. fmt(STATE.nextBuyPrice) end
+				local upg = tostring(STATE.nextUpgrade or "-")
+				if STATE.nextUpgradePrice then
+					upg = upg .. "  " .. fmt(STATE.nextUpgradePrice) .. " x" .. tostring(STATE.nextUpgradeCount or 1)
+				end
+				setLabel("StatusNext", "Next buy: " .. buy .. "\nNext upg: " .. upg)
+			end
+			do
+				local note = tostring(STATE.note or "idle")
+				if STATE.blocked then note = note .. "\nBlocked: " .. STATE.blocked end
+				setLabel("StatusNote", "Note: " .. note)
+			end
+
+			setLabel("EarnFruit", string.format(
+				"Fruit: %d picked  |  %d ripe  |  %s",
+				STATE.fruits or 0,
+				STATE.fruitRipe or 0,
+				short(STATE.earnedFruit)
+			))
+			do
+				local r = STATE.raceIn > 0 and (math.floor(STATE.raceIn) .. "s") or "ready"
+				setLabel("EarnRace", string.format(
+					"Race: %s  |  won %d  |  %s",
+					r, STATE.races or 0, short(STATE.earnedRace)
+				))
+			end
+			do
+				local t = STATE.tradeIn > 0 and (math.floor(STATE.tradeIn) .. "s") or "ready"
+				setLabel("EarnTrade", string.format(
+					"Trade: %s  |  closed %d  |  %s",
+					t, STATE.trades or 0, short(STATE.earnedTrade)
+				))
+			end
+			setLabel("EarnDrops", string.format(
+				"Drops: %d (%s)  |  Offers: %d (%s)",
+				STATE.drops or 0, short(STATE.earnedDrop),
+				STATE.offers or 0, short(STATE.earnedOffer)
+			))
+
+			setLabel("PowerClickFruit", powerLevelText("ClickFruitValue"))
+			setLabel("PowerUpgradeStack", powerLevelText("UpgradeStack"))
+			setLabel("PowerBuyNext", powerLevelText("BuyNext"))
+			setLabel("PowerAutoFruit", powerLevelText("AutoFruit"))
+			setLabel("PowerManage", powerLevelText("Manage"))
+			setLabel("PowerWalkSpeed", powerLevelText("WalkSpeed"))
+			do
+				local np = tostring(STATE.nextPower or "-")
+				if STATE.nextPowerPrice then np = np .. "  " .. fmt(STATE.nextPowerPrice) .. " investors" end
+				setLabel("PowerNext", "Next: " .. np)
+			end
+
+			setLabel("OrchardStatus", "Orchard: " .. tostring(STATE.orchardNote or "off"))
+			setLabel("PrestigeProgress", string.format(
+				"Evolve: %.1f%%  |  Ascend: %.1f%%",
+				(STATE.evolveProgress or 0) * 100,
+				(STATE.ascendProgress or 0) * 100
+			))
+		end)
+		task.wait(0.5)
+	end
+end)
+
+--------------------------------------------------------------------------------
+-- unload
+--------------------------------------------------------------------------------
+
+Library:OnUnload(function()
+	_G.__KHUB_SL = (_G.__KHUB_SL or 0) + 1
+	if _G.__KHUB_SL_DROPCONN then pcall(function() _G.__KHUB_SL_DROPCONN:Disconnect() end) end
+	if _G.__KHUB_SL_SICONN then pcall(function() _G.__KHUB_SL_SICONN:Disconnect() end) end
+	print("[KHUB] unloaded")
+end)
+
+_G.__KHUB_SL_DBG = {
+	CONFIG = CONFIG, STATE = STATE,
+	Library = Library, Window = Window,
+}
+
+print("[KHUB] gen " .. GEN .. " ready â€” RightShift for the panel")
+pcall(function()
+	Library:Notify({
+		Title = "KHUB Sell Lemons",
+		Text = "KHUB Sell Lemons loaded. Press RightShift to toggle the menu.",
+		Duration = 4,
+	})
+end)
