@@ -1,0 +1,950 @@
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+local LOGO_ID = "rbxassetid://140466936910510"
+local DISCORD = "https://discord.gg/EKPb7BRDH8"
+local YOUTUBE = "https://www.youtube.com/@kyielpambid"
+
+local Parent = (gethui and gethui()) or CoreGui
+pcall(function()
+	local old = Parent:FindFirstChild("KHUB_ZombieArena")
+	if old then old:Destroy() end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_ZombieArena"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+pcall(function() ScreenGui.Parent = Parent end)
+if not ScreenGui.Parent then
+	ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local function corner(parent, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 8)
+	c.Parent = parent
+	return c
+end
+
+local function stroke(parent, color, thick, trans)
+	local s = Instance.new("UIStroke")
+	s.Color = color or Color3.fromRGB(200, 90, 140)
+	s.Thickness = thick or 1.5
+	s.Transparency = trans or 0.3
+	s.Parent = parent
+	return s
+end
+
+local Intro = Instance.new("Frame")
+Intro.Size = UDim2.new(1, 0, 1, 0)
+Intro.BackgroundColor3 = Color3.fromRGB(10, 8, 14)
+Intro.BorderSizePixel = 0
+Intro.ZIndex = 50
+Intro.Parent = ScreenGui
+
+local introLogo = Instance.new("ImageLabel")
+introLogo.Size = UDim2.new(0, 90, 0, 90)
+introLogo.Position = UDim2.new(0.5, -45, 0.5, -110)
+introLogo.BackgroundTransparency = 1
+introLogo.Image = LOGO_ID
+introLogo.ScaleType = Enum.ScaleType.Fit
+introLogo.ZIndex = 51
+introLogo.Parent = Intro
+corner(introLogo, 45)
+
+local introTitle = Instance.new("TextLabel")
+introTitle.Size = UDim2.new(1, 0, 0, 28)
+introTitle.Position = UDim2.new(0, 0, 0.5, -10)
+introTitle.BackgroundTransparency = 1
+introTitle.Text = "Survive Zombie Arena"
+introTitle.Font = Enum.Font.GothamBold
+introTitle.TextSize = 20
+introTitle.TextColor3 = Color3.fromRGB(255, 180, 200)
+introTitle.ZIndex = 51
+introTitle.Parent = Intro
+
+local introSub = Instance.new("TextLabel")
+introSub.Size = UDim2.new(1, 0, 0, 20)
+introSub.Position = UDim2.new(0, 0, 0.5, 18)
+introSub.BackgroundTransparency = 1
+introSub.Text = "Arin & Kyiel · KHUB"
+introSub.Font = Enum.Font.Gotham
+introSub.TextSize = 13
+introSub.TextColor3 = Color3.fromRGB(180, 140, 160)
+introSub.ZIndex = 51
+introSub.Parent = Intro
+
+local barBg = Instance.new("Frame")
+barBg.Size = UDim2.new(0, 220, 0, 6)
+barBg.Position = UDim2.new(0.5, -110, 0.5, 55)
+barBg.BackgroundColor3 = Color3.fromRGB(40, 25, 40)
+barBg.BorderSizePixel = 0
+barBg.ZIndex = 51
+barBg.Parent = Intro
+corner(barBg, 3)
+
+local barFill = Instance.new("Frame")
+barFill.Size = UDim2.new(0, 0, 1, 0)
+barFill.BackgroundColor3 = Color3.fromRGB(220, 90, 140)
+barFill.BorderSizePixel = 0
+barFill.ZIndex = 52
+barFill.Parent = barBg
+corner(barFill, 3)
+
+local introStatus = Instance.new("TextLabel")
+introStatus.Size = UDim2.new(1, 0, 0, 18)
+introStatus.Position = UDim2.new(0, 0, 0.5, 70)
+introStatus.BackgroundTransparency = 1
+introStatus.Text = "Loading..."
+introStatus.Font = Enum.Font.Gotham
+introStatus.TextSize = 12
+introStatus.TextColor3 = Color3.fromRGB(160, 140, 155)
+introStatus.ZIndex = 51
+introStatus.Parent = Intro
+
+local skipBtn = Instance.new("TextButton")
+skipBtn.Size = UDim2.new(0, 80, 0, 28)
+skipBtn.Position = UDim2.new(0.5, -40, 0.5, 100)
+skipBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 50)
+skipBtn.Text = "Skip"
+skipBtn.Font = Enum.Font.GothamBold
+skipBtn.TextSize = 12
+skipBtn.TextColor3 = Color3.fromRGB(255, 200, 220)
+skipBtn.ZIndex = 52
+skipBtn.Parent = Intro
+corner(skipBtn, 6)
+
+local introDone = false
+local function finishIntro()
+	if introDone then return end
+	introDone = true
+	TweenService:Create(Intro, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+	for _, c in ipairs(Intro:GetDescendants()) do
+		if c:IsA("TextLabel") or c:IsA("TextButton") then
+			TweenService:Create(c, TweenInfo.new(0.35), { TextTransparency = 1 }):Play()
+		elseif c:IsA("ImageLabel") then
+			TweenService:Create(c, TweenInfo.new(0.35), { ImageTransparency = 1 }):Play()
+		elseif c:IsA("Frame") and c ~= Intro then
+			TweenService:Create(c, TweenInfo.new(0.35), { BackgroundTransparency = 1 }):Play()
+		end
+	end
+	task.wait(0.45)
+	Intro.Visible = false
+end
+
+skipBtn.MouseButton1Click:Connect(finishIntro)
+
+task.spawn(function()
+	local steps = {
+		{ 0.25, "Preparing..." },
+		{ 0.55, "Loading modules..." },
+		{ 0.8, "Almost ready..." },
+		{ 1.0, "Done!" },
+	}
+	for _, step in ipairs(steps) do
+		if introDone then break end
+		introStatus.Text = step[2]
+		TweenService:Create(barFill, TweenInfo.new(0.35, Enum.EasingStyle.Quad), {
+			Size = UDim2.new(step[1], 0, 1, 0)
+		}):Play()
+		task.wait(0.4)
+	end
+	if not introDone then
+		task.wait(0.25)
+		finishIntro()
+	end
+end)
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 560, 0, 400)
+Main.Position = UDim2.new(0.5, -280, 0.5, -200)
+Main.BackgroundColor3 = Color3.fromRGB(16, 12, 20)
+Main.BorderSizePixel = 0
+Main.Visible = false
+Main.ClipsDescendants = true
+Main.Parent = ScreenGui
+corner(Main, 12)
+stroke(Main, Color3.fromRGB(180, 70, 120), 1.5, 0.45)
+
+local Top = Instance.new("Frame")
+Top.Size = UDim2.new(1, 0, 0, 44)
+Top.BackgroundColor3 = Color3.fromRGB(22, 16, 28)
+Top.BorderSizePixel = 0
+Top.Parent = Main
+corner(Top, 12)
+
+local topLogo = Instance.new("ImageLabel")
+topLogo.Size = UDim2.new(0, 28, 0, 28)
+topLogo.Position = UDim2.new(0, 12, 0.5, -14)
+topLogo.BackgroundTransparency = 1
+topLogo.Image = LOGO_ID
+topLogo.ScaleType = Enum.ScaleType.Fit
+topLogo.Parent = Top
+corner(topLogo, 14)
+
+local topTitle = Instance.new("TextLabel")
+topTitle.Size = UDim2.new(1, -100, 1, 0)
+topTitle.Position = UDim2.new(0, 48, 0, 0)
+topTitle.BackgroundTransparency = 1
+topTitle.Text = "Survive Zombie Arena · KHUB"
+topTitle.Font = Enum.Font.GothamBold
+topTitle.TextSize = 14
+topTitle.TextColor3 = Color3.fromRGB(255, 190, 210)
+topTitle.TextXAlignment = Enum.TextXAlignment.Left
+topTitle.Parent = Top
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 32, 0, 32)
+closeBtn.Position = UDim2.new(1, -40, 0.5, -16)
+closeBtn.BackgroundColor3 = Color3.fromRGB(50, 25, 40)
+closeBtn.Text = "×"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 18
+closeBtn.TextColor3 = Color3.fromRGB(255, 160, 180)
+closeBtn.Parent = Top
+corner(closeBtn, 8)
+
+local Side = Instance.new("Frame")
+Side.Size = UDim2.new(0, 130, 1, -52)
+Side.Position = UDim2.new(0, 8, 0, 48)
+Side.BackgroundColor3 = Color3.fromRGB(20, 14, 26)
+Side.BorderSizePixel = 0
+Side.Parent = Main
+corner(Side, 10)
+
+local sideList = Instance.new("UIListLayout")
+sideList.Padding = UDim.new(0, 6)
+sideList.SortOrder = Enum.SortOrder.LayoutOrder
+sideList.Parent = Side
+
+local sidePad = Instance.new("UIPadding")
+sidePad.PaddingTop = UDim.new(0, 8)
+sidePad.PaddingLeft = UDim.new(0, 6)
+sidePad.PaddingRight = UDim.new(0, 6)
+sidePad.Parent = Side
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -150, 1, -60)
+Content.Position = UDim2.new(0, 144, 0, 52)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+local pages = {}
+local activePage = nil
+
+local function makePage(name)
+	local page = Instance.new("ScrollingFrame")
+	page.Name = name
+	page.Size = UDim2.new(1, 0, 1, 0)
+	page.BackgroundTransparency = 1
+	page.BorderSizePixel = 0
+	page.ScrollBarThickness = 3
+	page.ScrollBarImageColor3 = Color3.fromRGB(200, 90, 140)
+	page.CanvasSize = UDim2.new(0, 0, 0, 0)
+	page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	page.Visible = false
+	page.Parent = Content
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0, 8)
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Parent = page
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingRight = UDim.new(0, 8)
+	pad.PaddingBottom = UDim.new(0, 12)
+	pad.Parent = page
+	pages[name] = page
+	return page
+end
+
+local function selectPage(name)
+	for n, p in pairs(pages) do
+		p.Visible = (n == name)
+	end
+	activePage = name
+	for _, btn in ipairs(Side:GetChildren()) do
+		if btn:IsA("TextButton") then
+			local on = btn.Name == "Tab_" .. name
+			btn.BackgroundColor3 = on and Color3.fromRGB(140, 45, 85) or Color3.fromRGB(28, 18, 36)
+			btn.TextColor3 = on and Color3.fromRGB(255, 220, 230) or Color3.fromRGB(190, 160, 175)
+		end
+	end
+end
+
+local function addTab(name, order)
+	local btn = Instance.new("TextButton")
+	btn.Name = "Tab_" .. name
+	btn.Size = UDim2.new(1, 0, 0, 34)
+	btn.BackgroundColor3 = Color3.fromRGB(28, 18, 36)
+	btn.Text = name
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 12
+	btn.TextColor3 = Color3.fromRGB(190, 160, 175)
+	btn.LayoutOrder = order
+	btn.Parent = Side
+	corner(btn, 8)
+	btn.MouseButton1Click:Connect(function()
+		selectPage(name)
+	end)
+	makePage(name)
+	return btn
+end
+
+local function section(page, title)
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1, -4, 0, 28)
+	f.BackgroundTransparency = 1
+	f.Parent = page
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, 0, 1, 0)
+	l.BackgroundTransparency = 1
+	l.Text = title
+	l.Font = Enum.Font.GothamBold
+	l.TextSize = 13
+	l.TextColor3 = Color3.fromRGB(255, 170, 195)
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.Parent = f
+	return f
+end
+
+local function addToggle(page, title, default, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, -4, 0, 40)
+	row.BackgroundColor3 = Color3.fromRGB(24, 16, 30)
+	row.BorderSizePixel = 0
+	row.Parent = page
+	corner(row, 8)
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -70, 1, 0)
+	label.Position = UDim2.new(0, 12, 0, 0)
+	label.BackgroundTransparency = 1
+	label.Text = title
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 13
+	label.TextColor3 = Color3.fromRGB(230, 210, 220)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = row
+
+	local state = default == true
+	local toggle = Instance.new("TextButton")
+	toggle.Size = UDim2.new(0, 48, 0, 24)
+	toggle.Position = UDim2.new(1, -58, 0.5, -12)
+	toggle.BackgroundColor3 = state and Color3.fromRGB(160, 50, 100) or Color3.fromRGB(50, 35, 55)
+	toggle.Text = ""
+	toggle.Parent = row
+	corner(toggle, 12)
+
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.new(0, 18, 0, 18)
+	knob.Position = state and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+	knob.BackgroundColor3 = Color3.fromRGB(255, 220, 230)
+	knob.BorderSizePixel = 0
+	knob.Parent = toggle
+	corner(knob, 9)
+
+	toggle.MouseButton1Click:Connect(function()
+		state = not state
+		TweenService:Create(toggle, TweenInfo.new(0.15), {
+			BackgroundColor3 = state and Color3.fromRGB(160, 50, 100) or Color3.fromRGB(50, 35, 55)
+		}):Play()
+		TweenService:Create(knob, TweenInfo.new(0.15), {
+			Position = state and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+		}):Play()
+		if callback then pcall(callback, state) end
+	end)
+	return function() return state end
+end
+
+local function addButton(page, title, callback)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, -4, 0, 36)
+	btn.BackgroundColor3 = Color3.fromRGB(120, 40, 75)
+	btn.Text = title
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 12
+	btn.TextColor3 = Color3.fromRGB(255, 220, 230)
+	btn.Parent = page
+	corner(btn, 8)
+	btn.MouseButton1Click:Connect(function()
+		if callback then pcall(callback) end
+	end)
+	return btn
+end
+
+local function addSlider(page, title, minV, maxV, default, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, -4, 0, 52)
+	row.BackgroundColor3 = Color3.fromRGB(24, 16, 30)
+	row.BorderSizePixel = 0
+	row.Parent = page
+	corner(row, 8)
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -16, 0, 20)
+	label.Position = UDim2.new(0, 12, 0, 4)
+	label.BackgroundTransparency = 1
+	label.Text = title .. ": " .. tostring(default)
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 12
+	label.TextColor3 = Color3.fromRGB(230, 210, 220)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = row
+
+	local track = Instance.new("Frame")
+	track.Size = UDim2.new(1, -24, 0, 6)
+	track.Position = UDim2.new(0, 12, 0, 32)
+	track.BackgroundColor3 = Color3.fromRGB(45, 30, 50)
+	track.BorderSizePixel = 0
+	track.Parent = row
+	corner(track, 3)
+
+	local fill = Instance.new("Frame")
+	local pct = (default - minV) / math.max(maxV - minV, 1)
+	fill.Size = UDim2.new(pct, 0, 1, 0)
+	fill.BackgroundColor3 = Color3.fromRGB(200, 80, 130)
+	fill.BorderSizePixel = 0
+	fill.Parent = track
+	corner(fill, 3)
+
+	local dragging = false
+	local function setFromX(x)
+		local rel = math.clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+		local val = math.floor(minV + rel * (maxV - minV) + 0.5)
+		fill.Size = UDim2.new(rel, 0, 1, 0)
+		label.Text = title .. ": " .. tostring(val)
+		if callback then pcall(callback, val) end
+	end
+
+	track.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			setFromX(input.Position.X)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			setFromX(input.Position.X)
+		end
+	end)
+end
+
+local function addParagraph(page, title, body)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, -4, 0, 70)
+	row.BackgroundColor3 = Color3.fromRGB(24, 16, 30)
+	row.BorderSizePixel = 0
+	row.Parent = page
+	corner(row, 8)
+	local t = Instance.new("TextLabel")
+	t.Size = UDim2.new(1, -16, 0, 20)
+	t.Position = UDim2.new(0, 10, 0, 6)
+	t.BackgroundTransparency = 1
+	t.Text = title
+	t.Font = Enum.Font.GothamBold
+	t.TextSize = 12
+	t.TextColor3 = Color3.fromRGB(255, 180, 200)
+	t.TextXAlignment = Enum.TextXAlignment.Left
+	t.Parent = row
+	local b = Instance.new("TextLabel")
+	b.Size = UDim2.new(1, -16, 1, -28)
+	b.Position = UDim2.new(0, 10, 0, 26)
+	b.BackgroundTransparency = 1
+	b.Text = body
+	b.Font = Enum.Font.Gotham
+	b.TextSize = 11
+	b.TextColor3 = Color3.fromRGB(190, 170, 185)
+	b.TextXAlignment = Enum.TextXAlignment.Left
+	b.TextYAlignment = Enum.TextYAlignment.Top
+	b.TextWrapped = true
+	b.Parent = row
+end
+
+addTab("Welcome", 1)
+addTab("Combat", 2)
+addTab("Auto Buy", 3)
+addTab("Movement", 4)
+addTab("Credits", 5)
+
+section(pages["Welcome"], "Welcome")
+addParagraph(pages["Welcome"], "Hello, " .. tostring(LocalPlayer.DisplayName),
+	"Survive Zombie Arena · Arin & Kyiel · KHUB\n@" .. LocalPlayer.Name .. " · Press Z = Auto Shoot")
+
+local silentAimEnabled = false
+local gunModsEnabled = false
+local flyEnabled = false
+local noclipEnabled = false
+local infiniteJumpEnabled = false
+local customWalkSpeed = 16
+local customHipHeight = 0
+
+getgenv().AutoHealthUpgrade = false
+getgenv().AutoWeaponUpgrade = false
+getgenv().AutoShoot = false
+getgenv().SkillE = false
+getgenv().SkillR = false
+getgenv().SkillQ = false
+
+local GunClientModule, originalGetAimDirection
+local ZombiesFolder, HealthUpgradeRemote, WeaponUpgradeRemote
+
+pcall(function()
+	local ps = LocalPlayer:WaitForChild("PlayerScripts", 5)
+	local controllers = ps and ps:WaitForChild("Controllers", 5)
+	local gunMod = controllers and controllers:FindFirstChild("GunClient")
+	if gunMod then
+		GunClientModule = require(gunMod)
+		originalGetAimDirection = GunClientModule.GetAimDirection
+	end
+end)
+pcall(function()
+	ZombiesFolder = workspace:FindFirstChild("Zombies_Local") or workspace:WaitForChild("Zombies_Local", 8)
+end)
+pcall(function()
+	local ur = ReplicatedStorage:WaitForChild("UpgradeRemotes", 8)
+	if ur then
+		HealthUpgradeRemote = ur:FindFirstChild("PurchaseHealthUpgrade")
+		WeaponUpgradeRemote = ur:FindFirstChild("PurchaseWeaponUpgrade")
+	end
+end)
+
+local cachedTarget, lastUpdateTime = nil, 0
+local UPDATE_INTERVAL, MAX_PITCH = 0.1, math.rad(60)
+
+local function isValidZombie(model)
+	if not model or not model:IsA("Model") then return false end
+	local ac = model:FindFirstChild("AnimationController")
+	return ac and ac:IsA("AnimationController")
+end
+
+local function getHRP(model)
+	if not model:IsA("Model") then return nil end
+	return model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+end
+
+local function getClosestZombieRootPart(origin)
+	if not ZombiesFolder then return nil end
+	local closestDistSq, closestPart = math.huge, nil
+	for _, child in ipairs(ZombiesFolder:GetChildren()) do
+		if isValidZombie(child) then
+			local rp = getHRP(child)
+			if rp and rp:IsA("BasePart") then
+				local d = rp.Position - origin
+				local distSq = d.X * d.X + d.Y * d.Y + d.Z * d.Z
+				if distSq < closestDistSq then
+					closestDistSq = distSq
+					closestPart = rp
+				end
+			end
+		end
+	end
+	return closestPart
+end
+
+local function updateClosestTarget(origin)
+	local now = tick()
+	if now - lastUpdateTime > UPDATE_INTERVAL then
+		lastUpdateTime = now
+		cachedTarget = getClosestZombieRootPart(origin)
+	end
+	return cachedTarget
+end
+
+local function clampDirection(direction)
+	local flatDir = Vector3.new(direction.X, 0, direction.Z)
+	if flatDir.Magnitude < 0.001 then return direction end
+	flatDir = flatDir.Unit
+	local verticalAngle = math.asin(math.clamp(direction.Y, -1, 1))
+	if math.abs(verticalAngle) > MAX_PITCH then
+		local newY = math.sin(MAX_PITCH * math.sign(verticalAngle))
+		local newFlat = math.cos(MAX_PITCH)
+		return (flatDir * newFlat + Vector3.new(0, newY, 0)).Unit
+	end
+	return direction
+end
+
+local function AutoBuyHealth()
+	task.spawn(function()
+		while getgenv().AutoHealthUpgrade do
+			if HealthUpgradeRemote then pcall(function() HealthUpgradeRemote:FireServer() end) end
+			task.wait(1)
+		end
+	end)
+end
+
+local function AutoBuyWeapon()
+	task.spawn(function()
+		while getgenv().AutoWeaponUpgrade do
+			if WeaponUpgradeRemote then pcall(function() WeaponUpgradeRemote:FireServer() end) end
+			task.wait(1)
+		end
+	end)
+end
+
+local function AutoEquipTools()
+	local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	local bag = LocalPlayer:WaitForChild("Backpack")
+	for _, tool in ipairs(bag:GetChildren()) do
+		if tool:IsA("Tool") then tool.Parent = char end
+	end
+end
+
+local function AutoShootLoop()
+	task.spawn(function()
+		while getgenv().AutoShoot do
+			pcall(function()
+				local tool = LocalPlayer.Backpack:FindFirstChildWhichIsA("Tool")
+					or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChildWhichIsA("Tool"))
+				if tool then
+					tool.Parent = LocalPlayer.Character
+					if mouse1press then mouse1press() end
+				end
+			end)
+			task.wait()
+		end
+	end)
+end
+
+local function AutoSkill(key, flag)
+	task.spawn(function()
+		while getgenv()[flag] do
+			pcall(function()
+				VirtualInputManager:SendKeyEvent(true, key, false, game)
+				VirtualInputManager:SendKeyEvent(false, key, false, game)
+			end)
+			task.wait(1)
+		end
+	end)
+end
+
+if ZombiesFolder then
+	pcall(function()
+		ZombiesFolder.ChildAdded:Connect(function() cachedTarget = nil lastUpdateTime = 0 end)
+		ZombiesFolder.ChildRemoved:Connect(function() cachedTarget = nil lastUpdateTime = 0 end)
+	end)
+end
+
+section(pages["Combat"], "Combat")
+addToggle(pages["Combat"], "Silent Aim", false, function(v)
+	silentAimEnabled = v
+	if not GunClientModule or not originalGetAimDirection then return end
+	if v then
+		GunClientModule.GetAimDirection = function(self)
+			local origin = self:GetFireOrigin()
+			if not origin then
+				if self.HumanoidRootPart then origin = self.HumanoidRootPart.Position
+				else return originalGetAimDirection(self) end
+			end
+			local target = updateClosestTarget(origin)
+			if target then
+				local dir = clampDirection((target.Position - origin).Unit)
+				if dir.Magnitude > 0.001 then return dir end
+			end
+			return originalGetAimDirection(self)
+		end
+	else
+		GunClientModule.GetAimDirection = originalGetAimDirection
+	end
+end)
+
+addToggle(pages["Combat"], "Gun Mods", false, function(v)
+	gunModsEnabled = v
+	if not v then return end
+	local init = LocalPlayer.PlayerScripts:FindFirstChild("Initializer")
+	if not init then return end
+	local env = getsenv(init)
+	local GunClient = env._G and env._G.GunClient
+	if not GunClient or not GunClient.EquippedConfig then return end
+	local cfg = GunClient.EquippedConfig
+	cfg.Damage = 999999
+	cfg.FireRate = 0.1
+	cfg.BulletSpeed = 999999
+	cfg.MaxRange = 999999
+	cfg.Penetration = true
+	cfg.PelletCount = 100
+	cfg.SpreadAngle = 0
+	cfg.BlastPower = 5000
+	cfg.BlastRadius = 5000
+	cfg.AmmoPerShot = 0
+	cfg.MaxAmmo = 999999
+	cfg.ReloadTime = 0
+	cfg.Recoil = 0
+	cfg.CameraShake = 0
+	task.spawn(function()
+		while gunModsEnabled and task.wait() do
+			GunClient.LastFireTime = 0
+			GunClient.IsReloading = false
+			GunClient.RecoilVelocity = 0
+		end
+	end)
+end)
+
+addToggle(pages["Combat"], "Auto Shoot", false, function(v)
+	getgenv().AutoShoot = v
+	if v then AutoShootLoop() end
+end)
+
+addToggle(pages["Combat"], "Auto Equip Tools", false, function(v)
+	if v then AutoEquipTools() end
+end)
+
+section(pages["Auto Buy"], "Upgrades & Skills")
+addToggle(pages["Auto Buy"], "Auto Buy Health", false, function(v)
+	getgenv().AutoHealthUpgrade = v
+	if v then AutoBuyHealth() end
+end)
+addToggle(pages["Auto Buy"], "Auto Buy Weapon", false, function(v)
+	getgenv().AutoWeaponUpgrade = v
+	if v then AutoBuyWeapon() end
+end)
+addToggle(pages["Auto Buy"], "Auto Skill E", false, function(v)
+	getgenv().SkillE = v
+	if v then AutoSkill(Enum.KeyCode.E, "SkillE") end
+end)
+addToggle(pages["Auto Buy"], "Auto Skill R", false, function(v)
+	getgenv().SkillR = v
+	if v then AutoSkill(Enum.KeyCode.R, "SkillR") end
+end)
+addToggle(pages["Auto Buy"], "Auto Skill Q", false, function(v)
+	getgenv().SkillQ = v
+	if v then AutoSkill(Enum.KeyCode.Q, "SkillQ") end
+end)
+
+section(pages["Movement"], "Movement")
+addButton(pages["Movement"], "Safe Spot 1", function()
+	local char = LocalPlayer.Character
+	if char and char:FindFirstChild("HumanoidRootPart") then
+		TweenService:Create(char.HumanoidRootPart, TweenInfo.new(1), {
+			CFrame = CFrame.new(-141, 507, -413)
+		}):Play()
+	end
+end)
+addButton(pages["Movement"], "Safe Spot 2", function()
+	local char = LocalPlayer.Character
+	if char and char:FindFirstChild("HumanoidRootPart") then
+		TweenService:Create(char.HumanoidRootPart, TweenInfo.new(1), {
+			CFrame = CFrame.new(-373, 509, -304)
+		}):Play()
+	end
+end)
+
+local flyConnection
+addToggle(pages["Movement"], "Fly", false, function(v)
+	flyEnabled = v
+	local char = LocalPlayer.Character
+	if v and char then
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
+		local bg = Instance.new("BodyGyro")
+		bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+		bg.P = 9e9
+		bg.D = 500
+		bg.Parent = hrp
+		local bv = Instance.new("BodyVelocity")
+		bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+		bv.Velocity = Vector3.zero
+		bv.Parent = hrp
+		flyConnection = RunService.Heartbeat:Connect(function()
+			if not flyEnabled then
+				pcall(function() bg:Destroy() end)
+				pcall(function() bv:Destroy() end)
+				if flyConnection then flyConnection:Disconnect() end
+				return
+			end
+			local cam = workspace.CurrentCamera
+			bg.CFrame = cam.CFrame
+			local speed, vel = 50, Vector3.zero
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + cam.CFrame.LookVector * speed end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - cam.CFrame.LookVector * speed end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - cam.CFrame.RightVector * speed end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + cam.CFrame.RightVector * speed end
+			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0, speed, 0) end
+			if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then vel = vel - Vector3.new(0, speed, 0) end
+			bv.Velocity = vel
+		end)
+	else
+		if flyConnection then flyConnection:Disconnect() end
+		if char and char:FindFirstChild("HumanoidRootPart") then
+			for _, o in pairs(char.HumanoidRootPart:GetChildren()) do
+				if o:IsA("BodyGyro") or o:IsA("BodyVelocity") then o:Destroy() end
+			end
+		end
+	end
+end)
+
+local noclipConnection
+addToggle(pages["Movement"], "Noclip", false, function(v)
+	noclipEnabled = v
+	if v then
+		noclipConnection = RunService.Stepped:Connect(function()
+			if not noclipEnabled then
+				if noclipConnection then noclipConnection:Disconnect() end
+				return
+			end
+			local char = LocalPlayer.Character
+			if char then
+				for _, part in pairs(char:GetDescendants()) do
+					if part:IsA("BasePart") then part.CanCollide = false end
+				end
+			end
+		end)
+	else
+		if noclipConnection then noclipConnection:Disconnect() end
+	end
+end)
+
+local infJumpConnection
+addToggle(pages["Movement"], "Infinite Jump", false, function(v)
+	infiniteJumpEnabled = v
+	if v then
+		infJumpConnection = UserInputService.JumpRequest:Connect(function()
+			if infiniteJumpEnabled then
+				local char = LocalPlayer.Character
+				if char and char:FindFirstChild("Humanoid") then
+					char.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+				end
+			end
+		end)
+	else
+		if infJumpConnection then infJumpConnection:Disconnect() end
+	end
+end)
+
+addSlider(pages["Movement"], "Walk Speed", 16, 100, 16, function(v)
+	customWalkSpeed = v
+	local char = LocalPlayer.Character
+	if char and char:FindFirstChild("Humanoid") then
+		char.Humanoid.WalkSpeed = v
+	end
+end)
+
+addSlider(pages["Movement"], "Hip Height", 0, 50, 0, function(v)
+	customHipHeight = v
+	local char = LocalPlayer.Character
+	if char and char:FindFirstChild("Humanoid") then
+		char.Humanoid.HipHeight = v
+	end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+	local hum = char:WaitForChild("Humanoid")
+	hum.WalkSpeed = customWalkSpeed
+	hum.HipHeight = customHipHeight
+end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+	if input.KeyCode == Enum.KeyCode.Z then
+		getgenv().AutoShoot = not getgenv().AutoShoot
+		if getgenv().AutoShoot then AutoShootLoop() end
+	end
+end)
+
+section(pages["Credits"], "Credits")
+addParagraph(pages["Credits"], "Kyiel & Arin · KHUB", "YouTube + Discord below")
+addButton(pages["Credits"], "Copy YouTube", function()
+	pcall(function() if setclipboard then setclipboard(YOUTUBE) end end)
+end)
+addButton(pages["Credits"], "Copy Discord", function()
+	pcall(function() if setclipboard then setclipboard(DISCORD) end end)
+end)
+
+selectPage("Welcome")
+
+local OpenBtn = Instance.new("ImageButton")
+OpenBtn.Name = "KHUB_Float"
+OpenBtn.Size = UDim2.new(0, 56, 0, 56)
+OpenBtn.Position = UDim2.new(1, -72, 0.5, -28)
+OpenBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+OpenBtn.BackgroundTransparency = 0.1
+OpenBtn.Image = LOGO_ID
+OpenBtn.ScaleType = Enum.ScaleType.Fit
+OpenBtn.Visible = false
+OpenBtn.Parent = ScreenGui
+corner(OpenBtn, 28)
+stroke(OpenBtn, Color3.fromRGB(200, 90, 140), 2, 0.15)
+
+local btnDragging, btnStart, btnPos
+OpenBtn.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		btnDragging = true
+		btnStart = input.Position
+		btnPos = OpenBtn.Position
+	end
+end)
+OpenBtn.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		btnDragging = false
+	end
+end)
+
+local draggingMain, dragStart, startPos
+Top.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingMain = true
+		dragStart = input.Position
+		startPos = Main.Position
+	end
+end)
+Top.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingMain = false
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
+	if draggingMain and dragStart then
+		local d = input.Position - dragStart
+		Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+	end
+	if btnDragging and btnStart then
+		local d = input.Position - btnStart
+		OpenBtn.Position = UDim2.new(btnPos.X.Scale, btnPos.X.Offset + d.X, btnPos.Y.Scale, btnPos.Y.Offset + d.Y)
+	end
+end)
+
+local uiOpen = true
+OpenBtn.MouseButton1Click:Connect(function()
+	uiOpen = not uiOpen
+	Main.Visible = uiOpen
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+	uiOpen = false
+	Main.Visible = false
+end)
+
+task.spawn(function()
+	repeat task.wait() until introDone
+	Main.Visible = true
+	OpenBtn.Visible = true
+end)
+
+task.spawn(function()
+	while task.wait(1.2) do
+		if OpenBtn and OpenBtn.Parent then
+			local s = OpenBtn:FindFirstChildOfClass("UIStroke")
+			if s then
+				local h = (tick() % 5) / 5
+				s.Color = Color3.fromHSV(h, 0.55, 1)
+			end
+		end
+	end
+end)
+
+print("[KHUB] Survive Zombie Arena · Arin & Kyiel")
