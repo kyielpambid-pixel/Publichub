@@ -1,0 +1,1017 @@
+-- Animal Hospital · KHUB & Kyiel
+-- Discord: https://discord.gg/EKPb7BRDH8
+-- YouTube: https://www.youtube.com/@kyielpambid
+
+local rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local genv = (getgenv and getgenv()) or _G
+if genv.cleanupScript then
+    pcall(genv.cleanupScript)
+    task.wait(0.1)
+end
+
+local players            = game:GetService("Players")
+local runservice         = game:GetService("RunService")
+local tweenservice       = game:GetService("TweenService")
+local workspace          = game:GetService("Workspace")
+local replicatedstorage  = game:GetService("ReplicatedStorage")
+local marketplaceservice = game:GetService("MarketplaceService")
+local lighting           = game:GetService("Lighting")
+local UserInputService   = game:GetService("UserInputService")
+local CoreGui            = game:GetService("CoreGui")
+
+local localplayer = players.LocalPlayer
+local playergui = localplayer:FindFirstChildOfClass("PlayerGui")
+if not playergui then
+    playergui = localplayer:WaitForChild("PlayerGui", 15)
+end
+
+local camera = workspace.CurrentCamera
+local isDead = false
+local KYIEL_LOGO = "rbxassetid://140466936910510"
+
+local state = {
+    anomaliesesp     = false,
+    patientsesp      = false,
+    uniqueesp        = false,
+    playeresp        = false,
+    tracers          = false,
+
+    anomalycolor     = Color3.fromRGB(255, 0, 0),
+    patientcolor     = Color3.fromRGB(0, 255, 0),
+    uniquecolor      = Color3.fromRGB(255, 215, 0),
+    playercolor      = Color3.fromRGB(0, 255, 255),
+    tracercolor      = Color3.fromRGB(255, 255, 255),
+    tracerthickness  = 1.5,
+
+    walkspeed        = 16,
+    infsanity        = false,
+    instantpp        = false,
+    thirdperson      = false,
+
+    spinenabled      = false,
+    spinspeed        = 10,
+}
+
+local window = rayfield:CreateWindow({
+    Name         = "Animal Hospital · KHUB & Kyiel",
+    LoadingTitle = "Animal Hospital",
+    LoadingSubtitle = "By KHUB & Kyiel",
+})
+
+-- Floating logo (same as other KHUB scripts)
+pcall(function()
+    local parent = (gethui and gethui()) or CoreGui
+    local old = parent:FindFirstChild("KYIEL_FloatIcon")
+    if old then old:Destroy() end
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "KYIEL_FloatIcon"
+    sg.ResetOnSpawn = false
+    sg.IgnoreGuiInset = true
+    sg.DisplayOrder = 999
+    sg.Parent = parent
+    local btn = Instance.new("ImageButton")
+    btn.Size = UDim2.new(0, 54, 0, 54)
+    btn.Position = UDim2.new(1, -70, 0.5, -27)
+    btn.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+    btn.BackgroundTransparency = 0.15
+    btn.Image = KYIEL_LOGO
+    btn.ScaleType = Enum.ScaleType.Fit
+    btn.Parent = sg
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+    local stroke = Instance.new("UIStroke", btn)
+    stroke.Color = Color3.fromRGB(200, 90, 140)
+    stroke.Thickness = 2
+    local dragging, startPos, btnPos
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            startPos = input.Position
+            btnPos = btn.Position
+        end
+    end)
+    btn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local d = input.Position - startPos
+            btn.Position = UDim2.new(btnPos.X.Scale, btnPos.X.Offset + d.X, btnPos.Y.Scale, btnPos.Y.Offset + d.Y)
+        end
+    end)
+    btn.MouseButton1Click:Connect(function()
+        pcall(function() rayfield:Destroy() end)
+    end)
+end)
+
+local esptab    = window:CreateTab("ESP", "eye")
+local playertab = window:CreateTab("Player", "user")
+local itemstab  = window:CreateTab("Items", "package")
+local tptab     = window:CreateTab("Teleport", "map-pin")
+local infotab   = window:CreateTab("Info", "info")
+
+local clearEspByType
+local removePlayerEsp
+local clearAllTracers
+local applyInstantPp
+local applyThirdPerson
+local craftCatItem
+local fetchObject
+local teleportTo
+
+-- INFO / LINKS
+infotab:CreateSection("KHUB & Kyiel")
+infotab:CreateParagraph({
+    Title = "Welcome",
+    Content = "Animal Hospital script\\nBy KHUB & Kyiel\\n@" .. localplayer.Name,
+})
+infotab:CreateButton({
+    Name = "Copy Discord",
+    Callback = function()
+        pcall(function() if setclipboard then setclipboard("https://discord.gg/EKPb7BRDH8") end end)
+        rayfield:Notify({ Title = "KHUB", Content = "Discord copied!", Duration = 2 })
+    end,
+})
+infotab:CreateButton({
+    Name = "Copy YouTube",
+    Callback = function()
+        pcall(function() if setclipboard then setclipboard("https://www.youtube.com/@kyielpambid") end end)
+        rayfield:Notify({ Title = "KHUB", Content = "YouTube copied!", Duration = 2 })
+    end,
+})
+infotab:CreateParagraph({
+    Title = "Links",
+    Content = "Discord: https://discord.gg/EKPb7BRDH8\\nYouTube: https://www.youtube.com/@kyielpambid",
+})
+
+esptab:CreateSection("Visuals")
+
+esptab:CreateToggle({
+    Name         = "Anomalies ESP",
+    Description  = "Bad guy ESP",
+    CurrentValue = false,
+    Flag         = "espanomalies",
+    Callback     = function(v)
+        state.anomaliesesp = v
+        if not v and clearEspByType then clearEspByType("anomaly") end
+    end,
+})
+
+esptab:CreateColorPicker({
+    Name         = "Anomalies color",
+    Color        = Color3.fromRGB(255, 0, 0),
+    Flag         = "espanomalycolor",
+    Callback     = function(c) state.anomalycolor = c end,
+})
+
+esptab:CreateToggle({
+    Name         = "Patients ESP",
+    Description  = "Good guy ESP",
+    CurrentValue = false,
+    Flag         = "esppatients",
+    Callback     = function(v)
+        state.patientsesp = v
+        if not v and clearEspByType then clearEspByType("patient") end
+    end,
+})
+
+esptab:CreateColorPicker({
+    Name         = "Patients color",
+    Color        = Color3.fromRGB(0, 255, 0),
+    Flag         = "esppatientcolor",
+    Callback     = function(c) state.patientcolor = c end,
+})
+
+esptab:CreateToggle({
+    Name         = "Unique ESP",
+    Description  = "Unique targets glow gold",
+    CurrentValue = false,
+    Flag         = "espunique",
+    Callback     = function(v)
+        state.uniqueesp = v
+        if not v and clearEspByType then clearEspByType("unique") end
+    end,
+})
+
+esptab:CreateColorPicker({
+    Name         = "Unique color",
+    Color        = Color3.fromRGB(255, 215, 0),
+    Flag         = "espuniquecolor",
+    Callback     = function(c) state.uniquecolor = c end,
+})
+
+esptab:CreateToggle({
+    Name         = "Player ESP",
+    Description  = "ESP on other players",
+    CurrentValue = false,
+    Flag         = "espplayers",
+    Callback     = function(v)
+        state.playeresp = v
+        if not v and removePlayerEsp then
+            for _, p in ipairs(players:GetPlayers()) do removePlayerEsp(p) end
+        end
+    end,
+})
+
+esptab:CreateColorPicker({
+    Name         = "Player color",
+    Color        = Color3.fromRGB(0, 255, 255),
+    Flag         = "espplayercolor",
+    Callback     = function(c) state.playercolor = c end,
+})
+
+esptab:CreateSection("Tracers")
+
+esptab:CreateToggle({
+    Name         = "Tracers",
+    Description  = "Draw lines to ESP targets",
+    CurrentValue = false,
+    Flag         = "esptracers",
+    Callback     = function(v)
+        state.tracers = v
+        if not v and clearAllTracers then clearAllTracers() end
+    end,
+})
+
+esptab:CreateColorPicker({
+    Name         = "Tracer color",
+    Color        = Color3.fromRGB(255, 255, 255),
+    Flag         = "tracercolor",
+    Callback     = function(c) state.tracercolor = c end,
+})
+
+esptab:CreateSlider({
+    Name         = "Tracer thickness",
+    Range        = { 0.5, 6 },
+    Increment    = 0.1,
+    CurrentValue = 1.5,
+    Flag         = "tracerthickness",
+    Callback     = function(v) state.tracerthickness = v end,
+})
+
+playertab:CreateSection("Player")
+
+playertab:CreateSlider({
+    Name         = "Walkspeed",
+    Range        = { 16, 150 },
+    Increment    = 1,
+    CurrentValue = 16,
+    Flag         = "walkspeed",
+    Callback     = function(v) state.walkspeed = v end,
+})
+
+playertab:CreateToggle({
+    Name         = "Spin player",
+    CurrentValue = false,
+    Flag         = "spinplayer",
+    Callback     = function(v) state.spinenabled = v end,
+})
+
+playertab:CreateInput({
+    Name         = "Spin speed",
+    PlaceholderText = "10",
+    RemoveTextAfterFocusLost = false,
+    Callback     = function(text)
+        local num = tonumber(text)
+        if num then
+            state.spinspeed = num
+        end
+    end,
+})
+
+playertab:CreateSection("Important")
+
+playertab:CreateToggle({
+    Name         = "Infinite sanity",
+    CurrentValue = false,
+    Flag         = "infsanity",
+    Callback     = function(v) state.infsanity = v end,
+})
+
+playertab:CreateToggle({
+    Name         = "Instant ProximityPrompt",
+    CurrentValue = false,
+    Flag         = "instantpp",
+    Callback     = function(v)
+        state.instantpp = v
+        if applyInstantPp then applyInstantPp() end
+    end,
+})
+
+playertab:CreateSection("Camera")
+
+playertab:CreateToggle({
+    Name         = "Third person",
+    CurrentValue = false,
+    Flag         = "thirdperson",
+    Callback     = function(v)
+        state.thirdperson = v
+        if applyThirdPerson then applyThirdPerson() end
+    end,
+})
+
+itemstab:CreateSection("Client items")
+
+itemstab:CreateButton({
+    Name     = "Spawn cat (30s speed boost)",
+    Callback = function()
+        if craftCatItem then
+            local got = craftCatItem()
+            if got then
+                rayfield:Notify({ Title = "Cat", Content = "Cat crafted!", Duration = 2, Image = "cat" })
+            else
+                rayfield:Notify({ Title = "Cat", Content = "Failed to craft cat", Duration = 3, Image = "alert-circle" })
+            end
+        end
+    end,
+})
+
+itemstab:CreateSection("Grab items")
+
+for _, item in ipairs({
+    "herbs", "eye drops", "iv drops", "medkit",
+    "thermo", "ointment", "bandages", "maple syrup",
+    "cough syrup", "medicine",
+}) do
+    itemstab:CreateButton({
+        Name     = item,
+        Callback = function()
+            rayfield:Notify({ Title = "Item", Content = "Getting " .. item .. "...", Duration = 2, Image = "package" })
+            if fetchObject then
+                local got = fetchObject(item)
+                if got then
+                    rayfield:Notify({ Title = "Item", Content = item .. " obtained!", Duration = 2, Image = "check" })
+                else
+                    rayfield:Notify({ Title = "Item", Content = "Could not get " .. item .. " (busy or missing)", Duration = 3, Image = "alert-circle" })
+                end
+            end
+        end,
+    })
+end
+
+tptab:CreateSection("Locations")
+tptab:CreateButton({ Name = "Check in", Callback = function() if teleportTo then teleportTo("check in") end end })
+tptab:CreateButton({ Name = "Shop",     Callback = function() if teleportTo then teleportTo("shop") end end })
+
+for _, name in ipairs({
+    "room 1", "room 2", "room 3", "room 4",
+    "room 5", "room 6", "room 7", "room 8",
+}) do
+    tptab:CreateButton({
+        Name     = name,
+        Callback = function() if teleportTo then teleportTo(name) end end,
+    })
+end
+
+local highlightCache = {}
+local tracerCache    = {}
+local sanityConnections = {}
+local connections     = {}
+
+local function trackConnection(conn)
+    table.insert(connections, conn)
+    return conn
+end
+
+local function notify(title, content, duration, icon)
+    pcall(function()
+        rayfield:Notify({
+            Title    = title,
+            Content  = content,
+            Duration = duration or 3,
+            Image    = icon or "info",
+        })
+    end)
+end
+
+local function getCharacter() return localplayer.Character end
+local function getRootPart()
+    local char = getCharacter()
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+local function getHumanoid()
+    local char = getCharacter()
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function isUniqueTarget(target)
+    if not target then return false end
+    if target:GetAttribute("Unique") == true then return true end
+    local success, hasTag = pcall(function() return target:HasTag("Unique") end)
+    if success and hasTag then return true end
+    for _, desc in ipairs(target:GetDescendants()) do
+        if desc:GetAttribute("Unique") == true then return true end
+        local dSuccess, dHasTag = pcall(function() return desc:HasTag("Unique") end)
+        if dSuccess and dHasTag then return true end
+    end
+    return false
+end
+
+local function isAnomalyTarget(model)
+    if not model then return false end
+    if model:GetAttribute("Always Patient") == true then return false end
+    if model:GetAttribute("HeadRotationEnabled") == true then return true end
+    local headRotTag, tagSuccess = pcall(function() return model:HasTag("HeadRotationEnabled") end)
+    if tagSuccess and headRotTag then return true end
+    if model:GetAttribute("Skinwalker") == true
+        or model:GetAttribute("SkinwalkerEasy") == true
+        or model:GetAttribute("PenaltyWhenLettingIn") == true
+        or model:GetAttribute("HasCameraEffect") == true then
+        return true
+    end
+    local cameraFx = model:GetAttribute("Camera Effect")
+    local photoFx  = model:GetAttribute("Photo Effect")
+    if (cameraFx and cameraFx ~= "" and cameraFx ~= "None")
+        or (photoFx and photoFx ~= "" and photoFx ~= "None") then
+        return true
+    end
+    local originalFace = model:GetAttribute("OriginalFace")
+    local head          = model:FindFirstChild("Head")
+    local decal         = head and head:FindFirstChildOfClass("Decal")
+    if originalFace and decal then
+        if tostring(decal.Texture) ~= tostring(originalFace) then
+            return true
+        end
+    end
+    for _, desc in ipairs(model:GetDescendants()) do
+        if desc:GetAttribute("HeadRotationEnabled") == true then return true end
+        local dSuccess, dHasTag = pcall(function() return desc:HasTag("HeadRotationEnabled") end)
+        if dSuccess and dHasTag then return true end
+    end
+    return false
+end
+
+local function applyHighlight(target, fillColor, espCategory)
+    if not target or not target.Parent then return end
+    local existing = highlightCache[target]
+    if existing then
+        existing.FillColor = fillColor
+        existing:SetAttribute("espType", espCategory)
+        return
+    end
+    local highlight = Instance.new("Highlight")
+    highlight.Name                 = "espHighlight"
+    highlight.Adornee              = target
+    highlight.FillColor            = fillColor
+    highlight.FillTransparency     = 0.4
+    highlight.OutlineColor         = Color3.fromRGB(255, 255, 255)
+    highlight.OutlineTransparency  = 0
+    highlight.DepthMode            = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight:SetAttribute("espType", espCategory)
+    highlight.Parent               = target
+    highlightCache[target]        = highlight
+end
+
+clearEspByType = function(espCategory)
+    for target, highlight in pairs(highlightCache) do
+        if highlight and highlight.Parent and highlight:GetAttribute("espType") == espCategory then
+            highlight:Destroy()
+            highlightCache[target] = nil
+        end
+    end
+end
+
+local tracerGui = Instance.new("ScreenGui")
+tracerGui.Name             = "tracerOverlay"
+tracerGui.ResetOnSpawn     = false
+tracerGui.IgnoreGuiInset   = true
+tracerGui.DisplayOrder     = 9999
+tracerGui.Parent           = playergui
+
+local function addTracer(target, color)
+    if not target or not target.Parent then return end
+    if tracerCache[target] then
+        tracerCache[target].frame.BackgroundColor3 = color
+        return
+    end
+    local frame = Instance.new("Frame")
+    frame.Name              = "tracerLine"
+    frame.BorderSizePixel   = 0
+    frame.BackgroundColor3  = color
+    frame.AnchorPoint       = Vector2.new(0.5, 0.5)
+    frame.Visible           = false
+    frame.Parent            = tracerGui
+    tracerCache[target]    = { frame = frame }
+end
+
+clearAllTracers = function()
+    for _, entry in pairs(tracerCache) do
+        if entry.frame and entry.frame.Parent then
+            entry.frame:Destroy()
+        end
+    end
+    tracerCache = {}
+end
+
+local function clearTracerFor(target)
+    local entry = tracerCache[target]
+    if entry then
+        if entry.frame and entry.frame.Parent then entry.frame:Destroy() end
+        tracerCache[target] = nil
+    end
+end
+
+local function processModel(model)
+    if not model:IsA("Model") then return end
+    if not model:FindFirstChildOfClass("Humanoid") then return end
+    if players:GetPlayerFromCharacter(model) then return end
+    local head = model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart")
+    if not head then return end
+    if isUniqueTarget(model) then
+        if state.uniqueesp then
+            applyHighlight(model, state.uniquecolor, "unique")
+            if state.tracers then addTracer(model, state.tracercolor) end
+        end
+    elseif isAnomalyTarget(model) then
+        if state.anomaliesesp then
+            applyHighlight(model, state.anomalycolor, "anomaly")
+            if state.tracers then addTracer(model, state.tracercolor) end
+        end
+    else
+        if state.patientsesp then
+            applyHighlight(model, state.patientcolor, "patient")
+            if state.tracers then addTracer(model, state.tracercolor) end
+        end
+    end
+end
+
+local function processUniqueObjects()
+    if not state.uniqueesp then return end
+    pcall(function()
+        for _, desc in ipairs(workspace:GetDescendants()) do
+            if not desc or not desc.Parent then continue end
+            if desc:IsA("Model") and players:GetPlayerFromCharacter(desc) then continue end
+            if isUniqueTarget(desc) then
+                local target
+                if desc:IsA("Model") then
+                    target = desc
+                elseif desc:IsA("BasePart") then
+                    target = desc.Parent:IsA("Model") and desc.Parent or desc
+                else
+                    target = desc
+                end
+                if not target or not target.Parent then continue end
+                applyHighlight(target, state.uniquecolor, "unique")
+                if state.tracers then addTracer(target, state.tracercolor) end
+            end
+        end
+    end)
+end
+
+task.spawn(function()
+    while not isDead do
+        task.wait(0.5)
+        for target, highlight in pairs(highlightCache) do
+            if not target or not target.Parent then
+                if highlight and highlight.Parent then highlight:Destroy() end
+                highlightCache[target] = nil
+            end
+        end
+        for target, entry in pairs(tracerCache) do
+            if not target or not target.Parent then
+                if entry.frame and entry.frame.Parent then entry.frame:Destroy() end
+                tracerCache[target] = nil
+            end
+        end
+        if not state.anomaliesesp then clearEspByType("anomaly") end
+        if not state.patientsesp   then clearEspByType("patient") end
+        if not state.uniqueesp     then clearEspByType("unique") end
+        if not state.tracers       then clearAllTracers() end
+        for _, child in ipairs(workspace:GetChildren()) do
+            if child:IsA("Model") and child ~= localplayer.Character then
+                processModel(child)
+            else
+                local nameLower = string.lower(child.Name)
+                if string.find(nameLower, "npc") or string.find(nameLower, "patient") then
+                    for _, desc in ipairs(child:GetDescendants()) do
+                        processModel(desc)
+                    end
+                end
+            end
+        end
+        processUniqueObjects()
+    end
+end)
+
+trackConnection(runservice.RenderStepped:Connect(function()
+    if isDead then return end
+    if not state.tracers then
+        if next(tracerCache) then clearAllTracers() end
+        return
+    end
+    local viewportSize = camera.ViewportSize
+    local origin       = Vector2.new(viewportSize.X / 2, viewportSize.Y)
+    local thickness    = math.clamp(state.tracerthickness, 0.5, 6)
+    for target, entry in pairs(tracerCache) do
+        if not target or not target.Parent then
+            clearTracerFor(target)
+        else
+            local part
+            if target:IsA("Model") then
+                part = target:FindFirstChild("HumanoidRootPart")
+                    or target:FindFirstChild("Head")
+                    or target:FindFirstChildWhichIsA("BasePart")
+            elseif target:IsA("BasePart") then
+                part = target
+            end
+            if part and part.Parent and part:IsDescendantOf(workspace) then
+                local screenPos, onScreen = camera:WorldToViewportPoint(part.Position)
+                if onScreen and screenPos.Z > 0 then
+                    local target2D = Vector2.new(screenPos.X, screenPos.Y)
+                    local delta    = target2D - origin
+                    local dist     = delta.Magnitude
+                    if dist < 1 then dist = 1 end
+                    local angle    = math.atan2(delta.Y, delta.X)
+                    entry.frame.Size     = UDim2.new(0, dist, 0, thickness)
+                    entry.frame.Position = UDim2.new(0, (origin.X + target2D.X) / 2, 0, (origin.Y + target2D.Y) / 2)
+                    entry.frame.Rotation = math.deg(angle)
+                    entry.frame.BackgroundColor3 = state.tracercolor
+                    entry.frame.BackgroundTransparency = 0
+                    entry.frame.Visible  = true
+                else
+                    entry.frame.Visible = false
+                end
+            else
+                entry.frame.Visible = false
+            end
+        end
+    end
+end))
+
+trackConnection(runservice.RenderStepped:Connect(function(dt)
+    if isDead or not state.spinenabled then return end
+    local root = getRootPart()
+    if root then
+        root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(state.spinspeed * 10 * dt * 60), 0)
+    end
+end))
+
+removePlayerEsp = function(player)
+    local char = player and player.Character
+    if not char then return end
+    local highlight = highlightCache[char]
+    if highlight and highlight.Parent then
+        highlight:Destroy()
+        highlightCache[char] = nil
+    end
+    clearTracerFor(char)
+end
+
+trackConnection(runservice.RenderStepped:Connect(function()
+    if isDead then return end
+    if not (state.playeresp or state.tracers) then return end
+    for _, p in ipairs(players:GetPlayers()) do
+        if p ~= localplayer then
+            local char = p.Character
+            if char then
+                if state.playeresp then
+                    local existing = highlightCache[char]
+                    if existing then
+                        existing.FillColor = state.playercolor
+                    else
+                        applyHighlight(char, state.playercolor, "player")
+                    end
+                end
+                if state.tracers then
+                    addTracer(char, state.tracercolor)
+                end
+            end
+        end
+    end
+end))
+
+trackConnection(players.PlayerRemoving:Connect(function(p)
+    removePlayerEsp(p)
+end))
+
+local catBoostUntil = 0
+local catSpeed      = 35
+
+task.spawn(function()
+    while not isDead do
+        task.wait(0.4)
+        local humanoid = getHumanoid()
+        if humanoid and humanoid.WalkSpeed ~= 0 then
+            local targetSpeed = (os.clock() < catBoostUntil) and catSpeed or state.walkspeed
+            if humanoid.WalkSpeed ~= targetSpeed then
+                humanoid.WalkSpeed = targetSpeed
+            end
+        end
+    end
+end)
+
+local function hookSanityValue(valueObj)
+    if not valueObj or not valueObj:IsA("ValueBase") then return end
+    local nameLower = string.lower(valueObj.Name)
+    if string.find(nameLower, "sanity") or string.find(nameLower, "sanidad")
+        or string.find(nameLower, "cordura") then
+        valueObj.Value = 100
+        if not sanityConnections[valueObj] then
+            sanityConnections[valueObj] = valueObj.Changed:Connect(function(newVal)
+                if state.infsanity and newVal ~= 100 then
+                    valueObj.Value = 100
+                end
+            end)
+        end
+    end
+end
+
+task.spawn(function()
+    while not isDead do
+        task.wait(0.25)
+        if state.infsanity then
+            pcall(function()
+                if localplayer:GetAttribute("Sanity")   ~= 100 then localplayer:SetAttribute("Sanity",   100) end
+                if localplayer:GetAttribute("Sanidad")  ~= 100 then localplayer:SetAttribute("Sanidad",  100) end
+                local char = getCharacter()
+                if char then
+                    if char:GetAttribute("Sanity")  ~= 100 then char:SetAttribute("Sanity",  100) end
+                    if char:GetAttribute("Sanidad") ~= 100 then char:SetAttribute("Sanidad", 100) end
+                    for _, child in ipairs(char:GetChildren()) do
+                        hookSanityValue(child)
+                    end
+                end
+                local stats = localplayer:FindFirstChild("leaderstats")
+                    or localplayer:FindFirstChild("Data")
+                    or localplayer:FindFirstChild("Stats")
+                if stats then
+                    for _, child in ipairs(stats:GetChildren()) do
+                        hookSanityValue(child)
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+applyInstantPp = function()
+    pcall(function()
+        for _, desc in ipairs(workspace:GetDescendants()) do
+            if desc:IsA("ProximityPrompt") then
+                desc.HoldDuration = state.instantpp and 0 or 1
+            end
+        end
+    end)
+end
+
+trackConnection(workspace.DescendantAdded:Connect(function(inst)
+    if isDead then return end
+    if state.instantpp and inst:IsA("ProximityPrompt") then
+        task.wait(0.1)
+        pcall(function() inst.HoldDuration = 0 end)
+    end
+end))
+
+applyThirdPerson = function()
+    pcall(function()
+        if state.thirdperson then
+            localplayer.CameraMode = Enum.CameraMode.Classic
+            localplayer.CameraMinZoomDistance = 10
+            localplayer.CameraMaxZoomDistance = 10
+        else
+            localplayer.CameraMinZoomDistance = 0.5
+            localplayer.CameraMaxZoomDistance = 0.5
+        end
+    end)
+end
+
+trackConnection(localplayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    applyThirdPerson()
+end))
+
+local roomCFrames = {
+    ["check in"] = CFrame.new(-105, 3, 0),
+    ["shop"]     = CFrame.new(-167, 3, -13),
+    ["room 1"]   = CFrame.new(-174, 3, -44),
+    ["room 2"]   = CFrame.new(-117, 3, -58),
+    ["room 3"]   = CFrame.new(-172, 3, -84),
+    ["room 4"]   = CFrame.new(-117, 3, -96),
+    ["room 5"]   = CFrame.new(-150, 3, -119),
+    ["room 6"]   = CFrame.new(-170, 3, 55),
+    ["room 7"]   = CFrame.new(-116, 3, 52),
+    ["room 8"]   = CFrame.new(-145, 3, 89),
+}
+
+teleportTo = function(name)
+    local cf   = roomCFrames[name]
+    local root = getRootPart()
+    if cf and root then
+        pcall(function() root.CFrame = cf end)
+        notify("Teleport", "TP success", 1.5, "map-pin")
+    else
+        notify("Teleport", "TP failed", 2, "alert-circle")
+    end
+end
+
+local function buildCatItem()
+    local tool = Instance.new("Tool")
+    tool.Name           = "cat"
+    tool.ToolTip        = "client cola boost"
+    tool.RequiresHandle = true
+    tool.CanBeDropped   = true
+    local handle = Instance.new("Part")
+    handle.Name         = "Handle"
+    handle.Size         = Vector3.new(1.2, 1, 1.2)
+    handle.BrickColor   = BrickColor.new("Pastel orange")
+    handle.Material     = Enum.Material.SmoothPlastic
+    handle.Anchored     = false
+    handle.CanCollide   = false
+    local mesh = Instance.new("SpecialMesh")
+    mesh.MeshType = Enum.MeshType.Sphere
+    mesh.Scale    = Vector3.new(1.2, 1, 1.2)
+    mesh.Parent   = handle
+    local earLeft = Instance.new("WedgePart")
+    earLeft.Size        = Vector3.new(0.3, 0.4, 0.3)
+    earLeft.BrickColor  = BrickColor.new("Pastel orange")
+    earLeft.Material    = Enum.Material.SmoothPlastic
+    earLeft.CanCollide  = false
+    earLeft.CFrame      = handle.CFrame * CFrame.new(-0.35, 0.6, 0) * CFrame.Angles(0, 0, math.rad(-15))
+    earLeft.Parent      = tool
+    local weldLeft = Instance.new("WeldConstraint")
+    weldLeft.Part0 = handle
+    weldLeft.Part1 = earLeft
+    weldLeft.Parent = earLeft
+    local earRight = Instance.new("WedgePart")
+    earRight.Size        = Vector3.new(0.3, 0.4, 0.3)
+    earRight.BrickColor  = BrickColor.new("Pastel orange")
+    earRight.Material    = Enum.Material.SmoothPlastic
+    earRight.CanCollide  = false
+    earRight.CFrame      = handle.CFrame * CFrame.new(0.35, 0.6, 0) * CFrame.Angles(0, 0, math.rad(15))
+    earRight.Parent      = tool
+    local weldRight = Instance.new("WeldConstraint")
+    weldRight.Part0 = handle
+    weldRight.Part1 = earRight
+    weldRight.Parent = earRight
+    local faceGui = Instance.new("SurfaceGui")
+    faceGui.Name = "catFaceGui"
+    faceGui.Face = Enum.NormalId.Front
+    faceGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+    faceGui.PixelsPerStud = 100
+    faceGui.Parent = handle
+    local faceLabel = Instance.new("TextLabel")
+    faceLabel.Size = UDim2.new(0.6, 0, 0.6, 0)
+    faceLabel.Position = UDim2.new(0.2, 0, 0.2, 0)
+    faceLabel.BackgroundTransparency = 1
+    faceLabel.Text = ":3"
+    faceLabel.TextColor3 = Color3.fromRGB(30, 30, 30)
+    faceLabel.TextScaled = true
+    faceLabel.Font = Enum.Font.FredokaOne
+    faceLabel.Parent = faceGui
+    handle.Parent = tool
+    local isActive = false
+    tool.Activated:Connect(function()
+        if isActive or isDead then return end
+        isActive = true
+        local char = getCharacter()
+        local root = getRootPart()
+        if char and root then
+            catBoostUntil = os.clock() + 20
+            local attachmentTop = Instance.new("Attachment")
+            attachmentTop.Position = Vector3.new(0, 1, 0)
+            attachmentTop.Parent = root
+            local attachmentBottom = Instance.new("Attachment")
+            attachmentBottom.Position = Vector3.new(0, -1, 0)
+            attachmentBottom.Parent = root
+            local faceTrailGui = Instance.new("BillboardGui")
+            faceTrailGui.Name = "catTrailGui"
+            faceTrailGui.Size = UDim2.new(0, 40, 0, 40)
+            faceTrailGui.AlwaysOnTop = true
+            faceTrailGui.Adornee = root
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(1, 0, 1, 0)
+            label.BackgroundTransparency = 1
+            label.Text = ":3"
+            label.TextColor3 = Color3.fromRGB(255, 182, 193)
+            label.TextScaled = true
+            label.Font = Enum.Font.FredokaOne
+            label.Parent = faceTrailGui
+            faceTrailGui.Parent = root
+            local trail = Instance.new("Trail")
+            trail.Attachment0 = attachmentTop
+            trail.Attachment1 = attachmentBottom
+            trail.Lifetime = 0.6
+            trail.Color = ColorSequence.new(Color3.fromRGB(255, 182, 193))
+            trail.Transparency = NumberSequence.new(0.2, 1)
+            trail.Parent = root
+            task.delay(20, function()
+                if trail then trail:Destroy() end
+                if attachmentTop then attachmentTop:Destroy() end
+                if attachmentBottom then attachmentBottom:Destroy() end
+                if faceTrailGui then faceTrailGui:Destroy() end
+            end)
+        end
+        task.wait(2)
+        isActive = false
+    end)
+    return tool
+end
+
+craftCatItem = function()
+    local backpack = localplayer:FindFirstChildOfClass("Backpack")
+    if not backpack then return false end
+    local tool = buildCatItem()
+    tool.Parent = backpack
+    return true
+end
+
+local isBusy = false
+fetchObject = function(itemname)
+    if isBusy then return false end
+    isBusy = true
+    local char = getCharacter()
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local humanoid = getHumanoid()
+    if not root or not char then isBusy = false return false end
+    local targetName = string.lower(itemname)
+    local targetPrompt = nil
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if desc:IsA("ProximityPrompt") then
+            local actionText = string.lower(desc.ActionText or "")
+            local objectText = string.lower(desc.ObjectText or "")
+            local parentName = string.lower(desc.Parent and desc.Parent.Name or "")
+            if string.find(actionText, targetName) or string.find(objectText, targetName) or string.find(parentName, targetName) then
+                targetPrompt = desc
+                break
+            end
+        end
+    end
+    if not targetPrompt then
+        for _, itemFolder in ipairs(workspace:GetDescendants()) do
+            if itemFolder:IsA("Model") or itemFolder:IsA("Folder") or itemFolder:IsA("BasePart") then
+                if string.find(string.lower(itemFolder.Name), targetName) then
+                    local prompt = itemFolder:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    if prompt then
+                        targetPrompt = prompt
+                        break
+                    end
+                end
+            end
+        end
+    end
+    if not targetPrompt then
+        isBusy = false
+        return false
+    end
+    local parent = targetPrompt.Parent
+    local basePart = (parent:IsA("BasePart") and parent) or parent:FindFirstChildWhichIsA("BasePart", true)
+    if not basePart then
+        isBusy = false
+        return false
+    end
+    local savedCFrame = root.CFrame
+    local tempPlatform = Instance.new("Part")
+    tempPlatform.Size = Vector3.new(12, 1, 12)
+    tempPlatform.Anchored = true
+    tempPlatform.CanCollide = true
+    tempPlatform.Transparency = 1
+    tempPlatform.Position = basePart.Position - Vector3.new(0, 2.5, 0)
+    tempPlatform.Parent = workspace
+    if humanoid then humanoid.PlatformStand = true end
+    local targetPos = basePart.Position
+    root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    root.CFrame = CFrame.lookAt(targetPos + Vector3.new(0, 1.5, 0), targetPos)
+    task.wait(0.15)
+    pcall(function()
+        if fireproximityprompt then
+            fireproximityprompt(targetPrompt)
+        end
+    end)
+    task.wait(0.25)
+    root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    root.CFrame = savedCFrame + Vector3.new(0, 0.5, 0)
+    task.wait(0.05)
+    if humanoid then humanoid.PlatformStand = false end
+    tempPlatform:Destroy()
+    isBusy = false
+    return true
+end
+
+genv.cleanupScript = function()
+    isDead = true
+    for k in pairs(state) do
+        if type(state[k]) == "boolean" then state[k] = false end
+    end
+    for _, conn in pairs(sanityConnections) do pcall(function() conn:Disconnect() end) end
+    sanityConnections = {}
+    clearAllTracers()
+    for target, highlight in pairs(highlightCache) do
+        if highlight and highlight.Parent then pcall(function() highlight:Destroy() end) end
+        highlightCache[target] = nil
+    end
+    for _, p in ipairs(players:GetPlayers()) do removePlayerEsp(p) end
+    for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
+    connections = {}
+    pcall(function() if tracerGui and tracerGui.Parent then tracerGui:Destroy() end end)
+    pcall(function()
+        local parent = (gethui and gethui()) or CoreGui
+        local f = parent:FindFirstChild("KYIEL_FloatIcon")
+        if f then f:Destroy() end
+    end)
+    pcall(function() rayfield:Destroy() end)
+end
+
+notify("Animal Hospital", "Loaded · KHUB & Kyiel", 4, "check-circle")
+print("[KHUB & Kyiel] Animal Hospital loaded")
