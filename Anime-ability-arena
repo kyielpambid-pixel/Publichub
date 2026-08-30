@@ -1,0 +1,456 @@
+--[[
+	Anime Ability Arena by KHUB
+	ESP · Aimbot · FOV · Jump · Speed · Collision
+]]
+
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+
+local lp = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+local LOGO_ID = "rbxassetid://140466936910510"
+local DISCORD = "https://discord.gg/EKPb7BRDH8"
+local TOGGLE_UI_KEY = Enum.KeyCode.RightControl
+local TOGGLE_UI_KEY_2 = Enum.KeyCode.K
+local TOGGLE_FLOAT_KEY = Enum.KeyCode.RightShift
+
+local espEnabled = false
+local smoothEnabled = true
+local aimbotEnabled = false
+local lockMode = "Fixed"
+local lockedTarget = nil
+local fovEnabled = false
+local fovSizes = {30, 40, 60, 90, 120, 150, 200}
+local fovSizeIdx = 4
+local currentFovRadius = 100
+local jumpPowers = {50, 52, 55, 58, 60}
+local jumpIdx = 1
+local speeds = {16, 20, 24, 30, 40, 50}
+local speedIdx = 1
+local blockPlayerEnabled = false
+local passPlayerEnabled = false
+local espBoxes = {}
+
+local FovDrawing = Drawing.new("Circle")
+FovDrawing.Visible = false
+FovDrawing.Thickness = 1
+FovDrawing.NumSides = 32
+FovDrawing.Color = Color3.fromRGB(255, 180, 255)
+FovDrawing.Transparency = 0.5
+FovDrawing.Filled = false
+
+local function GetClosestTarget()
+	local closest = nil
+	local shortestDist = math.huge
+	local mousePos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= lp and player.Character then
+			local hum = player.Character:FindFirstChildOfClass("Humanoid")
+			local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+			if hum and hum.Health > 0 and hrp then
+				local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+				if onScreen then
+					local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+					if dist < shortestDist then
+						shortestDist = dist
+						closest = hrp
+					end
+				end
+			end
+		end
+	end
+	return closest
+end
+
+local function ClearESP()
+	for _, h in ipairs(espBoxes) do
+		pcall(function() h:Destroy() end)
+	end
+	espBoxes = {}
+end
+
+local function ApplyESP()
+	ClearESP()
+	if not espEnabled then return end
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= lp then
+			local char = player.Character
+			if char then
+				local hl = Instance.new("Highlight")
+				hl.FillColor = Color3.fromRGB(255, 180, 80)
+				hl.OutlineColor = Color3.fromRGB(255, 220, 150)
+				hl.FillTransparency = 0.5
+				hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+				hl.Parent = char
+				table.insert(espBoxes, hl)
+			end
+		end
+	end
+end
+
+Players.PlayerAdded:Connect(function(p)
+	p.CharacterAdded:Connect(function()
+		if espEnabled then task.wait(0.5) ApplyESP() end
+	end)
+end)
+for _, p in ipairs(Players:GetPlayers()) do
+	if p ~= lp then
+		p.CharacterAdded:Connect(function()
+			if espEnabled then task.wait(0.5) ApplyESP() end
+		end)
+	end
+end
+
+RunService.RenderStepped:Connect(function()
+	local vp = Camera.ViewportSize
+	if fovEnabled then
+		FovDrawing.Position = Vector2.new(vp.X / 2, vp.Y / 2)
+		FovDrawing.Radius = currentFovRadius
+		FovDrawing.Visible = true
+	else
+		FovDrawing.Visible = false
+	end
+
+	if aimbotEnabled then
+		if lockedTarget then
+			local char = lockedTarget.Parent
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if not hum or hum.Health <= 0 then
+				lockedTarget = nil
+			end
+		end
+		if not lockedTarget then
+			lockedTarget = GetClosestTarget()
+		end
+		if lockedTarget then
+			if lockMode == "Fixed" then
+				Camera.CFrame = CFrame.new(Camera.CFrame.Position, lockedTarget.Position)
+			else
+				Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, lockedTarget.Position), 0.25)
+			end
+		end
+	end
+end)
+
+RunService.Heartbeat:Connect(function()
+	if lp.Character then
+		local hum = lp.Character:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum.JumpPower = jumpPowers[jumpIdx]
+			hum.WalkSpeed = speeds[speedIdx]
+		end
+	end
+end)
+
+RunService.Stepped:Connect(function()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= lp and player.Character then
+			for _, part in ipairs(player.Character:GetDescendants()) do
+				if part:IsA("BasePart") then
+					if passPlayerEnabled then
+						part.CanCollide = false
+					elseif blockPlayerEnabled then
+						part.CanCollide = true
+					end
+				end
+			end
+		end
+	end
+end)
+
+--====================================================
+-- UI
+--====================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_AnimeAbilityArena"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then
+	ScreenGui.Parent = lp:WaitForChild("PlayerGui")
+end
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 300, 0, 420)
+Main.Position = UDim2.new(0.5, -150, 0.5, -210)
+Main.BackgroundColor3 = Color3.fromRGB(14, 10, 22)
+Main.BorderSizePixel = 0
+Main.Visible = true
+Main.ClipsDescendants = true
+Main.Parent = ScreenGui
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 14)
+
+local mainStroke = Instance.new("UIStroke", Main)
+mainStroke.Thickness = 2
+local strokeGrad = Instance.new("UIGradient", mainStroke)
+strokeGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 100, 255)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(180, 50, 230)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(90, 20, 160)),
+})
+strokeGrad.Rotation = 45
+
+local Top = Instance.new("Frame", Main)
+Top.Size = UDim2.new(1, 0, 0, 44)
+Top.BackgroundColor3 = Color3.fromRGB(18, 12, 28)
+Top.BorderSizePixel = 0
+
+local titleBg = Instance.new("Frame", Top)
+titleBg.Size = UDim2.new(0, 190, 0, 28)
+titleBg.Position = UDim2.new(0, 10, 0.5, -14)
+titleBg.BackgroundColor3 = Color3.fromRGB(50, 18, 85)
+Instance.new("UICorner", titleBg).CornerRadius = UDim.new(0, 8)
+
+local titleLabel = Instance.new("TextLabel", titleBg)
+titleLabel.Size = UDim2.new(1, 0, 1, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "Anime Ability Arena"
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 12
+titleLabel.TextColor3 = Color3.fromRGB(255, 180, 255)
+
+local badge = Instance.new("TextLabel", Top)
+badge.Size = UDim2.new(0, 48, 0, 22)
+badge.Position = UDim2.new(0, 208, 0.5, -11)
+badge.BackgroundColor3 = Color3.fromRGB(35, 15, 55)
+badge.Text = "KHUB"
+badge.Font = Enum.Font.GothamBold
+badge.TextSize = 11
+badge.TextColor3 = Color3.fromRGB(210, 140, 255)
+Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 6)
+
+local Close = Instance.new("TextButton", Top)
+Close.Size = UDim2.new(0, 32, 0, 26)
+Close.Position = UDim2.new(1, -38, 0.5, -13)
+Close.BackgroundColor3 = Color3.fromRGB(50, 15, 70)
+Close.Text = "X"
+Close.Font = Enum.Font.GothamBold
+Close.TextSize = 14
+Close.TextColor3 = Color3.fromRGB(255, 160, 255)
+Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 7)
+
+local Scroll = Instance.new("ScrollingFrame", Main)
+Scroll.Size = UDim2.new(1, -16, 1, -56)
+Scroll.Position = UDim2.new(0, 8, 0, 50)
+Scroll.BackgroundTransparency = 1
+Scroll.BorderSizePixel = 0
+Scroll.ScrollBarThickness = 3
+Scroll.CanvasSize = UDim2.new(0, 0, 0, 520)
+
+local function addToggle(text, y, default, callback)
+	local row = Instance.new("Frame", Scroll)
+	row.Size = UDim2.new(1, -4, 0, 34)
+	row.Position = UDim2.new(0, 0, 0, y)
+	row.BackgroundColor3 = Color3.fromRGB(22, 14, 34)
+	Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+	local lab = Instance.new("TextLabel", row)
+	lab.Size = UDim2.new(1, -70, 1, 0)
+	lab.Position = UDim2.new(0, 10, 0, 0)
+	lab.BackgroundTransparency = 1
+	lab.Text = text
+	lab.Font = Enum.Font.Gotham
+	lab.TextSize = 12
+	lab.TextColor3 = Color3.fromRGB(230, 200, 255)
+	lab.TextXAlignment = Enum.TextXAlignment.Left
+	local btn = Instance.new("TextButton", row)
+	btn.Size = UDim2.new(0, 50, 0, 24)
+	btn.Position = UDim2.new(1, -58, 0.5, -12)
+	btn.BackgroundColor3 = default and Color3.fromRGB(60, 140, 80) or Color3.fromRGB(50, 20, 70)
+	btn.Text = default and "ON" or "OFF"
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 11
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+	local on = default
+	btn.MouseButton1Click:Connect(function()
+		on = not on
+		btn.Text = on and "ON" or "OFF"
+		btn.BackgroundColor3 = on and Color3.fromRGB(60, 140, 80) or Color3.fromRGB(50, 20, 70)
+		callback(on, btn)
+	end)
+	return btn
+end
+
+local function addCycle(text, y, getLabel, onClick)
+	local row = Instance.new("Frame", Scroll)
+	row.Size = UDim2.new(1, -4, 0, 34)
+	row.Position = UDim2.new(0, 0, 0, y)
+	row.BackgroundColor3 = Color3.fromRGB(22, 14, 34)
+	Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+	local lab = Instance.new("TextLabel", row)
+	lab.Size = UDim2.new(1, -90, 1, 0)
+	lab.Position = UDim2.new(0, 10, 0, 0)
+	lab.BackgroundTransparency = 1
+	lab.Text = text
+	lab.Font = Enum.Font.Gotham
+	lab.TextSize = 12
+	lab.TextColor3 = Color3.fromRGB(230, 200, 255)
+	lab.TextXAlignment = Enum.TextXAlignment.Left
+	local btn = Instance.new("TextButton", row)
+	btn.Size = UDim2.new(0, 72, 0, 24)
+	btn.Position = UDim2.new(1, -80, 0.5, -12)
+	btn.BackgroundColor3 = Color3.fromRGB(50, 18, 85)
+	btn.Text = getLabel()
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 11
+	btn.TextColor3 = Color3.fromRGB(255, 200, 255)
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+	btn.MouseButton1Click:Connect(function()
+		onClick()
+		btn.Text = getLabel()
+	end)
+	return btn
+end
+
+local function addLab(text, y)
+	local l = Instance.new("TextLabel", Scroll)
+	l.Size = UDim2.new(1, -4, 0, 18)
+	l.Position = UDim2.new(0, 0, 0, y)
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.Font = Enum.Font.GothamBold
+	l.TextSize = 11
+	l.TextColor3 = Color3.fromRGB(180, 120, 255)
+	l.TextXAlignment = Enum.TextXAlignment.Left
+end
+
+addLab("COMBAT", 0)
+addToggle("ESP", 22, false, function(on)
+	espEnabled = on
+	if on then ApplyESP() else ClearESP() end
+end)
+addToggle("Aimbot", 60, false, function(on)
+	aimbotEnabled = on
+	if not on then lockedTarget = nil end
+end)
+addCycle("Lock Mode", 98, function()
+	return lockMode
+end, function()
+	lockMode = (lockMode == "Fixed") and "Smooth" or "Fixed"
+	lockedTarget = nil
+end)
+addToggle("FOV Circle", 136, false, function(on)
+	fovEnabled = on
+	FovDrawing.Visible = on
+end)
+addCycle("FOV Size", 174, function()
+	return tostring(currentFovRadius)
+end, function()
+	fovSizeIdx = (fovSizeIdx % #fovSizes) + 1
+	currentFovRadius = fovSizes[fovSizeIdx]
+end)
+
+addLab("MOVEMENT", 220)
+addCycle("Jump Power", 242, function()
+	return tostring(jumpPowers[jumpIdx])
+end, function()
+	jumpIdx = (jumpIdx % #jumpPowers) + 1
+end)
+addCycle("Speed", 280, function()
+	return tostring(speeds[speedIdx])
+end, function()
+	speedIdx = (speedIdx % #speeds) + 1
+end)
+addToggle("Smooth Play", 318, true, function(on)
+	smoothEnabled = on
+end)
+
+addLab("PLAYERS", 364)
+addToggle("Anti-Collision", 386, false, function(on)
+	blockPlayerEnabled = on
+	if on then passPlayerEnabled = false end
+end)
+addToggle("Pass Players", 424, false, function(on)
+	passPlayerEnabled = on
+	if on then blockPlayerEnabled = false end
+end)
+
+addLab("Kyiel & Arin · KHUB", 470)
+addLab("RightCtrl / K = Toggle", 490)
+
+-- Floating logo
+local OpenBtn = Instance.new("ImageButton", ScreenGui)
+OpenBtn.Size = UDim2.new(0, 48, 0, 48)
+OpenBtn.Position = UDim2.new(0, 24, 0.5, -24)
+OpenBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 32)
+OpenBtn.Image = LOGO_ID
+OpenBtn.Visible = false
+OpenBtn.AutoButtonColor = false
+OpenBtn.ScaleType = Enum.ScaleType.Fit
+Instance.new("UICorner", OpenBtn).CornerRadius = UDim.new(1, 0)
+local openStroke = Instance.new("UIStroke", OpenBtn)
+openStroke.Thickness = 2
+openStroke.Color = Color3.fromRGB(180, 70, 255)
+
+Close.MouseButton1Click:Connect(function()
+	Main.Visible = false
+	OpenBtn.Visible = true
+end)
+OpenBtn.MouseButton1Click:Connect(function()
+	Main.Visible = true
+	OpenBtn.Visible = false
+end)
+
+local draggingMain, dragStart, startPos
+Top.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingMain = true
+		dragStart = input.Position
+		startPos = Main.Position
+	end
+end)
+Top.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingMain = false
+	end
+end)
+
+local btnDragging, btnStart, btnPos
+OpenBtn.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		btnDragging = true
+		btnStart = input.Position
+		btnPos = OpenBtn.Position
+	end
+end)
+OpenBtn.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		btnDragging = false
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if draggingMain and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local d = input.Position - dragStart
+		Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+	end
+	if btnDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local d = input.Position - btnStart
+		OpenBtn.Position = UDim2.new(btnPos.X.Scale, btnPos.X.Offset + d.X, btnPos.Y.Scale, btnPos.Y.Offset + d.Y)
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+	if input.KeyCode == TOGGLE_UI_KEY or input.KeyCode == TOGGLE_UI_KEY_2 then
+		if Main.Visible then
+			Main.Visible = false
+			OpenBtn.Visible = true
+		else
+			Main.Visible = true
+			OpenBtn.Visible = false
+		end
+	elseif input.KeyCode == TOGGLE_FLOAT_KEY then
+		if Main.Visible then return end
+		OpenBtn.Visible = not OpenBtn.Visible
+	end
+end)
+
+print("[KHUB] Anime Ability Arena loaded | No key")
