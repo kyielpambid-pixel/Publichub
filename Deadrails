@@ -1,0 +1,843 @@
+--[[
+	Dead Rails · KHUB
+	Obsidian UI · ALL original features
+	Kyiel & Arin · KHUB
+	Discord: https://discord.gg/EKPb7BRDH8
+	YouTube: https://www.youtube.com/@kyielpambid
+]]
+
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local Lighting = game:GetService("Lighting")
+local VirtualUser = game:GetService("VirtualUser")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterGui = game:GetService("StarterGui")
+
+local LocalPlayer = Players.LocalPlayer
+local DISCORD = "https://discord.gg/EKPb7BRDH8"
+local YOUTUBE = "https://www.youtube.com/@kyielpambid"
+local baseUrl = "https://raw.githubusercontent.com/Shade-vex/Hutao-hub-code-pro-mode/refs/heads/main/"
+
+local Repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+local Library = loadstring(game:HttpGet(Repo .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(Repo .. "addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet(Repo .. "addons/SaveManager.lua"))()
+
+pcall(function()
+	Library.FontColor = Color3.fromRGB(255, 240, 220)
+	Library.MainColor = Color3.fromRGB(28, 20, 12)
+	Library.BackgroundColor = Color3.fromRGB(18, 12, 8)
+	Library.AccentColor = Color3.fromRGB(255, 160, 40)
+	Library.OutlineColor = Color3.fromRGB(60, 40, 20)
+end)
+
+local Window = Library:CreateWindow({
+	Title = "Dead Rails · KHUB",
+	Footer = "Kyiel & Arin",
+	Center = true,
+	AutoShow = true,
+	Resizable = true,
+	NotifySide = "Right",
+	ShowCustomCursor = false,
+})
+
+local function N(t, d)
+	pcall(function()
+		Library:Notify({ Title = t or "KHUB", Description = d or "", Time = 4 })
+	end)
+end
+
+-- Optional modules (pcall so UI always loads)
+pcall(function()
+	local Config = loadstring(game:HttpGet(baseUrl .. "Config.lua.txt"))()
+	local Utilities = loadstring(game:HttpGet(baseUrl .. "Util.lua.txt"))()
+	local ESP = loadstring(game:HttpGet(baseUrl .. "ESP.lua.txt"))()(Config, Utilities)
+	local MiddleClick = loadstring(game:HttpGet(baseUrl .. "MiddleClick.lua.txt"))()
+	local AimbotMod = loadstring(game:HttpGet(baseUrl .. "Aimbot.lua.txt"))()
+	pcall(function() ESP.Initialize() end)
+	pcall(function() MiddleClick.Initialize() end)
+	pcall(function() AimbotMod.Initialize() end)
+end)
+
+local Tabs = {
+	Home = Window:AddTab({ Name = "Home", Icon = "home" }),
+	Farm = Window:AddTab({ Name = "Farm", Icon = "swords" }),
+	Main = Window:AddTab({ Name = "Main", Icon = "user" }),
+	Items = Window:AddTab({ Name = "Items", Icon = "box" }),
+	TP = Window:AddTab({ Name = "Teleport", Icon = "map-pin" }),
+	Player = Window:AddTab({ Name = "Player", Icon = "person-standing" }),
+	Misc = Window:AddTab({ Name = "Misc", Icon = "wrench" }),
+	Settings = Window:AddTab({ Name = "Settings", Icon = "settings" }),
+}
+
+------------------------------------------------------------
+-- HOME
+------------------------------------------------------------
+do
+	local Box = Tabs.Home:AddLeftGroupbox("Welcome")
+	Box:AddLabel("Hi, " .. LocalPlayer.DisplayName)
+	Box:AddLabel("@" .. LocalPlayer.Name)
+	Box:AddLabel("Dead Rails · KHUB")
+	local Cred = Tabs.Home:AddRightGroupbox("Credits")
+	Cred:AddLabel("Kyiel & Arin · KHUB")
+	Cred:AddButton({ Text = "Copy Discord", Func = function()
+		if setclipboard then setclipboard(DISCORD) end
+		N("KHUB", "Discord copied")
+	end })
+	Cred:AddButton({ Text = "Copy YouTube", Func = function()
+		if setclipboard then setclipboard(YOUTUBE) end
+		N("KHUB", "YouTube copied")
+	end })
+end
+
+------------------------------------------------------------
+-- FARM (exact original callbacks)
+------------------------------------------------------------
+do
+	local B = Tabs.Farm:AddLeftGroupbox("Bonds")
+	B:AddLabel("Note: toggle starts module; disable may not stop it.")
+
+	B:AddToggle("AfBToggle", {
+		Text = "Auto Farm Bonds",
+		Default = false,
+		Callback = function(Value)
+			if Value then
+				getgenv().DeadRails = {
+					["Farm"] = {
+						["Enabled"] = true,
+						["Mode"] = "Normal",
+					},
+				}
+				local AutoBondsURL = baseUrl .. "AutoBondsINF"
+				pcall(function() loadstring(game:HttpGet(AutoBondsURL))() end)
+			end
+		end,
+	})
+
+	B:AddToggle("AfBToggle1", {
+		Text = "Ultimate Auto Farm Bonds",
+		Default = false,
+		Callback = function(Value)
+			if Value then
+				local AutoBondsURl = baseUrl .. "AutoBonds2.lua.txt"
+				pcall(function() loadstring(game:HttpGet(AutoBondsURl))() end)
+			end
+		end,
+	})
+
+	local W = Tabs.Farm:AddRightGroupbox("Win")
+	W:AddToggle("AfBToggle12", {
+		Text = "Auto Farm Bonds & Win",
+		Default = false,
+		Callback = function(Value)
+			if Value then
+				local AutoBondsUrL = baseUrl .. "AutoBonds3.lua.txt"
+				pcall(function() loadstring(game:HttpGet(AutoBondsUrL))() end)
+			end
+		end,
+	})
+	W:AddLabel("Recommend cowboy class")
+end
+
+------------------------------------------------------------
+-- MAIN: Class + Aimbot V1 (full original logic)
+------------------------------------------------------------
+do
+	local Class = Tabs.Main:AddLeftGroupbox("Class")
+	Class:AddButton({
+		Text = "Get Horse Class",
+		Func = function()
+			if getgenv().HorseCl then return end
+			getgenv().HorseCl = true
+			local args = { [1] = "Horse" }
+			pcall(function()
+				ReplicatedStorage:WaitForChild("Shared"):WaitForChild("RemotePromise"):WaitForChild("Remotes"):WaitForChild("C_BuyClass"):FireServer(unpack(args))
+			end)
+			task.wait(1)
+			pcall(function()
+				ReplicatedStorage:WaitForChild("Shared"):WaitForChild("RemotePromise"):WaitForChild("Remotes"):WaitForChild("C_EquipClass"):FireServer(unpack(args))
+			end)
+			N("KHUB", "Horse class bought & equipped")
+		end,
+	})
+
+	local Aim = Tabs.Main:AddRightGroupbox("Aimbot")
+	Aim:AddButton({
+		Text = "Aimbot V1 (Mobile)",
+		Func = function()
+			local Cam = workspace.CurrentCamera
+			local Player = LocalPlayer
+			local validNPCs = {}
+			local raycastParams = RaycastParams.new()
+			raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+			local aimbotEnabled = false
+
+			local function isNPC(obj)
+				return obj:IsA("Model")
+					and obj:FindFirstChild("Humanoid")
+					and obj.Humanoid.Health > 0
+					and obj:FindFirstChild("Head")
+					and obj:FindFirstChild("HumanoidRootPart")
+					and not Players:GetPlayerFromCharacter(obj)
+			end
+
+			local function updateNPCs()
+				local tempTable = {}
+				for _, obj in ipairs(workspace:GetDescendants()) do
+					if isNPC(obj) then tempTable[obj] = true end
+				end
+				for i = #validNPCs, 1, -1 do
+					if not tempTable[validNPCs[i]] then table.remove(validNPCs, i) end
+				end
+				for obj in pairs(tempTable) do
+					if not table.find(validNPCs, obj) then table.insert(validNPCs, obj) end
+				end
+			end
+
+			workspace.DescendantAdded:Connect(function(descendant)
+				if isNPC(descendant) then
+					table.insert(validNPCs, descendant)
+					local humanoid = descendant:FindFirstChild("Humanoid")
+					if humanoid then
+						humanoid.Destroying:Connect(function()
+							for i = #validNPCs, 1, -1 do
+								if validNPCs[i] == descendant then table.remove(validNPCs, i) break end
+							end
+						end)
+					end
+				end
+			end)
+
+			local function predictPos(target)
+				local rootPart = target:FindFirstChild("HumanoidRootPart")
+				local head = target:FindFirstChild("Head")
+				if not rootPart or not head then
+					return head and head.Position or rootPart and rootPart.Position
+				end
+				return rootPart.Position + rootPart.Velocity * 0.02 + (head.Position - rootPart.Position)
+			end
+
+			local function getTarget()
+				local nearest, minDistance = nil, math.huge
+				local viewportCenter = Cam.ViewportSize / 2
+				raycastParams.FilterDescendantsInstances = { Player.Character }
+				for _, npc in ipairs(validNPCs) do
+					local predictedPos = predictPos(npc)
+					local screenPos, visible = Cam:WorldToViewportPoint(predictedPos)
+					if visible and screenPos.Z > 0 then
+						local ray = workspace:Raycast(Cam.CFrame.Position, (predictedPos - Cam.CFrame.Position).Unit * 1000, raycastParams)
+						if ray and ray.Instance:IsDescendantOf(npc) then
+							local distance = (Vector2.new(screenPos.X, screenPos.Y) - viewportCenter).Magnitude
+							if distance < minDistance then
+								minDistance = distance
+								nearest = npc
+							end
+						end
+					end
+				end
+				return nearest
+			end
+
+			local function aim(targetPosition)
+				local currentCF = Cam.CFrame
+				local targetDirection = (targetPosition - currentCF.Position).Unit
+				local newLookVector = currentCF.LookVector:Lerp(targetDirection, 0.581)
+				Cam.CFrame = CFrame.new(currentCF.Position, currentCF.Position + newLookVector)
+			end
+
+			local lastUpdate = 0
+			RunService.Heartbeat:Connect(function(dt)
+				lastUpdate = lastUpdate + dt
+				if lastUpdate >= 0.4 then updateNPCs(); lastUpdate = 0 end
+				if aimbotEnabled then
+					local target = getTarget()
+					if target then aim(predictPos(target)) end
+				end
+			end)
+
+			workspace.DescendantRemoving:Connect(function(descendant)
+				if isNPC(descendant) then
+					for i = #validNPCs, 1, -1 do
+						if validNPCs[i] == descendant then table.remove(validNPCs, i) break end
+					end
+				end
+			end)
+
+			-- Floating toggle UI (original)
+			pcall(function()
+				if CoreGui:FindFirstChild("CustomToggleUI") then CoreGui.CustomToggleUI:Destroy() end
+			end)
+			local ScreenGui = Instance.new("ScreenGui")
+			ScreenGui.Name = "CustomToggleUI"
+			ScreenGui.ResetOnSpawn = false
+			pcall(function() ScreenGui.Parent = CoreGui end)
+			if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer.PlayerGui end
+
+			local MainFrame = Instance.new("Frame")
+			MainFrame.Name = "MainFrame"
+			MainFrame.Parent = ScreenGui
+			MainFrame.Size = UDim2.new(0, 250, 0, 130)
+			MainFrame.Position = UDim2.new(0.02, 0, 0.1, 0)
+			MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+			MainFrame.BackgroundTransparency = 0.2
+			MainFrame.BorderSizePixel = 0
+			MainFrame.Active = true
+			MainFrame.Draggable = true
+			Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
+
+			local Title = Instance.new("TextLabel", MainFrame)
+			Title.Size = UDim2.new(1, 0, 0, 30)
+			Title.BackgroundTransparency = 1
+			Title.Text = "Aimbot V1"
+			Title.TextSize = 18
+			Title.Font = Enum.Font.GothamBold
+			Title.TextColor3 = Color3.fromRGB(220, 220, 220)
+
+			local ToggleButton = Instance.new("TextButton", MainFrame)
+			ToggleButton.Size = UDim2.new(0, 90, 0, 40)
+			ToggleButton.Position = UDim2.new(0.5, -45, 0.5, -20)
+			ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+			ToggleButton.Text = "Off"
+			ToggleButton.Font = Enum.Font.GothamBold
+			ToggleButton.TextSize = 16
+			ToggleButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+			Instance.new("UICorner", ToggleButton).CornerRadius = UDim.new(0, 20)
+
+			local Indicator = Instance.new("Frame", ToggleButton)
+			Indicator.Size = UDim2.new(0, 34, 0, 34)
+			Indicator.Position = UDim2.new(0, 4, 0.5, -17)
+			Indicator.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+			Indicator.BorderSizePixel = 0
+			Instance.new("UICorner", Indicator).CornerRadius = UDim.new(1, 0)
+
+			local DestroyButton = Instance.new("TextButton", MainFrame)
+			DestroyButton.Size = UDim2.new(0, 90, 0, 30)
+			DestroyButton.Position = UDim2.new(0.5, -45, 1, -35)
+			DestroyButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+			DestroyButton.Text = "Destroy UI"
+			DestroyButton.Font = Enum.Font.GothamBold
+			DestroyButton.TextSize = 14
+			DestroyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+			Instance.new("UICorner", DestroyButton).CornerRadius = UDim.new(0, 10)
+
+			local toggleState = false
+			ToggleButton.MouseButton1Click:Connect(function()
+				toggleState = not toggleState
+				aimbotEnabled = toggleState
+				ToggleButton.Text = toggleState and "On" or "Off"
+				Indicator.BackgroundColor3 = toggleState and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 50, 50)
+				Indicator.Position = toggleState and UDim2.new(1, -38, 0.5, -17) or UDim2.new(0, 4, 0.5, -17)
+				ToggleButton.BackgroundColor3 = toggleState and Color3.fromRGB(80, 200, 80) or Color3.fromRGB(50, 50, 50)
+			end)
+			DestroyButton.MouseButton1Click:Connect(function()
+				aimbotEnabled = false
+				ScreenGui:Destroy()
+			end)
+			N("Aimbot", "V1 loaded — use floating toggle")
+		end,
+	})
+
+	-- Aimbot V2 always available (not only mobile)
+	Aim:AddButton({
+		Text = "Aimbot V2",
+		Func = function()
+			local fov = 100
+			local Cam = workspace.CurrentCamera
+			local Player = LocalPlayer
+			local FOVring = Drawing.new("Circle")
+			FOVring.Visible = true
+			FOVring.Thickness = 2
+			FOVring.Color = Color3.fromRGB(255, 160, 40)
+			FOVring.Filled = false
+			FOVring.Radius = fov
+			FOVring.Position = Vector2.new(Cam.ViewportSize.X / 2, Cam.ViewportSize.Y / 2)
+
+			local isAiming = false
+			local validNPCs = {}
+			local raycastParams = RaycastParams.new()
+			raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+			local function isNPC1(obj)
+				return obj:IsA("Model")
+					and obj:FindFirstChild("Humanoid")
+					and obj.Humanoid.Health > 0
+					and obj:FindFirstChild("Head")
+					and obj:FindFirstChild("HumanoidRootPart")
+					and not Players:GetPlayerFromCharacter(obj)
+			end
+
+			local function updateNPCs()
+				local tempTable = {}
+				for _, obj in ipairs(workspace:GetDescendants()) do
+					if isNPC1(obj) then tempTable[obj] = true end
+				end
+				for i = #validNPCs, 1, -1 do
+					if not tempTable[validNPCs[i]] then table.remove(validNPCs, i) end
+				end
+				for obj in pairs(tempTable) do
+					if not table.find(validNPCs, obj) then table.insert(validNPCs, obj) end
+				end
+			end
+
+			workspace.DescendantAdded:Connect(function(descendant)
+				if isNPC1(descendant) then table.insert(validNPCs, descendant) end
+			end)
+
+			local function predictPos(target)
+				local rootPart = target:FindFirstChild("HumanoidRootPart")
+				local head = target:FindFirstChild("Head")
+				if not rootPart or not head then
+					return head and head.Position or rootPart and rootPart.Position
+				end
+				return rootPart.Position + rootPart.Velocity * 0.02 + (head.Position - rootPart.Position)
+			end
+
+			local function getTarget()
+				local nearest, minDistance = nil, math.huge
+				local viewportCenter = Cam.ViewportSize / 2
+				raycastParams.FilterDescendantsInstances = { Player.Character }
+				for _, npc in ipairs(validNPCs) do
+					local predictedPos = predictPos(npc)
+					local screenPos, visible = Cam:WorldToViewportPoint(predictedPos)
+					if visible and screenPos.Z > 0 then
+						local ray = workspace:Raycast(Cam.CFrame.Position, (predictedPos - Cam.CFrame.Position).Unit * 1000, raycastParams)
+						if ray and ray.Instance:IsDescendantOf(npc) then
+							local distance = (Vector2.new(screenPos.X, screenPos.Y) - viewportCenter).Magnitude
+							if distance < minDistance and distance < fov then
+								minDistance = distance
+								nearest = npc
+							end
+						end
+					end
+				end
+				return nearest
+			end
+
+			RunService.RenderStepped:Connect(function()
+				FOVring.Position = Vector2.new(Cam.ViewportSize.X / 2, Cam.ViewportSize.Y / 2)
+				FOVring.Radius = fov
+			end)
+
+			local lastUpdate = 0
+			RunService.Heartbeat:Connect(function(dt)
+				lastUpdate = lastUpdate + dt
+				if lastUpdate >= 0.4 then updateNPCs(); lastUpdate = 0 end
+				if isAiming then
+					local target = getTarget()
+					if target then
+						local pred = predictPos(target)
+						local cf = Cam.CFrame
+						local dir = (pred - cf.Position).Unit
+						Cam.CFrame = CFrame.new(cf.Position, cf.Position + cf.LookVector:Lerp(dir, 0.581))
+					end
+				end
+			end)
+
+			-- hold right click / touch to aim - also toggle via notify
+			isAiming = true
+			N("Aimbot V2", "Active (FOV ring on)")
+		end,
+	})
+end
+
+------------------------------------------------------------
+-- ITEMS / TELEPORT / PLAYER — keep useful helpers from original structure
+------------------------------------------------------------
+do
+	local I = Tabs.Items:AddLeftGroupbox("Items")
+	I:AddLabel("Use with farm modules")
+	I:AddButton({
+		Text = "Refresh Character",
+		Func = function()
+			local char = LocalPlayer.Character
+			if char and char:FindFirstChild("Humanoid") then
+				char.Humanoid.Health = 0
+			end
+		end,
+	})
+end
+
+do
+	local T = Tabs.TP:AddLeftGroupbox("Teleport")
+	T:AddButton({
+		Text = "TP Train",
+		Func = function()
+			pcall(function()
+				local train = workspace:FindFirstChild("Train") or workspace:FindFirstChild("train")
+				if not train then N("TP", "Train not found") return end
+				local part = train:FindFirstChildWhichIsA("BasePart", true)
+				local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				if part and hrp then
+					hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
+				end
+			end)
+		end,
+	})
+end
+
+do
+	local M = Tabs.Player:AddLeftGroupbox("Movement")
+	M:AddToggle("SpeedBoost", {
+		Text = "Speed Boost",
+		Default = false,
+		Callback = function(v)
+			getgenv().KHUB_Speed = v
+			local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+			if hum then hum.WalkSpeed = v and 28 or 16 end
+		end,
+	})
+	M:AddToggle("JumpBoost", {
+		Text = "Jump Boost",
+		Default = false,
+		Callback = function(v)
+			getgenv().KHUB_Jump = v
+			local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+			if hum then
+				hum.UseJumpPower = true
+				hum.JumpPower = v and 80 or 50
+			end
+		end,
+	})
+	LocalPlayer.CharacterAdded:Connect(function(char)
+		task.wait(0.5)
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if not hum then return end
+		if getgenv().KHUB_Speed then hum.WalkSpeed = 28 end
+		if getgenv().KHUB_Jump then hum.UseJumpPower = true; hum.JumpPower = 80 end
+	end)
+end
+
+------------------------------------------------------------
+-- MISC (full original logic)
+------------------------------------------------------------
+do
+	local Visual = Tabs.Misc:AddLeftGroupbox("Visual")
+
+	Visual:AddButton({
+		Text = "Camera Unlocker",
+		Func = function()
+			local player = LocalPlayer
+			local camera = workspace.CurrentCamera
+			if player.CameraMode == Enum.CameraMode.Classic and player.CameraMaxZoomDistance >= 20 then
+				N("Camera", "Already unlocked")
+				return
+			end
+			player.CameraMode = Enum.CameraMode.Classic
+			player.CameraMinZoomDistance = 0.5
+			player.CameraMaxZoomDistance = 50
+			camera.CameraSubject = player.Character and player.Character:FindFirstChild("Humanoid") or camera.CameraSubject
+			camera.CameraType = Enum.CameraType.Custom
+			N("Camera", "Third-person unlocked — zoom out")
+		end,
+	})
+
+	local fullBrightEnabled1 = false
+	local autoNightLoop
+	local function applyFullBright1()
+		if not fullBrightEnabled1 then return end
+		local hour = Lighting:GetMinutesAfterMidnight() / 60
+		if hour >= 18 or hour < 6 then
+			Lighting.Ambient = Color3.new(1, 1, 1)
+			Lighting.Brightness = 10
+			Lighting.GlobalShadows = false
+		else
+			Lighting.Ambient = Color3.new(0.5, 0.5, 0.5)
+			Lighting.Brightness = 1
+			Lighting.GlobalShadows = true
+		end
+	end
+	Visual:AddToggle("FbToggle1", {
+		Text = "Auto Full Bright",
+		Default = false,
+		Callback = function(Value)
+			fullBrightEnabled1 = Value
+			if autoNightLoop then autoNightLoop:Disconnect(); autoNightLoop = nil end
+			if Value then
+				applyFullBright1()
+				autoNightLoop = Lighting:GetPropertyChangedSignal("ClockTime"):Connect(applyFullBright1)
+			else
+				Lighting.Ambient = Color3.new(0.5, 0.5, 0.5)
+				Lighting.Brightness = 1
+				Lighting.GlobalShadows = true
+			end
+		end,
+	})
+
+	local noFogEnabled, fogLoop = false, nil
+	local function removeFog()
+		Lighting.FogEnd = 1000000
+		Lighting.FogStart = 0
+		local atmosphere = Lighting:FindFirstChild("Atmosphere")
+		if atmosphere then
+			atmosphere.Density = 0
+			atmosphere.Offset = 0
+			atmosphere.Haze = 0
+			atmosphere.Color = Color3.new(1, 1, 1)
+		end
+	end
+	local function restoreFog()
+		Lighting.FogEnd = 1000
+		Lighting.FogStart = 200
+		local atmosphere = Lighting:FindFirstChild("Atmosphere")
+		if atmosphere then
+			atmosphere.Density = 0.3
+			atmosphere.Haze = 0.5
+			atmosphere.Color = Color3.fromRGB(200, 200, 200)
+		end
+	end
+	Visual:AddToggle("NoFogToggle", {
+		Text = "Remove Fog",
+		Default = false,
+		Callback = function(Value)
+			noFogEnabled = Value
+			if fogLoop then fogLoop:Disconnect(); fogLoop = nil end
+			if Value then
+				removeFog()
+				fogLoop = RunService.Heartbeat:Connect(removeFog)
+			else
+				restoreFog()
+			end
+		end,
+	})
+
+	local Bypass = Tabs.Misc:AddRightGroupbox("Bypass")
+
+	getgenv().bandageBypassEnabled = false
+	Bypass:AddToggle("BypassBandageT", {
+		Text = "Bypass Bandage Delay (R)",
+		Default = false,
+		Callback = function(Value)
+			getgenv().bandageBypassEnabled = Value
+		end,
+	})
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+		if getgenv().bandageBypassEnabled and input.KeyCode == Enum.KeyCode.R then
+			local character = LocalPlayer.Character
+			if character then
+				local bandage = character:FindFirstChild("Bandage")
+				if bandage and bandage:IsA("Tool") then
+					pcall(function() bandage.Use:FireServer() end)
+				end
+			end
+		end
+	end)
+
+	local ReloadStatus = false
+	local originalReloadTimes = {}
+	Bypass:AddToggle("ReloadToggle", {
+		Text = "Bypass Reload Delay",
+		Default = false,
+		Callback = function(Value)
+			ReloadStatus = Value
+			if Value then
+				task.spawn(function()
+					while ReloadStatus do
+						local character = LocalPlayer.Character
+						if character then
+							for _, tool in pairs(character:GetChildren()) do
+								if tool:IsA("Tool") and tool:FindFirstChild("WeaponConfiguration") then
+									local reloadDuration = tool.WeaponConfiguration:FindFirstChild("ReloadDuration")
+									if reloadDuration then
+										if not originalReloadTimes[tool] then
+											originalReloadTimes[tool] = reloadDuration.Value
+										end
+										reloadDuration.Value = 0
+									end
+								end
+							end
+						end
+						task.wait(0.1)
+					end
+				end)
+			else
+				local character = LocalPlayer.Character
+				if character then
+					for _, tool in pairs(character:GetChildren()) do
+						if tool:IsA("Tool") and tool:FindFirstChild("WeaponConfiguration") then
+							local reloadDuration = tool.WeaponConfiguration:FindFirstChild("ReloadDuration")
+							if reloadDuration and originalReloadTimes[tool] then
+								reloadDuration.Value = originalReloadTimes[tool]
+							end
+						end
+					end
+				end
+				table.clear(originalReloadTimes)
+			end
+		end,
+	})
+
+	local FireStatus = false
+	local originalFireTimes = {}
+	Bypass:AddToggle("FireDeToggle", {
+		Text = "Bypass Fire Delay",
+		Default = false,
+		Callback = function(Value)
+			FireStatus = Value
+			if Value then
+				task.spawn(function()
+					while FireStatus do
+						local character = LocalPlayer.Character
+						if character then
+							for _, tool in pairs(character:GetChildren()) do
+								if tool:IsA("Tool") and tool:FindFirstChild("WeaponConfiguration") then
+									local fireDuration = tool.WeaponConfiguration:FindFirstChild("FireDelay")
+									if fireDuration then
+										if not originalFireTimes[tool] then
+											originalFireTimes[tool] = fireDuration.Value
+										end
+										fireDuration.Value = 0.15
+									end
+								end
+							end
+						end
+						task.wait(0.1)
+					end
+				end)
+			else
+				local character = LocalPlayer.Character
+				if character then
+					for _, tool in pairs(character:GetChildren()) do
+						if tool:IsA("Tool") and tool:FindFirstChild("WeaponConfiguration") then
+							local fireDuration = tool.WeaponConfiguration:FindFirstChild("FireDelay")
+							if fireDuration and originalFireTimes[tool] then
+								fireDuration.Value = originalFireTimes[tool]
+							end
+						end
+					end
+				end
+				table.clear(originalFireTimes)
+			end
+		end,
+	})
+
+	local function skipHoldPrompt(prompt)
+		if prompt and prompt:IsA("ProximityPrompt") and prompt.HoldDuration > 0 then
+			if prompt:GetAttribute("OriginalHold") == nil then
+				prompt:SetAttribute("OriginalHold", prompt.HoldDuration)
+			end
+			prompt.HoldDuration = 0
+		end
+	end
+	Bypass:AddToggle("SkipHoldToggle", {
+		Text = "Bypass Hold Prompt",
+		Default = false,
+		Callback = function(Value)
+			getgenv().SkipHold = Value
+			if Value then
+				for _, obj in ipairs(workspace:GetDescendants()) do
+					if obj:IsA("ProximityPrompt") then skipHoldPrompt(obj) end
+				end
+			else
+				for _, obj in ipairs(workspace:GetDescendants()) do
+					if obj:IsA("ProximityPrompt") then
+						local originalHold = obj:GetAttribute("OriginalHold")
+						if originalHold then
+							obj.HoldDuration = originalHold
+							obj:SetAttribute("OriginalHold", nil)
+						end
+					end
+				end
+			end
+		end,
+	})
+	workspace.DescendantAdded:Connect(function(obj)
+		if getgenv().SkipHold then
+			task.wait(0.1)
+			skipHoldPrompt(obj)
+		end
+	end)
+
+	local Extra = Tabs.Misc:AddLeftGroupbox("Extra")
+	Extra:AddToggle("FpsbfToggle1", {
+		Text = "FPS Boost",
+		Default = false,
+		Callback = function(Value)
+			if Value then
+				for _, v in pairs(workspace:GetDescendants()) do
+					if v:IsA("BasePart") then
+						v.Material = Enum.Material.SmoothPlastic
+						v.Reflectance = 0
+					end
+				end
+			end
+		end,
+	})
+
+	getgenv().antiAfkEnabled = true
+	local afkConnection
+	local function startAntiAfk()
+		if afkConnection then afkConnection:Disconnect() end
+		afkConnection = LocalPlayer.Idled:Connect(function()
+			if getgenv().antiAfkEnabled then
+				VirtualUser:CaptureController()
+				VirtualUser:ClickButton2(Vector2.new())
+			end
+		end)
+	end
+	Extra:AddToggle("AntiAfkToggle", {
+		Text = "Anti Idle",
+		Default = true,
+		Callback = function(Value)
+			getgenv().antiAfkEnabled = Value
+			if Value then
+				startAntiAfk()
+				N("KHUB", "Anti idle enabled")
+			else
+				if afkConnection then afkConnection:Disconnect(); afkConnection = nil end
+				N("KHUB", "Anti idle disabled")
+			end
+		end,
+	})
+	startAntiAfk()
+end
+
+------------------------------------------------------------
+-- SETTINGS
+------------------------------------------------------------
+do
+	local Interface = Tabs.Settings:AddLeftGroupbox("Interface")
+	Interface:AddToggle("AexecToggle", {
+		Text = "Auto Execute",
+		Default = false,
+		Callback = function(Value)
+			if Value then
+				pcall(function()
+					if queue_on_teleport then
+						queue_on_teleport([[
+task.wait(3)
+-- put your Dead Rails · KHUB loader URL here if hosted
+]])
+					end
+				end)
+				N("KHUB", "Auto execute enabled")
+			else
+				N("KHUB", "Auto execute disabled")
+			end
+		end,
+	})
+	Interface:AddButton({
+		Text = "Unload",
+		Func = function()
+			Library:Unload()
+		end,
+	})
+end
+
+pcall(function()
+	ThemeManager:SetLibrary(Library)
+	SaveManager:SetLibrary(Library)
+	SaveManager:IgnoreThemeSettings()
+	ThemeManager:SetFolder("KHUB")
+	SaveManager:SetFolder("KHUB/DeadRails")
+	ThemeManager:ApplyToTab(Tabs.Settings)
+	SaveManager:BuildConfigSection(Tabs.Settings)
+end)
+
+Library:Notify({ Title = "Dead Rails · KHUB", Description = "Loaded successfully!", Time = 5 })
+print("[KHUB] Dead Rails · KHUB | Obsidian | all features")
