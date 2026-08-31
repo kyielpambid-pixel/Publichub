@@ -1,0 +1,605 @@
+local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Angelo-Gitland/Lua-Land-Ui-Library/refs/heads/main/Lua%20Land%20Ui"))()
+
+local players = game:GetService("Players")
+local workspace = game:GetService("Workspace")
+local runService = game:GetService("RunService")
+local userInputService = game:GetService("UserInputService")
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local camera = workspace.CurrentCamera
+
+local localPlayer = players.LocalPlayer
+
+local autoFarmEnabled = false
+local orbitAutoFarmEnabled = false
+local priorityBossesEnabled = false
+
+local normalFarmClickerEnabled = true
+local orbitFarmClickerEnabled = true
+
+local normalFarmDistance = 4
+local normalFarmHeight = 5
+
+local orbitSpeed = 1
+local orbitRadius = 10
+
+local selectedWeapon = "none"
+local weaponDropdown = nil
+
+local triggerBotEnabled = false
+local espEnabled = false
+local chamsEnabled = false
+local autoRebirthEnabled = false
+local autoApplyModsEnabled = false
+
+local triggerBotRadius = 75
+
+local hitboxExpanderEnabled = false
+local hitboxSize = 5
+local hitboxTransparency = 0.5
+
+local bossNames = {
+    ["VerityMonster"] = true,
+    ["LovityMonster"] = true,
+    ["CrueltyMonster"] = true,
+    ["FalsityMonster"] = true
+}
+
+local function isVerityDead(verity)
+    if not verity or not verity.Parent then return true end
+    local humanoid = verity:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.Health <= 0 then return true end
+    local health = verity:GetAttribute("Health") or verity:GetAttribute("HP")
+    if health and health <= 0 then return true end
+    return false
+end
+
+local function getVerityTorso(verity)
+    if not verity then return nil end
+    if verity:IsA("Model") then
+        return verity:FindFirstChild("HumanoidRootPart")
+            or verity:FindFirstChild("Torso")
+            or verity:FindFirstChild("UpperTorso")
+            or verity:FindFirstChild("Hitbox")
+            or verity.PrimaryPart
+            or verity:FindFirstChildWhichIsA("BasePart")
+    elseif verity:IsA("BasePart") then
+        return verity
+    end
+    return nil
+end
+
+local function getAvailableWeapons()
+    local weapons = {"none"}
+    local backpack = localPlayer and localPlayer:FindFirstChild("Backpack")
+    if backpack then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") and not table.find(weapons, tool.Name) then
+                table.insert(weapons, tool.Name)
+            end
+        end
+    end
+    
+    local char = localPlayer and localPlayer.Character
+    if char then
+        for _, tool in ipairs(char:GetChildren()) do
+            if tool:IsA("Tool") and not table.find(weapons, tool.Name) then
+                table.insert(weapons, tool.Name)
+            end
+        end
+    end
+    return weapons
+end
+
+local function equipSelectedWeapon(character)
+    if selectedWeapon == "none" or not selectedWeapon then return end
+    local char = character or (localPlayer and localPlayer.Character)
+    local backpack = localPlayer and localPlayer:FindFirstChild("Backpack")
+    if char and backpack then
+        local tool = backpack:FindFirstChild(selectedWeapon)
+        if tool and tool:IsA("Tool") then
+            tool.Parent = char
+        end
+    end
+end
+
+local function applyModsToTool(tool)
+    if not tool:IsA("Tool") then return end
+    
+    tool:SetAttribute("recoilMin", Vector2.zero)
+    tool:SetAttribute("recoilMax", Vector2.zero)
+    tool:SetAttribute("rateOfFire", 5000)
+    tool:SetAttribute("RateOfFire", 5000)
+    tool:SetAttribute("burstCooldown", 0)
+    tool:SetAttribute("reloadTime", 0.01)
+    tool:SetAttribute("_reloading", false)
+    tool:SetAttribute("spread", 0)
+
+    for _, child in ipairs(tool:GetDescendants()) do
+        if child:IsA("Value") or child:IsA("Configuration") then
+            local nameLower = child.Name:lower()
+            if nameLower:find("recoil") then
+                child.Value = 0
+            elseif nameLower:find("rate") or nameLower:find("firerate") then
+                child.Value = 5000
+            end
+        end
+    end
+end
+
+local function applyAllGunMods()
+    if not localPlayer then return end
+    if localPlayer.Backpack then
+        for _, tool in ipairs(localPlayer.Backpack:GetChildren()) do 
+            pcall(applyModsToTool, tool) 
+        end
+    end
+    if localPlayer.Character then
+        for _, tool in ipairs(localPlayer.Character:GetChildren()) do 
+            pcall(applyModsToTool, tool) 
+        end
+    end
+end
+
+local function setupToolListener(container)
+    if not container then return end
+    container.ChildAdded:Connect(function(child)
+        if autoApplyModsEnabled and child:IsA("Tool") then
+            task.wait(0.1)
+            pcall(applyModsToTool, child)
+        end
+    end)
+end
+
+if localPlayer then
+    if localPlayer.Backpack then setupToolListener(localPlayer.Backpack) end
+    if localPlayer.Character then setupToolListener(localPlayer.Character) end
+    localPlayer.CharacterAdded:Connect(function(newCharacter)
+        newCharacter:WaitForChild("Humanoid", 5)
+        task.wait(1)
+        equipSelectedWeapon(newCharacter)
+        setupToolListener(newCharacter)
+        if localPlayer.Backpack then setupToolListener(localPlayer.Backpack) end
+    end)
+end
+
+local function triggerInteractions(target)
+    if not target then return end
+    for _, descendant in ipairs(target:GetDescendants()) do
+        if descendant:IsA("ClickDetector") and fireclickdetector then
+            fireclickdetector(descendant)
+        end
+    end
+end
+
+local function spoofClickAndFire(target)
+    local char = localPlayer and localPlayer.Character
+    if char then
+        local tool = char:FindFirstChildOfClass("Tool")
+        if tool then
+            if autoApplyModsEnabled then
+                pcall(applyModsToTool, tool)
+            end
+            tool:Activate()
+        end
+    end
+
+    if mouse1click then
+        mouse1click()
+    elseif mouse1press and mouse1release then
+        mouse1press()
+        task.wait(0.01)
+        mouse1release()
+    end
+
+    if target then
+        triggerInteractions(target)
+    end
+end
+
+task.spawn(function()
+    while true do
+        if autoRebirthEnabled then
+            local remotes = replicatedStorage:FindFirstChild("Remotes")
+            local rebirthRemote = remotes and remotes:FindFirstChild("RebirthRequest")
+            if rebirthRemote then
+                pcall(function() rebirthRemote:InvokeServer() end)
+            end
+        end
+        task.wait(1)
+    end
+end)
+
+runService.RenderStepped:Connect(function()
+    if camera then
+        camera.CameraType = Enum.CameraType.Custom
+    end
+end)
+
+local function getBestTarget(roamingFolder)
+    local bestBoss = nil
+    local bestRegular = nil
+
+    for _, verity in ipairs(roamingFolder:GetChildren()) do
+        if not isVerityDead(verity) then
+            local part = getVerityTorso(verity)
+            if part then
+                if priorityBossesEnabled and bossNames[verity.Name] then
+                    bestBoss = verity
+                    break
+                elseif not bestRegular then
+                    bestRegular = verity
+                end
+            end
+        end
+    end
+
+    if priorityBossesEnabled and bestBoss then
+        return bestBoss
+    end
+    return bestBoss or bestRegular
+end
+
+task.spawn(function()
+    local currentTarget = nil
+    local farmStartTime = 0
+
+    while true do
+        task.wait()
+        local char = localPlayer and localPlayer.Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+        
+        if not char or not humanoid or humanoid.Health <= 0 then
+            currentTarget = nil
+            farmStartTime = 0
+        else
+            local rootPart = char:FindFirstChild("HumanoidRootPart")
+            local roamingFolder = workspace:FindFirstChild("RoamingVerities")
+
+            if rootPart and roamingFolder then
+                if autoApplyModsEnabled then
+                    applyAllGunMods()
+                end
+
+                if autoFarmEnabled and not orbitAutoFarmEnabled then
+                    if farmStartTime == 0 then
+                        farmStartTime = tick()
+                    end
+
+                    local targetValid = false
+                    if currentTarget and currentTarget.Parent == roamingFolder and not isVerityDead(currentTarget) then
+                        if not priorityBossesEnabled or bossNames[currentTarget.Name] then
+                            targetValid = true
+                        else
+                            local betterChoice = getBestTarget(roamingFolder)
+                            if betterChoice == currentTarget then
+                                targetValid = true
+                            end
+                        end
+                    end
+
+                    if not targetValid then
+                        currentTarget = getBestTarget(roamingFolder)
+                        farmStartTime = tick()
+                    end
+
+                    if currentTarget then
+                        local torso = getVerityTorso(currentTarget)
+                        if torso then
+                            local targetPos = torso.Position + Vector3.new(0, normalFarmHeight, normalFarmDistance)
+                            rootPart.CFrame = CFrame.new(targetPos, torso.Position)
+
+                            if camera then
+                                camera.CFrame = CFrame.new(camera.CFrame.Position, torso.Position)
+                            end
+
+                            if normalFarmClickerEnabled and (tick() - farmStartTime >= 1.5) then
+                                spoofClickAndFire(currentTarget)
+                            end
+                        end
+                    end
+                else
+                    currentTarget = nil
+                    farmStartTime = 0
+                end
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    local currentTarget = nil
+    local angle = 0
+    local orbitStartTime = 0
+
+    while true do
+        task.wait()
+        local char = localPlayer and localPlayer.Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+        if not char or not humanoid or humanoid.Health <= 0 then
+            currentTarget = nil
+            orbitStartTime = 0
+        else
+            local rootPart = char:FindFirstChild("HumanoidRootPart")
+            local roamingFolder = workspace:FindFirstChild("RoamingVerities")
+
+            if rootPart and roamingFolder then
+                if orbitAutoFarmEnabled and not autoFarmEnabled then
+                    if orbitStartTime == 0 then
+                        orbitStartTime = tick()
+                    end
+
+                    local targetValid = false
+                    if currentTarget and currentTarget.Parent == roamingFolder and not isVerityDead(currentTarget) then
+                        if not priorityBossesEnabled or bossNames[currentTarget.Name] then
+                            targetValid = true
+                        else
+                            local betterChoice = getBestTarget(roamingFolder)
+                            if betterChoice == currentTarget then
+                                targetValid = true
+                            end
+                        end
+                    end
+
+                    if not targetValid then
+                        currentTarget = getBestTarget(roamingFolder)
+                        orbitStartTime = tick()
+                    end
+
+                    if currentTarget then
+                        local torso = getVerityTorso(currentTarget)
+                        if torso then
+                            angle = angle + (orbitSpeed * 0.05)
+                            local orbitPos = torso.Position + Vector3.new(math.cos(angle) * orbitRadius, 0, math.sin(angle) * orbitRadius)
+
+                            rootPart.CFrame = CFrame.new(orbitPos, torso.Position)
+                            if camera then
+                                camera.CFrame = CFrame.new(camera.CFrame.Position, torso.Position)
+                            end
+
+                            if orbitFarmClickerEnabled and (tick() - orbitStartTime >= 1.5) then
+                                spoofClickAndFire(currentTarget)
+                            end
+                        end
+                    end
+                else
+                    currentTarget = nil
+                    orbitStartTime = 0
+                end
+            end
+        end
+    end
+end)
+
+runService.RenderStepped:Connect(function()
+    local roamingFolder = workspace:FindFirstChild("RoamingVerities")
+    if not roamingFolder or not camera then return end
+
+    local mouseLoc = userInputService:GetMouseLocation()
+    local bestTriggerTarget = nil
+    local shortestDist = triggerBotRadius
+
+    for _, verity in ipairs(roamingFolder:GetChildren()) do
+        local isDead = isVerityDead(verity)
+        local torso = getVerityTorso(verity)
+        local isBoss = bossNames[verity.Name] == true
+
+        local highlight = verity:FindFirstChild("VerityHighlight")
+        if chamsEnabled and not isDead then
+            if not highlight then
+                highlight = Instance.new("Highlight")
+                highlight.Name = "VerityHighlight"
+                highlight.Adornee = verity
+                highlight.FillColor = isBoss and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 255)
+                highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                highlight.Parent = verity
+            end
+        elseif highlight then
+            highlight:Destroy()
+        end
+
+        local billboard = verity:FindFirstChild("VerityESP")
+        if espEnabled and torso and not isDead then
+            if not billboard then
+                billboard = Instance.new("BillboardGui")
+                billboard.Name = "VerityESP"
+                billboard.Size = UDim2.new(0, 100, 0, 40)
+                billboard.AlwaysOnTop = true
+                billboard.Adornee = torso
+
+                local textLabel = Instance.new("TextLabel")
+                textLabel.Size = UDim2.new(1, 0, 1, 0)
+                textLabel.BackgroundTransparency = 1
+                textLabel.TextColor3 = isBoss and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(255, 255, 255)
+                textLabel.TextStrokeTransparency = 0
+                textLabel.TextSize = 14
+                textLabel.Font = Enum.Font.SourceSansBold
+                textLabel.Text = verity.Name
+                textLabel.TextScaled = true
+                textLabel.Parent = billboard
+
+                billboard.Parent = verity
+            end
+        elseif billboard then
+            billboard:Destroy()
+        end
+
+        if hitboxExpanderEnabled and torso and not isDead then
+            torso.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+            torso.Transparency = hitboxTransparency
+            torso.CanCollide = false
+        end
+
+        if triggerBotEnabled and not isDead then
+            local checkPart = torso or verity.PrimaryPart
+            if checkPart then
+                local screenPos, onScreen = camera:WorldToScreenPoint(checkPart.Position)
+                if onScreen then
+                    local dx = screenPos.X - mouseLoc.X
+                    local dy = screenPos.Y - mouseLoc.Y
+                    local dist = math.sqrt(dx * dx + dy * dy)
+                    if dist < shortestDist then
+                        shortestDist = dist
+                        bestTriggerTarget = verity
+                    end
+                end
+            end
+        end
+    end
+
+    if triggerBotEnabled and bestTriggerTarget then
+        spoofClickAndFire(bestTriggerTarget)
+    end
+end)
+
+-- ==================== UI CREATION ====================
+local Window = lib:CreateWindow({
+    Title     = "Area 51",
+    Subtitle  = "Survive Verity Script",
+    TitleIcon = "crosshair",
+    Theme     = "Default",
+    Intro = {
+        Title    = "Area 51",
+        Subtitle = "Survive Verity Script",
+        Icon     = "crosshair",
+    },
+})
+
+-- ==================== MAIN TAB ====================
+local MainTab = Window:CreateTab({
+    Name      = "Main",
+    Icon      = "crosshair",
+    SearchBar = false,
+})
+
+MainTab:CreateSection("Weapon Mods")
+
+MainTab:CreateToggle("Auto Apply Mods", function(Value)
+    autoApplyModsEnabled = Value
+    if Value then applyAllGunMods() end
+end)
+
+MainTab:CreateButton("Press for Gun Mods", function()
+    applyAllGunMods()
+end)
+
+MainTab:CreateSection("Weapon Equip")
+
+MainTab:CreateDropdown({
+    Label   = "Auto Equip Gun",
+    Options = getAvailableWeapons(),
+    Default = "none",
+}, function(Value)
+    selectedWeapon = type(Value) == "table" and Value[1] or Value
+    equipSelectedWeapon()
+end)
+
+MainTab:CreateButton("Refresh Inventory", function()
+    print("Inventory refreshed")
+end)
+
+MainTab:CreateSection("Hitbox Expander")
+
+MainTab:CreateToggle("Hitbox Expander", function(Value)
+    hitboxExpanderEnabled = Value
+end)
+
+MainTab:CreateSlider("Hitbox Size", 2, 15, 5, function(Value)
+    hitboxSize = Value
+end)
+
+MainTab:CreateSlider("Hitbox Transparency", 0, 1, 0.5, function(Value)
+    hitboxTransparency = Value
+end)
+
+MainTab:CreateSection("Triggerbot")
+
+MainTab:CreateToggle("Mid Triggerbot", function(Value)
+    triggerBotEnabled = Value
+end)
+
+MainTab:CreateSection("Autofarms")
+
+MainTab:CreateToggle("Priority Boss Monsters", function(Value)
+    priorityBossesEnabled = Value
+end)
+
+MainTab:CreateSection("Normal Autofarm")
+
+MainTab:CreateToggle("Autofarm Verities", function(Value)
+    autoFarmEnabled = Value
+    if Value then orbitAutoFarmEnabled = false end
+end)
+
+MainTab:CreateToggle("Autofarm Autoclicker", function(Value)
+    normalFarmClickerEnabled = Value
+end)
+
+MainTab:CreateSlider("Autofarm Distance", 2, 15, 4, function(Value)
+    normalFarmDistance = Value
+end)
+
+MainTab:CreateSlider("Farm Height", 0, 20, 5, function(Value)
+    normalFarmHeight = Value
+end)
+
+MainTab:CreateSection("Orbit Autofarm")
+
+MainTab:CreateToggle("Orbit Autofarm", function(Value)
+    orbitAutoFarmEnabled = Value
+    if Value then autoFarmEnabled = false end
+end)
+
+MainTab:CreateToggle("Orbit Autoclicker", function(Value)
+    orbitFarmClickerEnabled = Value
+end)
+
+MainTab:CreateSlider("Orbit Speed", 1, 30, 1, function(Value)
+    orbitSpeed = Value
+end)
+
+MainTab:CreateSlider("Orbit Radius", 5, 20, 10, function(Value)
+    orbitRadius = Value
+end)
+
+-- ==================== VISUALS TAB ====================
+local VisualsTab = Window:CreateTab({
+    Name      = "Visuals",
+    Icon      = "eye",
+    SearchBar = false,
+})
+
+VisualsTab:CreateSection("ESP")
+
+VisualsTab:CreateToggle("ESP", function(Value)
+    espEnabled = Value
+end)
+
+VisualsTab:CreateToggle("Chams", function(Value)
+    chamsEnabled = Value
+end)
+
+-- ==================== AUTO TAB ====================
+local AutoTab = Window:CreateTab({
+    Name      = "Auto",
+    Icon      = "refresh",
+    SearchBar = false,
+})
+
+AutoTab:CreateSection("Auto Features")
+
+AutoTab:CreateToggle("Auto Rebirth", function(Value)
+    autoRebirthEnabled = Value
+end)
+
+-- ==================== LOGS TAB ====================
+local LogsTab = Window:CreateTab({
+    Name      = "Logs",
+    Icon      = "file-text",
+    SearchBar = false,
+})
+
+LogsTab:CreateSection("Update Logs")
+
+LogsTab:CreateLabel("Release: Added 1.5s delay before autoclickers fire")
+LogsTab:CreateLabel("Made by YUA")
