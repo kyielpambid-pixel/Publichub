@@ -1,0 +1,652 @@
+local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Angelo-Gitland/Lua-Land-Ui-Library/refs/heads/main/Lua%20Land%20Ui"))()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+
+local Settings = {
+    Enabled = true,
+    TargetMethod = "Closest",
+    FOVCheck = true,
+    VisibilityCheck = true,
+    Wallbang = false,
+    FOV = 150,
+    FOVCircle = true,
+    ESP = true,
+    BoxESP = true,
+    NameESP = true,
+    DistanceESP = true,
+    HealthESP = true,
+    TargetOnly = false,
+    SilentAimLimit = 100,
+    ESPColor = Color3.fromRGB(255, 70, 70),
+    ESPOutlineColor = Color3.fromRGB(255, 255, 255),
+    FOVColor = Color3.fromRGB(255, 70, 70),
+    ESPFillTransparency = 0.75,
+    CFGName = "default",
+}
+
+local target = nil
+local ESPObjects = {}
+
+local CFGFolder = "BloodZone"
+
+local function EnsureCFGFolder()
+    if not makefolder or not isfolder then return end
+    if not isfolder(CFGFolder) then
+        pcall(function()
+            makefolder(CFGFolder)
+        end)
+    end
+end
+
+local function GetCFGPath(name)
+    return CFGFolder .. "/" .. tostring(name) .. ".json"
+end
+
+local function ColorToTable(color)
+    return { R = color.R, G = color.G, B = color.B }
+end
+
+local function TableToColor(value, fallback)
+    if type(value) ~= "table" then return fallback end
+    if type(value.R) ~= "number" or type(value.G) ~= "number" or type(value.B) ~= "number" then return fallback end
+    return Color3.new(value.R, value.G, value.B)
+end
+
+local function SaveCFG(name)
+    if not writefile then return false end
+    EnsureCFGFolder()
+    local data = {
+        Enabled = Settings.Enabled,
+        TargetMethod = Settings.TargetMethod,
+        FOVCheck = Settings.FOVCheck,
+        VisibilityCheck = Settings.VisibilityCheck,
+        Wallbang = Settings.Wallbang,
+        FOV = Settings.FOV,
+        FOVCircle = Settings.FOVCircle,
+        ESP = Settings.ESP,
+        BoxESP = Settings.BoxESP,
+        NameESP = Settings.NameESP,
+        DistanceESP = Settings.DistanceESP,
+        HealthESP = Settings.HealthESP,
+        TargetOnly = Settings.TargetOnly,
+        SilentAimLimit = Settings.SilentAimLimit,
+        ESPFillTransparency = Settings.ESPFillTransparency,
+        ESPColor = ColorToTable(Settings.ESPColor),
+        ESPOutlineColor = ColorToTable(Settings.ESPOutlineColor),
+        FOVColor = ColorToTable(Settings.FOVColor),
+    }
+    local success, encoded = pcall(function()
+        return HttpService:JSONEncode(data)
+    end)
+    if not success then return false end
+    local saved = pcall(function()
+        writefile(GetCFGPath(name), encoded)
+    end)
+    if saved then Settings.CFGName = name end
+    return saved
+end
+
+local function LoadCFG(name)
+    if not readfile or not isfile then return false end
+    local path = GetCFGPath(name)
+    if not isfile(path) then return false end
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(readfile(path))
+    end)
+    if not success or type(data) ~= "table" then return false end
+    if data.Enabled ~= nil then Settings.Enabled = data.Enabled end
+    if data.TargetMethod == "Closest" or data.TargetMethod == "FOV" then Settings.TargetMethod = data.TargetMethod end
+    if data.FOVCheck ~= nil then Settings.FOVCheck = data.FOVCheck end
+    if data.VisibilityCheck ~= nil then Settings.VisibilityCheck = data.VisibilityCheck end
+    if data.Wallbang ~= nil then Settings.Wallbang = data.Wallbang end
+    if type(data.FOV) == "number" then Settings.FOV = math.clamp(data.FOV, 0, 500) end
+    if data.FOVCircle ~= nil then Settings.FOVCircle = data.FOVCircle end
+    if data.ESP ~= nil then Settings.ESP = data.ESP end
+    if data.BoxESP ~= nil then Settings.BoxESP = data.BoxESP end
+    if data.NameESP ~= nil then Settings.NameESP = data.NameESP end
+    if data.DistanceESP ~= nil then Settings.DistanceESP = data.DistanceESP end
+    if data.HealthESP ~= nil then Settings.HealthESP = data.HealthESP end
+    if data.TargetOnly ~= nil then Settings.TargetOnly = data.TargetOnly end
+    if type(data.SilentAimLimit) == "number" then Settings.SilentAimLimit = math.clamp(data.SilentAimLimit, 1, 1000) end
+    if type(data.ESPFillTransparency) == "number" then Settings.ESPFillTransparency = math.clamp(data.ESPFillTransparency, 0, 1) end
+    Settings.ESPColor = TableToColor(data.ESPColor, Settings.ESPColor)
+    Settings.ESPOutlineColor = TableToColor(data.ESPOutlineColor, Settings.ESPOutlineColor)
+    Settings.FOVColor = TableToColor(data.FOVColor, Settings.FOVColor)
+    Settings.CFGName = name
+    return true
+end
+
+local function DestroyESP(player)
+    local objects = ESPObjects[player]
+    if not objects then return end
+    if objects.Highlight then objects.Highlight:Destroy() end
+    if objects.Billboard then objects.Billboard:Destroy() end
+    ESPObjects[player] = nil
+end
+
+local function DestroyAllESP()
+    for player in pairs(ESPObjects) do
+        DestroyESP(player)
+    end
+    table.clear(ESPObjects)
+end
+
+local function HideESP(player)
+    local objects = ESPObjects[player]
+    if not objects then return end
+    if objects.Highlight then objects.Highlight.Enabled = false end
+    if objects.Billboard then objects.Billboard.Enabled = false end
+end
+
+local function HideAllESP()
+    for player in pairs(ESPObjects) do
+        HideESP(player)
+    end
+end
+
+local function GetTargetPart(character)
+    if not character then return nil end
+    local head = character:FindFirstChild("Head")
+    local torso = character:FindFirstChild("Torso")
+    local parts = {}
+    if head and head:IsA("BasePart") then table.insert(parts, head) end
+    if torso and torso:IsA("BasePart") then table.insert(parts, torso) end
+    if #parts == 0 then return nil end
+    return parts[math.random(1, #parts)]
+end
+
+local function IsWithinSilentAimDistance(part)
+    if not part then return false end
+    local camera = Workspace.CurrentCamera
+    if not camera then return false end
+    local distance = (camera.CFrame.Position - part.Position).Magnitude
+    return distance <= Settings.SilentAimLimit
+end
+
+local function IsVisible(part)
+    if not part then return false end
+    local camera = Workspace.CurrentCamera
+    local character = LocalPlayer.Character
+    if not camera or not character then return false end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = { character }
+    params.IgnoreWater = true
+    local origin = camera.CFrame.Position
+    local direction = part.Position - origin
+    local result = Workspace:Raycast(origin, direction, params)
+    if not result then return true end
+    return result.Instance:IsDescendantOf(part.Parent)
+end
+
+local function GetScreenDistance(part)
+    local camera = Workspace.CurrentCamera
+    if not camera or not part then return math.huge, false end
+    local position, onScreen = camera:WorldToViewportPoint(part.Position)
+    if not onScreen then return math.huge, false end
+    local center = camera.ViewportSize / 2
+    local distance = (Vector2.new(position.X, position.Y) - center).Magnitude
+    return distance, true
+end
+
+local function IsInFOV(part)
+    local distance, onScreen = GetScreenDistance(part)
+    return onScreen and distance <= Settings.FOV
+end
+
+local function IsValidTarget(player)
+    if player == LocalPlayer then return false end
+    local character = player.Character
+    if not character then return false end
+    if character:GetAttribute("Immune") == true then return false end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return false end
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+    local part = GetTargetPart(character)
+    if not part then return false end
+    if not IsWithinSilentAimDistance(part) then return false end
+    if Settings.FOVCheck then
+        if not IsInFOV(part) then return false end
+    end
+    if not Settings.Wallbang and Settings.VisibilityCheck then
+        if not IsVisible(part) then return false end
+    end
+    return true
+end
+
+local function GetClosestTarget()
+    local closest = nil
+    local closestDistance = math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if not IsValidTarget(player) then continue end
+        local character = player.Character
+        local part = GetTargetPart(character)
+        if not part then continue end
+        if not IsWithinSilentAimDistance(part) then continue end
+        local distance, onScreen = GetScreenDistance(part)
+        if not onScreen then continue end
+        if distance < closestDistance then
+            closestDistance = distance
+            closest = part
+        end
+    end
+    return closest
+end
+
+local function GetFOVTarget()
+    local closest = nil
+    local closestDistance = math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if not IsValidTarget(player) then continue end
+        local character = player.Character
+        local part = GetTargetPart(character)
+        if not part then continue end
+        if not IsWithinSilentAimDistance(part) then continue end
+        local distance, onScreen = GetScreenDistance(part)
+        if not onScreen then continue end
+        if distance > Settings.FOV then continue end
+        if distance < closestDistance then
+            closestDistance = distance
+            closest = part
+        end
+    end
+    return closest
+end
+
+local function GetTarget()
+    if not Settings.Enabled then return nil end
+    if Settings.TargetMethod == "FOV" then return GetFOVTarget() end
+    return GetClosestTarget()
+end
+
+local old = nil
+local hookSuccess, err = pcall(function()
+    old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local args = {...}
+        if tostring(self) == "GunHit" and getnamecallmethod() == "FireServer" then
+            if target and typeof(target) == "Instance" then
+                local targetPart = target
+                if rawget(args[2][1], "Position") and rawget(args[2][1], "Instance") then
+                    rawset(args[2][1], "Position", targetPart.Position)
+                    rawset(args[2][1], "Instance", targetPart)
+                end
+            end
+        end
+        return old(self, unpack(args))
+    end))
+end)
+
+local function CreateESP(player, character)
+    if ESPObjects[player] then return ESPObjects[player] end
+    local objects = {}
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "BloodZoneESP"
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = Settings.ESPColor
+    highlight.OutlineColor = Settings.ESPOutlineColor
+    highlight.FillTransparency = Settings.ESPFillTransparency
+    highlight.OutlineTransparency = 0
+    highlight.Adornee = character
+    highlight.Enabled = false
+    highlight.Parent = character
+    objects.Highlight = highlight
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "BloodZoneInfo"
+    billboard.AlwaysOnTop = true
+    billboard.Size = UDim2.fromOffset(180, 70)
+    billboard.StudsOffset = Vector3.new(0, 3.2, 0)
+    billboard.Enabled = false
+    billboard.Adornee = character:FindFirstChild("Head")
+    billboard.Parent = character
+    objects.Billboard = billboard
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Name = "Name"
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Size = UDim2.new(1, 0, 0, 20)
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 13
+    nameLabel.TextColor3 = Settings.ESPOutlineColor
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.Text = player.DisplayName
+    nameLabel.Visible = false
+    nameLabel.Parent = billboard
+    objects.Name = nameLabel
+
+    local distanceLabel = Instance.new("TextLabel")
+    distanceLabel.Name = "Distance"
+    distanceLabel.BackgroundTransparency = 1
+    distanceLabel.Size = UDim2.new(1, 0, 0, 18)
+    distanceLabel.Position = UDim2.fromOffset(0, 20)
+    distanceLabel.Font = Enum.Font.Gotham
+    distanceLabel.TextSize = 11
+    distanceLabel.TextColor3 = Color3.fromRGB(210, 210, 210)
+    distanceLabel.TextStrokeTransparency = 0
+    distanceLabel.Visible = false
+    distanceLabel.Parent = billboard
+    objects.Distance = distanceLabel
+
+    local healthLabel = Instance.new("TextLabel")
+    healthLabel.Name = "Health"
+    healthLabel.BackgroundTransparency = 1
+    healthLabel.Size = UDim2.new(1, 0, 0, 18)
+    healthLabel.Position = UDim2.fromOffset(0, 38)
+    healthLabel.Font = Enum.Font.Gotham
+    healthLabel.TextSize = 11
+    healthLabel.TextStrokeTransparency = 0
+    healthLabel.Visible = false
+    healthLabel.Parent = billboard
+    objects.Health = healthLabel
+
+    ESPObjects[player] = objects
+    return objects
+end
+
+local function UpdateESP()
+    if not Settings.ESP then
+        HideAllESP()
+        return
+    end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        local character = player.Character
+        if not character then
+            DestroyESP(player)
+            continue
+        end
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        local head = character:FindFirstChild("Head")
+        if not humanoid or humanoid.Health <= 0 or not head then
+            DestroyESP(player)
+            continue
+        end
+        local objects = CreateESP(player, character)
+        local isTarget = target ~= nil and target:IsDescendantOf(character)
+        if Settings.TargetOnly and not isTarget then
+            HideESP(player)
+            continue
+        end
+        objects.Highlight.FillColor = Settings.ESPColor
+        objects.Highlight.OutlineColor = Settings.ESPOutlineColor
+        objects.Highlight.FillTransparency = Settings.ESPFillTransparency
+        objects.Highlight.Enabled = Settings.BoxESP
+        objects.Name.Text = player.DisplayName
+        objects.Name.TextColor3 = Settings.ESPOutlineColor
+        objects.Name.Visible = Settings.NameESP
+
+        local root = character:FindFirstChild("HumanoidRootPart")
+        if root then
+            local camera = Workspace.CurrentCamera
+            if camera then
+                local distance = (camera.CFrame.Position - root.Position).Magnitude
+                objects.Distance.Text = string.format("%.0f studs", distance)
+                objects.Distance.Visible = Settings.DistanceESP
+            end
+        end
+
+        local health = math.clamp(humanoid.Health, 0, humanoid.MaxHealth)
+        objects.Health.Text = string.format("HP: %d / %d", health, humanoid.MaxHealth)
+        local ratio = humanoid.Health / math.max(humanoid.MaxHealth, 1)
+        objects.Health.TextColor3 = Color3.fromRGB(255 * (1 - ratio), 255 * ratio, 0)
+        objects.Health.Visible = Settings.HealthESP
+
+        objects.Billboard.Enabled = Settings.NameESP or Settings.DistanceESP or Settings.HealthESP
+    end
+end
+
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local FOVGui = Instance.new("ScreenGui")
+FOVGui.Name = "BloodZone_FOV"
+FOVGui.ResetOnSpawn = false
+FOVGui.IgnoreGuiInset = true
+FOVGui.Parent = PlayerGui
+
+local FOVCircle = Instance.new("Frame")
+FOVCircle.Name = "Circle"
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.BackgroundTransparency = 1
+FOVCircle.BorderSizePixel = 0
+FOVCircle.Parent = FOVGui
+
+local FOVCorner = Instance.new("UICorner")
+FOVCorner.CornerRadius = UDim.new(1, 0)
+FOVCorner.Parent = FOVCircle
+
+local FOVStroke = Instance.new("UIStroke")
+FOVStroke.Thickness = 1.5
+FOVStroke.Transparency = 0.15
+FOVStroke.Color = Settings.FOVColor
+FOVStroke.Parent = FOVCircle
+
+-- ==================== ACCOUNT INFO ====================
+local function GetAccountAge()
+    local success, result = pcall(function()
+        return LocalPlayer.AccountAge
+    end)
+    if success and result then
+        local days = result
+        if days >= 365 then
+            local years = math.floor(days / 365)
+            local remainingDays = days % 365
+            local months = math.floor(remainingDays / 30)
+            return string.format("%d years, %d months", years, months)
+        elseif days >= 30 then
+            local months = math.floor(days / 30)
+            local remainingDays = days % 30
+            return string.format("%d months, %d days", months, remainingDays)
+        else
+            return string.format("%d days", days)
+        end
+    end
+    return "Unknown"
+end
+
+local function GetCurrentDateTime()
+    return os.date("%B %d, %Y | %I:%M:%S %p")
+end
+
+-- ==================== UI CREATION ====================
+local Window = lib:CreateWindow({
+    Title     = "Blood Zone by Khub",
+    Subtitle  = "Advanced Combat Suite",
+    TitleIcon = "crosshair",
+    Theme     = "Default",
+    Intro = {
+        Title    = "Blood Zone by Khub",
+        Subtitle = "Advanced Combat Suite",
+        Icon     = "crosshair",
+    },
+})
+
+-- ==================== WELCOME TAB ====================
+local WelcomeTab = Window:CreateTab({
+    Name      = "Welcome",
+    Icon      = "house",
+    SearchBar = false,
+})
+
+WelcomeTab:CreateSection("Profile Information")
+
+WelcomeTab:CreateLabel("👤 Player: " .. LocalPlayer.Name)
+WelcomeTab:CreateLabel("🆔 Display Name: " .. LocalPlayer.DisplayName)
+WelcomeTab:CreateLabel("🎮 UserID: " .. LocalPlayer.UserId)
+WelcomeTab:CreateLabel("📅 Account Age: " .. GetAccountAge())
+WelcomeTab:CreateLabel("📆 Date: " .. GetCurrentDateTime())
+
+WelcomeTab:CreateSection("Server Info")
+
+WelcomeTab:CreateLabel("🌍 Place: " .. game.PlaceId)
+WelcomeTab:CreateLabel("🔢 Job ID: " .. game.JobId)
+WelcomeTab:CreateLabel("👥 Players: " .. #Players:GetPlayers() .. "/" .. Players.MaxPlayers)
+
+-- ==================== COMBAT TAB ====================
+local CombatTab = Window:CreateTab({
+    Name      = "Combat",
+    Icon      = "crosshair",
+    SearchBar = false,
+})
+
+CombatTab:CreateSection("Targeting")
+
+CombatTab:CreateToggle("Enable", function(Value)
+    Settings.Enabled = Value
+    if not Value then target = nil end
+end)
+
+CombatTab:CreateDropdown({
+    Label   = "Target Method",
+    Options = {"Closest", "FOV"},
+    Default = Settings.TargetMethod,
+}, function(Value)
+    if Value == "Closest" or Value == "FOV" then
+        Settings.TargetMethod = Value
+    end
+end)
+
+CombatTab:CreateToggle("FOV Check", function(Value)
+    Settings.FOVCheck = Value
+end)
+
+CombatTab:CreateToggle("Visibility Check", function(Value)
+    Settings.VisibilityCheck = Value
+end)
+
+CombatTab:CreateToggle("Wallbang", function(Value)
+    Settings.Wallbang = Value
+end)
+
+CombatTab:CreateSlider("Silent Aim Distance", 1, 1000, Settings.SilentAimLimit, function(Value)
+    Settings.SilentAimLimit = math.clamp(tonumber(Value) or Settings.SilentAimLimit, 1, 1000)
+end)
+
+-- ==================== VISUALS TAB ====================
+local VisualsTab = Window:CreateTab({
+    Name      = "Visuals",
+    Icon      = "eye",
+    SearchBar = false,
+})
+
+VisualsTab:CreateSection("FOV")
+
+VisualsTab:CreateToggle("FOV Circle", function(Value)
+    Settings.FOVCircle = Value
+    FOVCircle.Visible = Value
+end)
+
+VisualsTab:CreateSlider("FOV Radius", 0, 500, Settings.FOV, function(Value)
+    Settings.FOV = tonumber(Value) or Settings.FOV
+end)
+
+VisualsTab:CreateSection("ESP")
+
+VisualsTab:CreateToggle("ESP", function(Value)
+    Settings.ESP = Value
+    if not Value then HideAllESP() end
+end)
+
+VisualsTab:CreateToggle("Box ESP", function(Value)
+    Settings.BoxESP = Value
+end)
+
+VisualsTab:CreateToggle("Name", function(Value)
+    Settings.NameESP = Value
+    if not Value then
+        for _, objects in pairs(ESPObjects) do
+            if objects.Name then objects.Name.Visible = false end
+        end
+    end
+end)
+
+VisualsTab:CreateToggle("Distance", function(Value)
+    Settings.DistanceESP = Value
+end)
+
+VisualsTab:CreateToggle("Health", function(Value)
+    Settings.HealthESP = Value
+end)
+
+VisualsTab:CreateToggle("Target Only", function(Value)
+    Settings.TargetOnly = Value
+end)
+
+-- ==================== SETTINGS TAB ====================
+local SettingsTab = Window:CreateTab({
+    Name      = "Settings",
+    Icon      = "settings",
+    SearchBar = false,
+})
+
+SettingsTab:CreateSection("Config")
+
+SettingsTab:CreateButton("Save Config", function()
+    local success = SaveCFG(Settings.CFGName)
+    print(success and "Config saved: " .. Settings.CFGName or "Failed to save config.")
+end)
+
+SettingsTab:CreateButton("Load Config", function()
+    local success = LoadCFG(Settings.CFGName)
+    if success then
+        FOVCircle.Visible = Settings.FOVCircle
+        FOVStroke.Color = Settings.FOVColor
+        print("Config loaded: " .. Settings.CFGName)
+    else
+        print("Config not found.")
+    end
+end)
+
+SettingsTab:CreateButton("Reset Config", function()
+    Settings.Enabled = true
+    Settings.TargetMethod = "Closest"
+    Settings.FOVCheck = true
+    Settings.VisibilityCheck = true
+    Settings.Wallbang = false
+    Settings.FOV = 150
+    Settings.FOVCircle = true
+    Settings.ESP = true
+    Settings.BoxESP = true
+    Settings.NameESP = true
+    Settings.DistanceESP = true
+    Settings.HealthESP = true
+    Settings.TargetOnly = false
+    Settings.SilentAimLimit = 100
+    Settings.ESPColor = Color3.fromRGB(255, 70, 70)
+    Settings.ESPOutlineColor = Color3.fromRGB(255, 255, 255)
+    Settings.FOVColor = Color3.fromRGB(255, 70, 70)
+    Settings.ESPFillTransparency = 0.75
+    target = nil
+    FOVCircle.Visible = true
+    FOVStroke.Color = Settings.FOVColor
+    print("Settings reset.")
+end)
+
+-- ==================== MAIN LOOP ====================
+RunService.RenderStepped:Connect(function()
+    target = GetTarget()
+
+    local camera = Workspace.CurrentCamera
+    if camera then
+        FOVCircle.Position = UDim2.fromOffset(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+        FOVCircle.Size = UDim2.fromOffset(Settings.FOV * 2, Settings.FOV * 2)
+        FOVCircle.Visible = Settings.FOVCircle
+        FOVStroke.Color = Settings.FOVColor
+    end
+
+    UpdateESP()
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    DestroyESP(player)
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.25)
+    target = nil
+    HideAllESP()
+end)
