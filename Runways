@@ -1,0 +1,607 @@
+local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Angelo-Gitland/Lua-Land-Ui-Library/refs/heads/main/Lua%20Land%20Ui"))()
+
+local players = game:GetService("Players")
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local userInputService = game:GetService("UserInputService")
+local runService = game:GetService("RunService")
+local guiService = game:GetService("GuiService")
+
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+local currentCamera = workspace.CurrentCamera
+local localPlayer = players.LocalPlayer
+
+local touchEnabled = userInputService.TouchEnabled and not userInputService.MouseEnabled
+
+local KillAuraEnabled = false
+local AutoAmmoEnabled = false
+local KillAuraRange = 50
+local KillAuraDamage = 100
+local AmmoAmount = 999
+local NPCList = { NPCs = {}, Safes = {} }
+
+getgenv().AimbotEnabled = false
+getgenv().EspNPCsEnabled = false
+getgenv().EspLootEnabled = false
+getgenv().AimbotTarget = { position = nil, part = nil }
+getgenv().AimPart = "HumanoidRootPart"
+getgenv().WalkSpeedEnabled = false
+getgenv().WalkSpeedValue = 16
+getgenv().TPWalkEnabled = false
+getgenv().TPWalkValue = 50
+
+local flowClient
+
+local function findFlowClient()
+    if flowClient and flowClient.Parent then return flowClient end
+    pcall(function()
+        flowClient = replicatedStorage:FindFirstChild("FlowClient")
+        if flowClient then
+            flowClient = flowClient:FindFirstChild("ClientRunner")
+            if flowClient then
+                flowClient = flowClient:FindFirstChild("Event")
+            end
+        end
+    end)
+    if not flowClient or not flowClient.Parent then
+        for _, value in ipairs(replicatedStorage:GetDescendants()) do
+            if value.Name == "Event" and (value:IsA("RemoteEvent") or value:IsA("UnreliableRemoteEvent")) then
+                flowClient = value
+                break
+            end
+        end
+    end
+    return flowClient
+end
+
+local espObjects = {}
+local scanningLoot = false
+
+task.spawn(function()
+    while task.wait(1) do
+        local npcList = {}
+        local npcsFolder = workspace:FindFirstChild("NPCs")
+        if npcsFolder then
+            for _, npc in ipairs(npcsFolder:GetChildren()) do
+                local humanoid = npc:FindFirstChildOfClass("Humanoid")
+                if humanoid and humanoid.Health > 0 then
+                    local root = npc:FindFirstChild(getgenv().AimPart)
+                    root = root or npc:FindFirstChild("HumanoidRootPart") or npc.PrimaryPart
+                    if root then
+                        table.insert(npcList, { Model = npc, Humanoid = humanoid, Root = root })
+                    end
+                end
+            end
+        end
+        NPCList.NPCs = npcList
+
+        if not scanningLoot and (getgenv().EspLootEnabled or KillAuraEnabled) then
+            scanningLoot = true
+            task.spawn(function()
+                local safeList = {}
+                local mapFolder = workspace:FindFirstChild("Map") or workspace
+                for i, descendant in ipairs(mapFolder:GetDescendants()) do
+                    if i % 150 == 0 then task.wait() end
+                    local health = descendant:FindFirstChild("Health")
+                    if health and (health:IsA("NumberValue") or health:IsA("IntValue")) then
+                        local model = descendant:IsA("Model") and descendant
+                        model = model or descendant:FindFirstAncestorOfClass("Model")
+                        if not (model and players:GetPlayerFromCharacter(model)) then
+                            table.insert(safeList, descendant)
+                        end
+                    end
+                end
+                NPCList.Safes = safeList
+                task.wait(4)
+                scanningLoot = false
+            end)
+        end
+    end
+end)
+
+local function createESP(target, text, color, espType)
+    if not target or not target.Parent then return end
+    local basePart = target:IsA("BasePart") and target or target:FindFirstChild("HumanoidRootPart") or target:FindFirstChild("Torso") or target.PrimaryPart or target:FindFirstChildOfClass("BasePart")
+    if not basePart then return end
+    
+    local hlName = "ESP_HL_" .. espType
+    local bbName = "ESP_BB_" .. espType
+    
+    if target:FindFirstChild(hlName) or basePart:FindFirstChild(bbName) then return end
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Name = hlName
+    highlight.FillTransparency = 0.6
+    highlight.OutlineTransparency = 0
+    highlight.FillColor = color
+    highlight.OutlineColor = Color3.new(1, 1, 1)
+    highlight.Parent = target
+    
+    local billboardGui = Instance.new("BillboardGui")
+    billboardGui.Name = bbName
+    billboardGui.Size = UDim2.new(0, 200, 0, 50)
+    billboardGui.StudsOffset = Vector3.new(0, 3, 0)
+    billboardGui.AlwaysOnTop = true
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = text
+    textLabel.TextColor3 = color
+    textLabel.TextStrokeTransparency = 0
+    textLabel.TextScaled = false
+    textLabel.TextSize = 14
+    textLabel.Font = Enum.Font.Code
+    textLabel.Parent = billboardGui
+    
+    billboardGui.Parent = basePart
+    
+    table.insert(espObjects, { highlight = highlight, billboard = billboardGui, target = target })
+end
+
+task.spawn(function()
+    while task.wait(1.5) do
+        for i = #espObjects, 1, -1 do
+            if not espObjects[i].target or not espObjects[i].target.Parent then
+                table.remove(espObjects, i)
+            end
+        end
+        
+        if getgenv().EspNPCsEnabled then
+            for _, npc in ipairs(NPCList.NPCs) do
+                createESP(npc.Model, npc.Model.Name, Color3.fromRGB(255, 50, 50), "NPC")
+            end
+        end
+        
+        if getgenv().EspLootEnabled then
+            local cashFolder = workspace:FindFirstChild("Cash")
+            if cashFolder then
+                for _, cash in ipairs(cashFolder:GetChildren()) do
+                    createESP(cash, "Cash", Color3.fromRGB(50, 255, 50), "Loot")
+                end
+            end
+            
+            local lootFolder = workspace:FindFirstChild("Loot")
+            if lootFolder then
+                for _, loot in ipairs(lootFolder:GetChildren()) do
+                    createESP(loot, loot.Name, Color3.fromRGB(0, 255, 255), "Loot")
+                end
+            end
+            
+            for _, safe in ipairs(NPCList.Safes) do
+                createESP(safe, safe.Name or "Safe", Color3.fromRGB(255, 215, 0), "Loot")
+            end
+        end
+    end
+end)
+
+local function killAuraLoop()
+    while KillAuraEnabled do
+        local remote = findFlowClient()
+        local character = localPlayer.Character
+        
+        if remote and character then
+            local rootPart = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
+            
+            if rootPart then
+                local position = rootPart.Position
+                local hitCount = 0
+                
+                for _, npc in ipairs(NPCList.NPCs) do
+                    if not KillAuraEnabled then break end
+                    
+                    if npc.Root and npc.Humanoid and npc.Humanoid.Health > 0 then
+                        if (npc.Root.Position - position).Magnitude <= KillAuraRange then
+                            pcall(function()
+                                remote:FireServer("NPCs", "Damage", npc.Humanoid, KillAuraDamage)
+                            end)
+                            hitCount = hitCount + 1
+                            
+                            if hitCount >= 3 then
+                                task.wait()
+                                hitCount = 0
+                                if rootPart then
+                                    position = rootPart.Position
+                                end
+                            end
+                        end
+                    end
+                end
+                
+                for _, safe in ipairs(NPCList.Safes) do
+                    if not KillAuraEnabled then break end
+                    
+                    if safe and safe.Parent then
+                        local basePart = safe:IsA("BasePart") and safe or safe:FindFirstChildOfClass("BasePart")
+                        local safePosition = basePart and basePart.Position or (safe:IsA("Model") and safe:GetPivot().Position)
+                        
+                        if safePosition and (safePosition - position).Magnitude <= KillAuraRange then
+                            pcall(function()
+                                remote:FireServer("DamageToOpen", "Damage", safe, KillAuraDamage, "melee")
+                            end)
+                            hitCount = hitCount + 1
+                            
+                            if hitCount >= 3 then
+                                task.wait()
+                                hitCount = 0
+                                if rootPart then
+                                    position = rootPart.Position
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        task.wait(0.15)
+    end
+end
+
+local function toggleKillAura(enabled)
+    KillAuraEnabled = enabled
+    if KillAuraEnabled then
+        task.spawn(killAuraLoop)
+    end
+end
+
+local function fillAmmo()
+    local remote = findFlowClient()
+    if not remote then return end
+    
+    local containers = {}
+    if localPlayer:FindFirstChild("Backpack") then
+        table.insert(containers, localPlayer.Backpack)
+    end
+    if localPlayer.Character then
+        table.insert(containers, localPlayer.Character)
+    end
+    
+    for _, container in ipairs(containers) do
+        for _, item in ipairs(container:GetChildren()) do
+            if item:IsA("Tool") then
+                pcall(function()
+                    remote:FireServer("Ammo", "setAmmo", item, AmmoAmount)
+                end)
+            end
+        end
+    end
+end
+
+local function autoAmmoLoop()
+    while AutoAmmoEnabled do
+        fillAmmo()
+        task.wait(1)
+    end
+end
+
+local function toggleAutoAmmo(enabled)
+    AutoAmmoEnabled = enabled
+    if AutoAmmoEnabled then
+        task.spawn(autoAmmoLoop)
+    end
+end
+
+local function freeAllGuns()
+    local remote = findFlowClient()
+    if not remote then return end
+    
+    -- Try different remote names for giving guns
+    local gunRemotes = {
+        "GiveGun",
+        "GiveWeapon",
+        "GiveItem",
+        "BuyGun",
+        "BuyWeapon",
+        "PurchaseGun",
+        "PurchaseWeapon",
+        "GetGun",
+        "GetWeapon",
+        "FreeGun",
+        "FreeWeapon",
+        "SpawnGun",
+        "SpawnWeapon",
+    }
+    
+    -- Try to find gun shop items
+    local shopItems = {}
+    local shopFolder = workspace:FindFirstChild("Shop") or workspace:FindFirstChild("GunShop") or workspace:FindFirstChild("WeaponShop")
+    
+    if shopFolder then
+        for _, item in ipairs(shopFolder:GetDescendants()) do
+            if item:IsA("Tool") then
+                table.insert(shopItems, item.Name)
+            end
+        end
+    end
+    
+    -- Also check replicated storage for gun data
+    pcall(function()
+        local itemsFolder = replicatedStorage:FindFirstChild("Items") or replicatedStorage:FindFirstChild("Weapons") or replicatedStorage:FindFirstChild("Guns")
+        if itemsFolder then
+            for _, item in ipairs(itemsFolder:GetChildren()) do
+                if item:IsA("Tool") then
+                    table.insert(shopItems, item.Name)
+                elseif item:IsA("Folder") then
+                    for _, tool in ipairs(item:GetChildren()) do
+                        if tool:IsA("Tool") then
+                            table.insert(shopItems, tool.Name)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    
+    -- Try firing different remote names
+    for _, remoteName in ipairs(gunRemotes) do
+        pcall(function()
+            remote:FireServer(remoteName, "all")
+        end)
+        pcall(function()
+            remote:FireServer(remoteName)
+        end)
+    end
+    
+    -- Try common gun names
+    local commonGuns = {
+        "Pistol", "Revolver", "SMG", "Shotgun", "Rifle", "AK47", "M4A1",
+        "Glock", "Deagle", "Uzi", "MP5", "AWP", "Sniper", "AR", "Carbine",
+        "HuntingRifle", "DoubleBarrel", "PumpShotgun", "TacticalShotgun",
+        "MachineGun", "Minigun", "Flamethrower", "RPG", "GrenadeLauncher",
+    }
+    
+    for _, gunName in ipairs(commonGuns) do
+        pcall(function()
+            remote:FireServer("GiveGun", gunName)
+        end)
+        pcall(function()
+            remote:FireServer("GiveWeapon", gunName)
+        end)
+        pcall(function()
+            remote:FireServer("BuyGun", gunName)
+        end)
+        pcall(function()
+            remote:FireServer("BuyWeapon", gunName)
+        end)
+    end
+    
+    -- Try to clone guns from workspace
+    pcall(function()
+        local gunFolder = workspace:FindFirstChild("Guns") or workspace:FindFirstChild("Weapons")
+        if gunFolder then
+            for _, gun in ipairs(gunFolder:GetChildren()) do
+                if gun:IsA("Tool") and localPlayer.Backpack then
+                    local clonedGun = gun:Clone()
+                    clonedGun.Parent = localPlayer.Backpack
+                end
+            end
+        end
+    end)
+end
+
+runService.RenderStepped:Connect(function(deltaTime)
+    pcall(function()
+        local guiInset = guiService:GetGuiInset()
+        local mousePos = touchEnabled and currentCamera.ViewportSize / 2 or userInputService:GetMouseLocation() - guiInset
+        
+        if getgenv().AimbotEnabled then
+            local closestDist = math.huge
+            local bestPosition = nil
+            local bestPart = nil
+            
+            for _, npc in ipairs(NPCList.NPCs) do
+                if npc.Root and npc.Humanoid and npc.Humanoid.Health > 0 then
+                    local screenPos, onScreen = currentCamera:WorldToViewportPoint(npc.Root.Position)
+                    
+                    if onScreen then
+                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                        
+                        if dist < closestDist then
+                            closestDist = dist
+                            bestPosition = npc.Root.Position
+                            bestPart = npc.Root
+                        end
+                    end
+                end
+            end
+            
+            getgenv().AimbotTarget = { position = bestPosition, part = bestPart }
+        else
+            getgenv().AimbotTarget = { position = nil, part = nil }
+        end
+        
+        local character = localPlayer.Character
+        if character then
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            local rootPart = character:FindFirstChild("HumanoidRootPart")
+            
+            if humanoid and rootPart and humanoid.Health > 0 then
+                if getgenv().WalkSpeedEnabled then
+                    humanoid.WalkSpeed = getgenv().WalkSpeedValue
+                end
+                
+                if getgenv().TPWalkEnabled and humanoid.MoveDirection.Magnitude > 0 then
+                    rootPart.CFrame = rootPart.CFrame + humanoid.MoveDirection * (getgenv().TPWalkValue * deltaTime)
+                end
+            end
+        end
+    end)
+end)
+
+if not getgenv().AimbotHooked then
+    getgenv().AimbotHooked = true
+    
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        
+        if not checkcaller() and getgenv().AimbotEnabled and getgenv().AimbotTarget.position then
+            if (method == "Raycast" or method == "raycast") and self == workspace then
+                local args = { ... }
+                if typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
+                    args[2] = (getgenv().AimbotTarget.position - args[1]).Unit * args[2].Magnitude
+                    return oldNamecall(self, unpack(args))
+                end
+                return oldNamecall(self, ...)
+            end
+            
+            if method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay" then
+                local args = { ... }
+                if typeof(args[1]) == "Ray" then
+                    local origin = args[1].Origin
+                    args[1] = Ray.new(origin, (getgenv().AimbotTarget.position - origin).Unit * args[1].Direction.Magnitude)
+                    return oldNamecall(self, unpack(args))
+                end
+                return oldNamecall(self, ...)
+            end
+            
+            return oldNamecall(self, ...)
+        end
+        
+        return oldNamecall(self, ...)
+    end))
+    
+    local oldIndex
+    oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
+        if not checkcaller() and getgenv().AimbotEnabled and getgenv().AimbotTarget.position then
+            if key == "Hit" or key == "hit" then
+                if typeof(self) == "Instance" and self:IsA("Mouse") then
+                    return CFrame.new(getgenv().AimbotTarget.position)
+                end
+                return oldIndex(self, key)
+            end
+            
+            if key == "Target" or key == "target" then
+                if typeof(self) == "Instance" and self:IsA("Mouse") then
+                    return getgenv().AimbotTarget.part
+                end
+                return oldIndex(self, key)
+            end
+            
+            return oldIndex(self, key)
+        end
+        
+        return oldIndex(self, key)
+    end))
+end
+
+-- ==================== UI CREATION ====================
+local Window = lib:CreateWindow({
+    Title     = "Runaways by Khub",
+    Subtitle  = "Script Suite",
+    TitleIcon = "crosshair",
+    Theme     = "Default",
+    Intro = {
+        Title    = "Runaways by Khub",
+        Subtitle = "Script Suite",
+        Icon     = "crosshair",
+    },
+})
+
+-- ==================== MAIN TAB ====================
+local MainTab = Window:CreateTab({
+    Name      = "Main",
+    Icon      = "crosshair",
+    SearchBar = false,
+})
+
+MainTab:CreateSection("Kill Aura")
+
+MainTab:CreateToggle("Kill Aura", function(Value)
+    toggleKillAura(Value)
+end)
+
+MainTab:CreateSlider("Kill Aura Range [Studs]", 1, 200, 50, function(Value)
+    KillAuraRange = Value
+end)
+
+MainTab:CreateSlider("Kill Aura Damage", 1, 1000, 100, function(Value)
+    KillAuraDamage = Value
+end)
+
+MainTab:CreateSection("Guns")
+
+MainTab:CreateButton("Free All Guns", function()
+    freeAllGuns()
+end)
+
+MainTab:CreateSection("Ammo")
+
+MainTab:CreateToggle("Auto Fill Ammo", function(Value)
+    toggleAutoAmmo(Value)
+end)
+
+MainTab:CreateSlider("Set Ammo Amount", 1, 100000, 999, function(Value)
+    AmmoAmount = Value
+end)
+
+MainTab:CreateButton("Fill Ammo Now", function()
+    fillAmmo()
+end)
+
+-- ==================== AIMBOT & ESP TAB ====================
+local AimbotTab = Window:CreateTab({
+    Name      = "Aimbot & ESP",
+    Icon      = "eye",
+    SearchBar = false,
+})
+
+AimbotTab:CreateSection("Aimbot")
+
+AimbotTab:CreateToggle("Silent Aim", function(Value)
+    getgenv().AimbotEnabled = Value
+end)
+
+AimbotTab:CreateDropdown({
+    Label   = "Aim Part",
+    Options = {"HumanoidRootPart", "Head"},
+    Default = "HumanoidRootPart",
+}, function(Value)
+    getgenv().AimPart = type(Value) == "table" and Value[1] or Value
+end)
+
+AimbotTab:CreateSection("ESP")
+
+AimbotTab:CreateToggle("ESP NPCs", function(Value)
+    getgenv().EspNPCsEnabled = Value
+end)
+
+AimbotTab:CreateToggle("ESP Loot & Safes", function(Value)
+    getgenv().EspLootEnabled = Value
+end)
+
+-- ==================== LOCALPLAYER TAB ====================
+local LocalPlayerTab = Window:CreateTab({
+    Name      = "LocalPlayer",
+    Icon      = "user",
+    SearchBar = false,
+})
+
+LocalPlayerTab:CreateSection("Movement")
+
+LocalPlayerTab:CreateToggle("Enable WalkSpeed", function(Value)
+    getgenv().WalkSpeedEnabled = Value
+end)
+
+LocalPlayerTab:CreateSlider("WalkSpeed", 16, 300, 16, function(Value)
+    getgenv().WalkSpeedValue = Value
+end)
+
+LocalPlayerTab:CreateSection("TPWalk")
+
+LocalPlayerTab:CreateToggle("Enable TPWalk (Bypass)", function(Value)
+    getgenv().TPWalkEnabled = Value
+end)
+
+LocalPlayerTab:CreateSlider("TPWalk Speed", 16, 300, 50, function(Value)
+    getgenv().TPWalkValue = Value
+end)
+
+-- ==================== CREDITS ====================
+MainTab:CreateSection("Credits")
+
+MainTab:CreateLabel("Credits by Yvaine & Kyiel")
+MainTab:CreateLabel("UI by Khub")
