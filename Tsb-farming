@@ -1,0 +1,256 @@
+local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Angelo-Gitland/Lua-Land-Ui-Library/refs/heads/main/Lua%20Land%20Ui"))()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+
+local lowestHpFarmEnabled = false
+local autoUltimateEnabled = false
+local autoEmoteEnabled = false
+local currentTarget = nil
+local farmConnection = nil
+local attackThread = nil
+local farmOffsetX, farmOffsetY, farmOffsetZ = 0, 0, 3
+
+local startTime = tick()
+local startKills = 0
+local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+if leaderstats and leaderstats:FindFirstChild("Kills") then
+    startKills = leaderstats.Kills.Value
+end
+
+local function comm(args)
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("Communicate") then
+        pcall(function()
+            char.Communicate:FireServer(unpack(args))
+        end)
+    end
+end
+
+local function getChar(plr)
+    local live = Workspace:FindFirstChild("Live")
+    return (live and live:FindFirstChild(plr.Name)) or plr.Character
+end
+
+local function isAlive(plr)
+    local c = getChar(plr)
+    local h = c and c:FindFirstChildOfClass("Humanoid")
+    return h and h.Health > 0
+end
+
+local function getTarget()
+    local low, best = math.huge, nil
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and isAlive(p) then
+            local h = getChar(p).Humanoid.Health
+            if h < low then
+                low = h
+                best = p
+            end
+        end
+    end
+    return best
+end
+
+local function fireHotbar()
+    pcall(function()
+        local hotbar = LocalPlayer.PlayerGui:FindFirstChild("Hotbar")
+        local backpack = hotbar and hotbar:FindFirstChild("Backpack")
+        local hb = backpack and backpack:FindFirstChild("Hotbar")
+        if not hb then return end
+        local events = {"MouseButton1Click", "MouseButton1Down", "MouseButton1Up", "Activated"}
+        for i = 1, 4 do
+            local slot = hb:FindFirstChild(tostring(i))
+            local btn = slot and slot:FindFirstChild("Base")
+            if btn and (btn:IsA("TextButton") or btn:IsA("ImageButton")) then
+                for _, eventName in ipairs(events) do
+                    if firesignal then
+                        firesignal(btn[eventName])
+                    elseif getconnections then
+                        for _, connection in pairs(getconnections(btn[eventName])) do
+                            if connection.Fire then
+                                connection:Fire()
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function stopFarm()
+    if farmConnection then
+        farmConnection:Disconnect()
+        farmConnection = nil
+    end
+    if attackThread then
+        task.cancel(attackThread)
+        attackThread = nil
+    end
+    currentTarget = nil
+end
+
+local function startFarm()
+    stopFarm()
+    farmConnection = RunService.Heartbeat:Connect(function()
+        if not lowestHpFarmEnabled then return end
+        if not currentTarget or not isAlive(currentTarget) then
+            currentTarget = getTarget()
+        end
+        if currentTarget then
+            local tHrp = getChar(currentTarget):FindFirstChild("HumanoidRootPart")
+            local myHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if tHrp and myHrp then
+                myHrp.CFrame = tHrp.CFrame * CFrame.new(farmOffsetX, farmOffsetY, farmOffsetZ)
+            end
+        end
+    end)
+    
+    attackThread = task.spawn(function()
+        while lowestHpFarmEnabled do
+            if currentTarget and isAlive(currentTarget) then
+                comm({{Goal = "LeftClick"}})
+                comm({{Dash = Enum.KeyCode.W, Key = Enum.KeyCode.Q, Goal = "KeyPress"}})
+                if autoUltimateEnabled then
+                    comm({{MoveDirection = Vector3.zero, Key = Enum.KeyCode.G, Goal = "KeyPress"}})
+                end
+                if autoEmoteEnabled then
+                    comm({{Goal = "Emote Spin"}})
+                end
+                fireHotbar()
+            end
+            task.wait(0.1)
+        end
+    end)
+end
+
+-- ==================== UI CREATION ====================
+local Window = lib:CreateWindow({
+    Title     = "TSB by Khub",
+    Subtitle  = "Strongest Battlegrounds Script",
+    TitleIcon = "swords",
+    Theme     = "Default",
+    Intro = {
+        Title    = "TSB by Khub",
+        Subtitle = "Strongest Battlegrounds Script",
+        Icon     = "swords",
+    },
+})
+
+-- ==================== HOME TAB ====================
+local HomeTab = Window:CreateTab({
+    Name      = "Home",
+    Icon      = "house",
+    SearchBar = false,
+})
+
+HomeTab:CreateSection("Welcome")
+
+HomeTab:CreateLabel("👤 Player: " .. LocalPlayer.DisplayName)
+HomeTab:CreateLabel("⚔️ TSB by Khub - Strongest Battlegrounds")
+
+HomeTab:CreateSection("Credits")
+
+HomeTab:CreateLabel("Credits: Yvaine & Kyiel")
+HomeTab:CreateLabel("UI by Khub")
+
+-- ==================== AUTO FARM TAB ====================
+local FarmTab = Window:CreateTab({
+    Name      = "Auto Farm",
+    Icon      = "crosshair",
+    SearchBar = false,
+})
+
+FarmTab:CreateSection("Combat")
+
+FarmTab:CreateToggle("Auto Kill Farm (Lowest HP)", function(Value)
+    lowestHpFarmEnabled = Value
+    if Value then
+        startFarm()
+    else
+        stopFarm()
+    end
+end)
+
+FarmTab:CreateToggle("Auto Ultimate", function(Value)
+    autoUltimateEnabled = Value
+end)
+
+FarmTab:CreateToggle("Auto Claim Emote", function(Value)
+    autoEmoteEnabled = Value
+end)
+
+FarmTab:CreateSection("Farm Position")
+
+FarmTab:CreateSlider("Offset X", -15, 15, 0, function(Value)
+    farmOffsetX = Value
+end)
+
+FarmTab:CreateSlider("Offset Y", -15, 15, 0, function(Value)
+    farmOffsetY = Value
+end)
+
+FarmTab:CreateSlider("Offset Z", -15, 15, 3, function(Value)
+    farmOffsetZ = Value
+end)
+
+-- ==================== STATS TAB ====================
+local StatsTab = Window:CreateTab({
+    Name      = "Stats",
+    Icon      = "chart-line",
+    SearchBar = false,
+})
+
+StatsTab:CreateSection("Statistics")
+
+local kpmLabel = StatsTab:CreateLabel("Kills Per Minute: 0.00")
+local killsLabel = StatsTab:CreateLabel("Total Kills: 0")
+
+task.spawn(function()
+    while task.wait(1) do
+        local currentKills = (leaderstats and leaderstats:FindFirstChild("Kills") and leaderstats.Kills.Value) or 0
+        local elapsed = (tick() - startTime) / 60
+        kpmLabel:Set(string.format("Kills Per Minute: %.2f", (currentKills - startKills) / math.max(0.01, elapsed)))
+        killsLabel:Set(string.format("Total Kills: %d", currentKills))
+    end
+end)
+
+-- ==================== CREDITS TAB ====================
+local CreditsTab = Window:CreateTab({
+    Name      = "Credits",
+    Icon      = "info",
+    SearchBar = false,
+})
+
+CreditsTab:CreateSection("Credits")
+
+CreditsTab:CreateLabel("Script by: nismovxa")
+CreditsTab:CreateLabel("Credits: Yvaine & Kyiel")
+CreditsTab:CreateLabel("UI by Khub")
+
+CreditsTab:CreateSection("Discord")
+
+CreditsTab:CreateLabel("discord.gg/getsnowy")
+
+-- ==================== SETTINGS TAB ====================
+local SettingsTab = Window:CreateTab({
+    Name      = "Settings",
+    Icon      = "settings",
+    SearchBar = false,
+})
+
+SettingsTab:CreateSection("Utilities")
+
+SettingsTab:CreateButton("Unload Script", function()
+    stopFarm()
+    Window:Destroy()
+end)
+
+SettingsTab:CreateSection("Credits")
+
+SettingsTab:CreateLabel("Credits: Yvaine & Kyiel")
+SettingsTab:CreateLabel("UI by Khub")
