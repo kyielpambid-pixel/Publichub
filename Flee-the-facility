@@ -1,0 +1,388 @@
+local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Angelo-Gitland/Lua-Land-Ui-Library/refs/heads/main/Lua%20Land%20Ui"))()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local LocalPlayer = Players.LocalPlayer
+
+local DISCORD_LINK = "https://discord.gg/rU9FyNEUQ7"
+
+local LPC = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local LPH = LPC:FindFirstChildOfClass("Humanoid")
+local LPR = LPC:FindFirstChild("HumanoidRootPart") or LPC.PrimaryPart
+
+LocalPlayer.CharacterAdded:Connect(function(c)
+    repeat task.wait() LPC = c; LPH = c:FindFirstChildOfClass("Humanoid"); LPR = c:FindFirstChild("HumanoidRootPart") or c.PrimaryPart until LPC and LPH and LPR
+end)
+
+local RemoteEvent = ReplicatedStorage:FindFirstChild("RemoteEvent") or ReplicatedStorage:WaitForChild("RemoteEvent", 2)
+
+local Toggle = {
+    ESP_Player = false, ESP_Computer = false, ESP_FreezePod = false, ESP_ExitDoor = false,
+    HitAura = false, HitAuraRange = 10, AutoTie = false, AutoTieRange = 5,
+    NoTaskFailed = false, AutoHelpCP_silent = false, AutoHelpCP = false,
+    AntiFling = false, TouchFling = false,
+    CamNoclip = false, CamDMode = false, CamMaxZoom = false, CamMaxZoomDis = 50,
+    FullBright = false, TPWalk = false, TPWalkSpeed = 50,
+    InfJump = false, Noclip = false, AntiAfk = false, AntiRagdoll = false,
+    SlowBeast = false, UntieBeast = false,
+}
+
+local function findroot_or(c)
+    if not (c and c.Parent) then return nil, nil end
+    local humanoid = c:FindFirstChildOfClass("Humanoid")
+    local root = c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso") or c.PrimaryPart
+    return root, humanoid
+end
+
+local function GetCurrentMap()
+    local map
+    local ov = ReplicatedStorage:FindFirstChild("CurrentMap")
+    if ov and ov:IsA("ObjectValue") and ov.Value then map = ov.Value end
+    if not map then
+        local comp = Workspace:FindFirstChild("ComputerTable")
+        if comp and comp.Parent then map = comp.Parent end
+    end
+    if not map then
+        local pod = Workspace:FindFirstChild("FreezePod")
+        if pod and pod.Parent then map = pod.Parent end
+    end
+    return map
+end
+
+local function GetHiddenGui()
+    if gethui then return gethui() end
+    return game:GetService("CoreGui")
+end
+
+-- ==================== UI CREATION ====================
+local Window = lib:CreateWindow({
+    Title     = "Flee the Facility by Khub",
+    Subtitle  = "Script Suite",
+    TitleIcon = "door",
+    Theme     = "Default",
+    Intro = {
+        Title    = "Flee the Facility by Khub",
+        Subtitle = "Script Suite",
+        Icon     = "door",
+    },
+})
+
+-- ==================== HOME TAB ====================
+local HomeTab = Window:CreateTab({ Name = "Home", Icon = "house", SearchBar = false })
+HomeTab:CreateSection("Welcome")
+HomeTab:CreateLabel("👤 Player: " .. LocalPlayer.DisplayName)
+HomeTab:CreateLabel("🚪 Flee the Facility by Khub")
+HomeTab:CreateSection("Discord")
+HomeTab:CreateButton("📋 Join Our Discord (Click to Copy)", function()
+    pcall(function()
+        if setclipboard then setclipboard(DISCORD_LINK)
+        elseif toclipboard then toclipboard(DISCORD_LINK) end
+    end)
+end)
+HomeTab:CreateLabel("Discord: " .. DISCORD_LINK)
+HomeTab:CreateSection("Credits")
+HomeTab:CreateLabel("Credits: Yvaine & Kyiel")
+HomeTab:CreateLabel("UI by Khub")
+
+-- ==================== MAIN TAB ====================
+local MainTab = Window:CreateTab({ Name = "Main", Icon = "crosshair", SearchBar = false })
+
+MainTab:CreateSection("ESP")
+
+MainTab:CreateToggle("ESP Player", function(Value) Toggle.ESP_Player = Value end)
+MainTab:CreateToggle("ESP Computer", function(Value) Toggle.ESP_Computer = Value end)
+MainTab:CreateToggle("ESP FreezePod", function(Value) Toggle.ESP_FreezePod = Value end)
+MainTab:CreateToggle("ESP ExitDoor", function(Value) Toggle.ESP_ExitDoor = Value end)
+
+-- ESP Loop
+local espFolder = Instance.new("Folder")
+espFolder.Name = "KhubESP"
+espFolder.Parent = GetHiddenGui()
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        pcall(function()
+            for _, child in pairs(espFolder:GetChildren()) do child:Destroy() end
+            
+            if Toggle.ESP_Player then
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer and p.Character then
+                        local head = p.Character:FindFirstChild("Head")
+                        if head then
+                            local bb = Instance.new("BillboardGui")
+                            bb.Name = p.Name
+                            bb.Adornee = head
+                            bb.Size = UDim2.new(5, 0, 5, 0)
+                            bb.AlwaysOnTop = true
+                            bb.Parent = espFolder
+                            local lbl = Instance.new("TextLabel")
+                            lbl.Size = UDim2.fromScale(1, 1)
+                            lbl.BackgroundTransparency = 1
+                            lbl.TextSize = 11
+                            lbl.Font = Enum.Font.FredokaOne
+                            lbl.TextColor3 = Color3.new(0, 1, 0)
+                            lbl.Text = p.Name
+                            lbl.Parent = bb
+                        end
+                    end
+                end
+            end
+            
+            local map = GetCurrentMap()
+            if map then
+                for _, o in pairs(map:GetChildren()) do
+                    local part = o:FindFirstChildWhichIsA("BasePart")
+                    if part then
+                        local show = false
+                        local name = ""
+                        local color = Color3.new(1, 1, 1)
+                        
+                        if Toggle.ESP_Computer and o.Name == "ComputerTable" then
+                            show = true; name = "Computer"; color = Color3.new(1, 1, 0)
+                        elseif Toggle.ESP_FreezePod and o.Name == "FreezePod" then
+                            show = true; name = "FreezePod"; color = Color3.new(0, 0, 1)
+                        elseif Toggle.ESP_ExitDoor and o.Name == "ExitDoor" then
+                            show = true; name = "ExitDoor"; color = Color3.new(1, 0, 0)
+                        end
+                        
+                        if show then
+                            local bb = Instance.new("BillboardGui")
+                            bb.Adornee = part
+                            bb.Size = UDim2.new(5, 0, 5, 0)
+                            bb.AlwaysOnTop = true
+                            bb.Parent = espFolder
+                            local lbl = Instance.new("TextLabel")
+                            lbl.Size = UDim2.fromScale(1, 1)
+                            lbl.BackgroundTransparency = 1
+                            lbl.TextSize = 11
+                            lbl.Font = Enum.Font.FredokaOne
+                            lbl.TextColor3 = color
+                            lbl.Text = name
+                            lbl.Parent = bb
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+MainTab:CreateSection("Beast")
+
+MainTab:CreateSlider("Hit Aura Range", 5, 15, 10, function(Value) Toggle.HitAuraRange = Value end)
+MainTab:CreateToggle("Hit Aura", function(Value) Toggle.HitAura = Value end)
+MainTab:CreateSlider("Auto Tie Range", 5, 100, 5, function(Value) Toggle.AutoTieRange = Value end)
+MainTab:CreateToggle("Auto Tie", function(Value) Toggle.AutoTie = Value end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.15)
+        if LPC and LPR then
+            local hammerEvent = LPC:FindFirstChild("HammerEvent", true)
+            if hammerEvent then
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer then
+                        local Stats = p:FindFirstChild("TempPlayerStatsModule")
+                        if Stats then
+                            local Ragdoll = Stats:FindFirstChild("Ragdoll")
+                            local Captured = Stats:FindFirstChild("Captured")
+                            if Ragdoll and Captured then
+                                local root = findroot_or(p.Character)
+                                if root and (root.Position - LPR.Position).Magnitude <= Toggle.HitAuraRange then
+                                    if Toggle.HitAura and not (Ragdoll.Value or Captured.Value) then
+                                        hammerEvent:FireServer("HammerHit", root)
+                                    end
+                                    if Toggle.AutoTie and Ragdoll.Value and not Captured.Value and (root.Position - LPR.Position).Magnitude <= Toggle.AutoTieRange then
+                                        hammerEvent:FireServer("HammerTieUp", root, root.Position)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+MainTab:CreateSection("In-Game")
+
+MainTab:CreateToggle("No Computer Hack Failed", function(Value) Toggle.NoTaskFailed = Value end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if Toggle.NoTaskFailed and RemoteEvent then
+            pcall(function() RemoteEvent:FireServer("SetPlayerMinigameResult", true) end)
+        end
+    end
+end)
+
+MainTab:CreateToggle("Auto Help Captured (Silent)", function(Value) Toggle.AutoHelpCP_silent = Value end)
+MainTab:CreateToggle("Auto Help Captured (TP)", function(Value) Toggle.AutoHelpCP = Value end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.05)
+        if Toggle.AutoHelpCP_silent or Toggle.AutoHelpCP then
+            pcall(function()
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer then
+                        local Stats = p:FindFirstChild("TempPlayerStatsModule")
+                        local Captured = Stats and Stats:FindFirstChild("Captured")
+                        if Captured and Captured.Value and RemoteEvent then
+                            RemoteEvent:FireServer("Input", "Action", true)
+                            break
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+MainTab:CreateSection("Other")
+MainTab:CreateToggle("Anti Fling", function(Value) Toggle.AntiFling = Value end)
+MainTab:CreateToggle("Touch Fling", function(Value) Toggle.TouchFling = Value end)
+
+-- ==================== LOCAL TAB ====================
+local LocalTab = Window:CreateTab({ Name = "Local", Icon = "user", SearchBar = false })
+
+LocalTab:CreateSection("Camera")
+LocalTab:CreateToggle("Noclip Camera", function(Value)
+    Toggle.CamNoclip = Value
+    LocalPlayer.DevCameraOcclusionMode = Value and Enum.DevCameraOcclusionMode.Invisicam or Enum.DevCameraOcclusionMode.Zoom
+end)
+LocalTab:CreateToggle("Camera Mode Default", function(Value)
+    Toggle.CamDMode = Value
+    if Value then LocalPlayer.CameraMode = Enum.CameraMode.Classic end
+end)
+LocalTab:CreateSlider("Camera Max Zoom", 10, 200, 50, function(Value)
+    Toggle.CamMaxZoomDis = Value
+    pcall(function() LocalPlayer.CameraMaxZoomDistance = Value end)
+end)
+LocalTab:CreateToggle("Auto Set Camera Zoom", function(Value)
+    Toggle.CamMaxZoom = Value
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if Toggle.CamMaxZoom then
+            pcall(function()
+                if LocalPlayer.CameraMaxZoomDistance ~= Toggle.CamMaxZoomDis then
+                    LocalPlayer.CameraMaxZoomDistance = Toggle.CamMaxZoomDis
+                end
+            end)
+        end
+    end
+end)
+
+LocalTab:CreateSection("Movement")
+LocalTab:CreateToggle("Full Bright", function(Value)
+    Toggle.FullBright = Value
+    if Value then
+        Lighting.Brightness = 1.5; Lighting.ClockTime = 14
+        Lighting.FogEnd = 100000; Lighting.FogStart = 0; Lighting.GlobalShadows = false
+    else
+        Lighting.Brightness = 1; Lighting.GlobalShadows = true
+    end
+end)
+LocalTab:CreateSlider("TP Walk Speed", 1, 200, 50, function(Value) Toggle.TPWalkSpeed = Value end)
+LocalTab:CreateToggle("TP Walk", function(Value) Toggle.TPWalk = Value end)
+LocalTab:CreateToggle("Infinite Jump", function(Value) Toggle.InfJump = Value end)
+LocalTab:CreateToggle("Noclip", function(Value) Toggle.Noclip = Value end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.01)
+        if Toggle.TPWalk and LPC and LPH then
+            local move = LPH.MoveDirection
+            if move.Magnitude > 0 then
+                LPC:TranslateBy(move * Toggle.TPWalkSpeed * 0.01 * 10)
+            end
+        end
+        if Toggle.Noclip and LPC then
+            for _, c in pairs(LPC:GetDescendants()) do
+                if c:IsA("BasePart") and c.CanCollide then c.CanCollide = false end
+            end
+        end
+    end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if Toggle.InfJump and LPH then LPH:ChangeState(Enum.HumanoidStateType.Jumping) end
+end)
+
+-- ==================== ANTI TAB ====================
+local AntiTab = Window:CreateTab({ Name = "Anti & Notify", Icon = "shield", SearchBar = false })
+AntiTab:CreateSection("Anti")
+AntiTab:CreateToggle("Anti AFK", function(Value)
+    Toggle.AntiAfk = Value
+end)
+AntiTab:CreateToggle("Anti Ragdoll", function(Value) Toggle.AntiRagdoll = Value end)
+
+LocalPlayer.Idled:Connect(function()
+    if Toggle.AntiAfk then
+        game:GetService("VirtualUser"):CaptureController()
+        game:GetService("VirtualUser"):ClickButton2(Vector2.new())
+    end
+end)
+
+-- ==================== RAGEBAIT TAB ====================
+local RageTab = Window:CreateTab({ Name = "Ragebait", Icon = "flame", SearchBar = false })
+RageTab:CreateSection("Beast Ragebait")
+RageTab:CreateToggle("Slow Beast", function(Value) Toggle.SlowBeast = Value end)
+RageTab:CreateToggle("Beast Untie Player", function(Value) Toggle.UntieBeast = Value end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.05)
+        if Toggle.SlowBeast then
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    local c = p.Character
+                    if c:FindFirstChild("BeastPowers") then
+                        local event = c:FindFirstChild("PowersEvent", true)
+                        if event then event:FireServer("Jumped") end
+                    end
+                end
+            end
+        end
+        if Toggle.UntieBeast then
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    local c = p.Character
+                    if c:FindFirstChild("Hammer") then
+                        local event = c:FindFirstChild("HammerEvent", true)
+                        if event then event:FireServer("HammerClick", true) end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ==================== SETTINGS TAB ====================
+local SettingsTab = Window:CreateTab({ Name = "Settings", Icon = "settings", SearchBar = false })
+SettingsTab:CreateSection("Utilities")
+SettingsTab:CreateButton("Unload Script", function()
+    espFolder:Destroy()
+    Window:Destroy()
+end)
+SettingsTab:CreateSection("Discord")
+SettingsTab:CreateButton("📋 Join Our Discord (Click to Copy)", function()
+    pcall(function()
+        if setclipboard then setclipboard(DISCORD_LINK)
+        elseif toclipboard then toclipboard(DISCORD_LINK) end
+    end)
+end)
+SettingsTab:CreateSection("Credits")
+SettingsTab:CreateLabel("Credits: Yvaine & Kyiel")
+SettingsTab:CreateLabel("UI by Khub")
+SettingsTab:CreateLabel("Discord: " .. DISCORD_LINK)
