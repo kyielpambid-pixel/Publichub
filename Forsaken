@@ -1,0 +1,652 @@
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local DISCORD = "https://discord.gg/rU9FyNEUQ7"
+
+local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Angelo-Gitland/Lua-Land-Ui-Library/refs/heads/main/Lua%20Land%20Ui"))()
+
+local Window = lib:CreateWindow({
+	Title = "Forsaken by Khub",
+	Subtitle = "Khub Script Suite",
+	TitleIcon = "swords",
+	Theme = "Default",
+	Intro = { Title = "Forsaken by Khub", Subtitle = "Khub Script Suite", Icon = "swords" },
+})
+
+local Network = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Network")
+local KillersFolder = workspace:WaitForChild("Players"):WaitForChild("Killers")
+
+local autoBlockOn = false
+local autoBlockAudioOn = false
+local detectionRange = 12
+local facingCheckEnabled = true
+local customFacingDot = -0.3
+local blockdelay = 0
+local autoPunch = false
+local aimPunch = false
+local aimPrediction = 4
+local backstab = false
+local backstabRange = 8
+local backstabMode = "Around"
+local visualEnabled = false
+local showKiller = false
+local showSurvivor = false
+local showItems = false
+local showGen = false
+local jumpEnabled = false
+local undetectedMode = false
+local backdis = 1.8
+local autoGen = true
+local autoGenSpeed = 0.08
+local infStamina = true
+local antiStun = false
+local antiSlow = false
+local antiBlindness = true
+local antiSubspace = false
+local voidrushcontrol = false
+local tpSlashEnabled = false
+local tpSlashRange = 8
+local tpSlashDistance = 0.3
+local tpSlashDelay = 0.08
+local tpSlashHoldTime = 0.58
+local tpSlashCooldown = 10
+local lastTpSlashTime = 0
+local lastBackstab = 0
+local BACKSTAB_COOLDOWN = 10
+local BACKSTAB_HOLD = 0.295
+local ORIGINAL_DASH_SPEED = 55
+local isOverrideActive = false
+local overrideConnection = nil
+local AutoTrickEnabled = false
+local activeMonitors = {}
+local descendantAddedConn = nil
+local cachedBlockBtn = nil
+local cachedCooldown = nil
+local soundHooks = {}
+local soundBlockedUntil = {}
+local lastLocalBlockTime = 0
+local AUDIO_LOCAL_COOLDOWN = 0.35
+
+local AttackAnimations = {
+	"131430497821198", "83829782357897", "126830014841198",
+	"126355327951215", "121086746534252", "105458270463374",
+	"127172483138092", "18885919947", "18885909645",
+	"87259391926321", "106014898528300", "86545133269813",
+	"89448354637442", "90499469533503", "116618003477002",
+	"106086955212611", "107640065977686", "77124578197357",
+	"101771617803133", "134958187822107", "111313169447787",
+	"71685573690338", "129843313690921", "97623143664485",
+	"136007065400978", "86096387000557", "108807732150251",
+	"138040001965654", "73502073176819", "86709774283672",
+	"140703210927645", "96173857867228", "121255898612475",
+	"98031287364865", "119462383658044", "77448521277146",
+	"103741352379819", "131696603025265", "122503338277352",
+	"97648548303678", "94162446513587", "84426150435898",
+	"93069721274110", "114620047310688", "97433060861952",
+	"82183356141401", "100592913030351", "121293883585738",
+	"70447634862911", "92173139187970", "106847695270773",
+	"125403313786645", "81639435858902", "137314737492715",
+	"120112897026015", "82113744478546", "118298475669935",
+	"126681776859538", "129976080405072", "109667959938617",
+	"74707328554358", "133336594357903", "86204001129974",
+	"124243639579224", "70371667919898", "131543461321709",
+	"136323728355613", "109230267448394", "122709416391891",
+	"121808371053483", "106538427162796", "88451353906104"
+}
+
+local autoBlockTriggerSounds = {
+	["102228729296384"]=true,["140242176732868"]=true,["112809109188560"]=true,["136323728355613"]=true,
+	["115026634746636"]=true,["84116622032112"]=true,["108907358619313"]=true,["127793641088496"]=true,
+	["86174610237192"]=true,["95079963655241"]=true,["101199185291628"]=true,["119942598489800"]=true,
+	["84307400688050"]=true,["113037804008732"]=true,["105200830849301"]=true,["75330693422988"]=true,
+	["82221759983649"]=true,["81702359653578"]=true,["108610718831698"]=true,["112395455254818"]=true,
+	["109431876587852"]=true,["109348678063422"]=true,["85853080745515"]=true,["12222216"]=true,
+	["105840448036441"]=true,["114742322778642"]=true,["119583605486352"]=true,["79980897195554"]=true,
+	["71805956520207"]=true,["79391273191671"]=true,["89004992452376"]=true,["101553872555606"]=true,
+	["101698569375359"]=true,["106300477136129"]=true,["116581754553533"]=true,["117231507259853"]=true,
+	["119089145505438"]=true,["121954639447247"]=true,["125213046326879"]=true,["131406927389838"]=true
+}
+
+local function refreshUIRefs()
+	local main = PlayerGui:FindFirstChild("MainUI")
+	if main then
+		local ability = main:FindFirstChild("AbilityContainer")
+		cachedBlockBtn = ability and ability:FindFirstChild("Block")
+		cachedCooldown = cachedBlockBtn and cachedBlockBtn:FindFirstChild("CooldownTime")
+	end
+end
+refreshUIRefs()
+
+local function click(btnName)
+	local ui = PlayerGui:FindFirstChild("MainUI")
+	local btn = ui and ui:FindFirstChild("AbilityContainer") and ui.AbilityContainer:FindFirstChild(btnName)
+	if not btn then return end
+	for _, c in ipairs(getconnections(btn.MouseButton1Click)) do pcall(function() c:Fire() end) end
+	pcall(function() btn:Activate() end)
+end
+
+local function isFacing(myRoot, targetRoot)
+	if not facingCheckEnabled then return true end
+	local dir = (myRoot.Position - targetRoot.Position).Unit
+	local dot = targetRoot.CFrame.LookVector:Dot(dir)
+	return dot > customFacingDot
+end
+
+local Welcome = Window:CreateTab({ Name = "Welcome", Icon = "house", SearchBar = false })
+Welcome:CreateSection("Profile")
+Welcome:CreateLabel("Player: " .. LocalPlayer.Name)
+Welcome:CreateLabel("Display: " .. LocalPlayer.DisplayName)
+Welcome:CreateLabel("UserId: " .. tostring(LocalPlayer.UserId))
+Welcome:CreateSection("Credits")
+Welcome:CreateLabel("Credits: Yvaine & Kyiel")
+Welcome:CreateLabel("UI by Khub")
+Welcome:CreateLabel("Discord: " .. DISCORD)
+Welcome:CreateButton("Copy Discord", function()
+	pcall(function()
+		if setclipboard then setclipboard(DISCORD)
+		elseif toclipboard then toclipboard(DISCORD) end
+	end)
+end)
+
+local RoleTab = Window:CreateTab({ Name = "Role", Icon = "user", SearchBar = false })
+RoleTab:CreateSection("Noli")
+RoleTab:CreateToggle("Voidrush Controllable", false, function(v) voidrushcontrol = v end)
+RoleTab:CreateSection("Verronica")
+RoleTab:CreateToggle("Auto Trick", false, function(v) AutoTrickEnabled = v end)
+RoleTab:CreateSection("Shedletsky")
+RoleTab:CreateToggle("Auto TP Slash", false, function(v) tpSlashEnabled = v end)
+RoleTab:CreateInput("TP Slash Range", "8", function(t) tpSlashRange = tonumber(t) or 8 end)
+RoleTab:CreateInput("TP Slash Distance", "0.3", function(t) tpSlashDistance = tonumber(t) or 0.3 end)
+RoleTab:CreateInput("TP Slash Delay", "0.08", function(t) tpSlashDelay = tonumber(t) or 0.08 end)
+
+RunService.RenderStepped:Connect(function()
+	if not voidrushcontrol then return end
+	local char = LocalPlayer.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+	if not char or not humanoid or not rootPart then return end
+	local voidRushState = char:GetAttribute("VoidRushState")
+	if voidRushState == "Dashing" then
+		if not isOverrideActive then
+			isOverrideActive = true
+			overrideConnection = RunService.RenderStepped:Connect(function()
+				local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+				local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				if not h or not r then return end
+				h.WalkSpeed = ORIGINAL_DASH_SPEED
+				h.AutoRotate = false
+				local direction = r.CFrame.LookVector
+				local horizontal = Vector3.new(direction.X, 0, direction.Z)
+				if horizontal.Magnitude > 0 then h:Move(horizontal.Unit) end
+			end)
+		end
+	else
+		if isOverrideActive then
+			isOverrideActive = false
+			if overrideConnection then overrideConnection:Disconnect() overrideConnection = nil end
+			local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+			if h then h.WalkSpeed = 18 h.AutoRotate = true h:Move(Vector3.zero) end
+		end
+	end
+end)
+
+RunService.Heartbeat:Connect(function()
+	if not tpSlashEnabled then return end
+	if tick() - lastTpSlashTime < tpSlashCooldown then return end
+	local myChar = LocalPlayer.Character
+	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+	if not myRoot then return end
+	local targetKiller = nil
+	local closestDist = math.huge
+	for _, killer in ipairs(KillersFolder:GetChildren()) do
+		local kRoot = killer:FindFirstChild("HumanoidRootPart")
+		if kRoot and killer:FindFirstChild("Humanoid") and killer.Humanoid.Health > 0 then
+			local dist = (kRoot.Position - myRoot.Position).Magnitude
+			if dist <= tpSlashRange and dist < closestDist then
+				closestDist = dist
+				targetKiller = killer
+			end
+		end
+	end
+	if targetKiller then
+		local kRoot = targetKiller:FindFirstChild("HumanoidRootPart")
+		if kRoot then
+			lastTpSlashTime = tick()
+			local holdStart = tick()
+			local holdConn
+			holdConn = RunService.Heartbeat:Connect(function()
+				if tick() - holdStart >= tpSlashHoldTime then
+					holdConn:Disconnect()
+					return
+				end
+				if myRoot and kRoot and kRoot.Parent then
+					myRoot.CFrame = CFrame.new(kRoot.Position + kRoot.CFrame.LookVector * tpSlashDistance, kRoot.Position)
+				end
+			end)
+			task.delay(tpSlashDelay, function()
+				if tpSlashEnabled and myRoot and kRoot and kRoot.Parent then
+					click("Slash")
+				end
+			end)
+		end
+	end
+end)
+
+local function monitorHighlight(h)
+	if not h or activeMonitors[h] then return end
+	local connections = {}
+	local cleanup
+	cleanup = function()
+		for _, conn in ipairs(connections) do
+			if conn and conn.Connected then conn:Disconnect() end
+		end
+		activeMonitors[h] = nil
+	end
+	local function trySprint()
+		if not AutoTrickEnabled then return end
+		local char = LocalPlayer.Character
+		if not char then return end
+		local adornee = h.Adornee
+		if adornee and (adornee == char or adornee:IsDescendantOf(char)) then
+			local btn = PlayerGui:FindFirstChild("MainUI") and PlayerGui.MainUI:FindFirstChild("SprintingButton")
+			if btn then
+				for _, c in ipairs(getconnections(btn.MouseButton1Down)) do pcall(c.Fire, c) end
+			end
+		end
+	end
+	local function onChanged()
+		if not AutoTrickEnabled then return end
+		if not h or not h.Parent then cleanup() return end
+		trySprint()
+	end
+	local c = h:GetPropertyChangedSignal("Adornee"):Connect(onChanged)
+	table.insert(connections, c)
+	table.insert(connections, h.AncestryChanged:Connect(function(_, parent)
+		if not parent then cleanup() else onChanged() end
+	end))
+	table.insert(connections, LocalPlayer.CharacterAdded:Connect(onChanged))
+	activeMonitors[h] = cleanup
+	task.spawn(onChanged)
+end
+
+local function startAutoTrick()
+	if descendantAddedConn then return end
+	local behaviorFolder = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Survivors"):WaitForChild("Veeronica"):WaitForChild("Behavior")
+	for _, desc in ipairs(behaviorFolder:GetDescendants()) do
+		if desc:IsA("Highlight") then monitorHighlight(desc) end
+	end
+	descendantAddedConn = behaviorFolder.DescendantAdded:Connect(function(child)
+		if child:IsA("Highlight") then monitorHighlight(child) end
+	end)
+end
+
+local function stopAutoTrick()
+	if descendantAddedConn then descendantAddedConn:Disconnect() descendantAddedConn = nil end
+	for _, cleanup in pairs(activeMonitors) do pcall(cleanup) end
+	activeMonitors = {}
+end
+
+task.spawn(function()
+	while task.wait(0.5) do
+		if AutoTrickEnabled then
+			if not descendantAddedConn then startAutoTrick() end
+		else
+			stopAutoTrick()
+		end
+	end
+end)
+
+local StaminaTab = Window:CreateTab({ Name = "Stamina", Icon = "zap", SearchBar = false })
+StaminaTab:CreateSection("Toggles")
+StaminaTab:CreateToggle("Infinite Stamina", true, function(v) infStamina = v end)
+StaminaTab:CreateToggle("Custom Max Stamina", false, function(v) enableMaxStamina = v end)
+StaminaTab:CreateToggle("Custom Stamina Gain", false, function(v) enableStaminaGain = v end)
+StaminaTab:CreateToggle("Custom Stamina Loss", false, function(v) enableStaminaLoss = v end)
+StaminaTab:CreateToggle("Custom Sprint Speed", false, function(v) enableSprintSpeed = v end)
+StaminaTab:CreateSection("Values")
+StaminaTab:CreateInput("Max Stamina", "100", function(v) customMaxStamina = tonumber(v) or 100 end)
+StaminaTab:CreateInput("Stamina Gain", "20", function(v) customStaminaGain = tonumber(v) or 20 end)
+StaminaTab:CreateInput("Stamina Loss", "5", function(v) customStaminaLoss = tonumber(v) or 5 end)
+StaminaTab:CreateInput("Sprint Speed", "28", function(v) customSprintSpeed = tonumber(v) or 28 end)
+
+task.spawn(function()
+	while task.wait(0.1) do
+		pcall(function()
+			local SprintingModule = require(ReplicatedStorage.Systems.Character.Game.Sprinting)
+			if SprintingModule then
+				if infStamina then
+					SprintingModule.Stamina = SprintingModule.MaxStamina
+				end
+			end
+		end)
+	end
+end)
+
+local AutoBlockTab = Window:CreateTab({ Name = "Autoblock", Icon = "shield", SearchBar = false })
+AutoBlockTab:CreateSection("Auto Block")
+AutoBlockTab:CreateToggle("Auto Block (Animation)", false, function(v) autoBlockOn = v end)
+AutoBlockTab:CreateToggle("Auto Block (Audio)", false, function(v) autoBlockAudioOn = v end)
+AutoBlockTab:CreateInput("Detection Range", "12", function(t) detectionRange = tonumber(t) or 12 end)
+AutoBlockTab:CreateToggle("Enable Facing Check", true, function(v) facingCheckEnabled = v end)
+AutoBlockTab:CreateInput("Facing Check DOT", "-0.3", function(t) customFacingDot = tonumber(t) or -0.3 end)
+AutoBlockTab:CreateInput("Block Delay (seconds)", "0", function(t) blockdelay = tonumber(t) or 0 end)
+AutoBlockTab:CreateSection("Autopunch")
+AutoBlockTab:CreateToggle("Autopunch", false, function(v) autoPunch = v end)
+AutoBlockTab:CreateToggle("Aimpunch", false, function(v) aimPunch = v end)
+AutoBlockTab:CreateSlider("Prediction", 0, 10, 4, function(v) aimPrediction = v end)
+
+RunService.RenderStepped:Connect(function()
+	if not autoBlockOn then return end
+	local myChar = LocalPlayer.Character
+	if not myChar then return end
+	local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+	if not myRoot then return end
+	refreshUIRefs()
+	if cachedCooldown and cachedCooldown.Text ~= "" then return end
+	for _, killer in ipairs(KillersFolder:GetChildren()) do
+		local hrp = killer:FindFirstChild("HumanoidRootPart")
+		if hrp and (hrp.Position - myRoot.Position).Magnitude <= detectionRange then
+			local hum = killer:FindFirstChildOfClass("Humanoid")
+			local animator = hum and hum:FindFirstChildOfClass("Animator")
+			if animator then
+				for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+					local animId = tostring(track.Animation.AnimationId):match("%d+")
+					if animId and table.find(AttackAnimations, animId) then
+						if not facingCheckEnabled or isFacing(myRoot, hrp) then
+							task.wait(blockdelay)
+							click("Block")
+							return
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
+local function extractNumericSoundId(sound)
+	local sid = sound.SoundId
+	if type(sid) ~= "string" then sid = tostring(sid) end
+	return sid:match("rbxassetid://(%d+)") or sid:match("://(%d+)") or sid:match("^(%d+)$")
+end
+
+local function hookSound(sound)
+	if not sound:IsA("Sound") or soundHooks[sound] then return end
+	local id = extractNumericSoundId(sound)
+	if not id or not autoBlockTriggerSounds[id] then return end
+	soundHooks[sound] = true
+	local function tryBlock()
+		if not autoBlockAudioOn then return end
+		if tick() - lastLocalBlockTime < AUDIO_LOCAL_COOLDOWN then return end
+		if soundBlockedUntil[sound] and tick() < soundBlockedUntil[sound] then return end
+		local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		if not myRoot then return end
+		local parent = sound.Parent
+		while parent and not parent:FindFirstChild("HumanoidRootPart") do parent = parent.Parent end
+		local hrp = parent and parent:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
+		if (hrp.Position - myRoot.Position).Magnitude > detectionRange then return end
+		if facingCheckEnabled and not isFacing(myRoot, hrp) then return end
+		refreshUIRefs()
+		if cachedCooldown and cachedCooldown.Text ~= "" then return end
+		task.wait(blockdelay)
+		click("Block")
+		lastLocalBlockTime = tick()
+		soundBlockedUntil[sound] = tick() + 1
+	end
+	sound.Played:Connect(tryBlock)
+	sound:GetPropertyChangedSignal("IsPlaying"):Connect(function() if sound.IsPlaying then tryBlock() end end)
+	if sound.IsPlaying then tryBlock() end
+end
+
+for _, desc in ipairs(KillersFolder:GetDescendants()) do if desc:IsA("Sound") then hookSound(desc) end end
+KillersFolder.DescendantAdded:Connect(function(desc) if desc:IsA("Sound") then hookSound(desc) end end)
+
+RunService.RenderStepped:Connect(function()
+	if not autoPunch then return end
+	local myChar = LocalPlayer.Character
+	if not myChar then return end
+	local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+	if not myRoot then return end
+	local gui = PlayerGui:FindFirstChild("MainUI")
+	local punchBtn = gui and gui:FindFirstChild("AbilityContainer") and gui.AbilityContainer:FindFirstChild("Punch")
+	local charges = punchBtn and punchBtn:FindFirstChild("Charges")
+	if not charges or charges.Text ~= "1" then return end
+	for _, killer in ipairs(KillersFolder:GetChildren()) do
+		local root = killer:FindFirstChild("HumanoidRootPart")
+		if root and (root.Position - myRoot.Position).Magnitude <= 10 then
+			if aimPunch then
+				local humanoid = myChar:FindFirstChildOfClass("Humanoid")
+				if humanoid then humanoid.AutoRotate = false end
+				task.spawn(function()
+					local startTime = tick()
+					while tick() - startTime < 1 do
+						if myRoot and root and root.Parent then
+							local predictedPos = root.Position + (root.CFrame.LookVector * aimPrediction)
+							myRoot.CFrame = CFrame.lookAt(myRoot.Position, predictedPos)
+						end
+						task.wait()
+					end
+					if humanoid then humanoid.AutoRotate = true end
+				end)
+			end
+			click("Punch")
+			break
+		end
+	end
+end)
+
+local BackstabTab = Window:CreateTab({ Name = "AutoBackstab", Icon = "swords", SearchBar = false })
+BackstabTab:CreateSection("Auto Backstab")
+BackstabTab:CreateToggle("AutoBackstab", false, function(v) backstab = v end)
+BackstabTab:CreateInput("Range", "8", function(t) backstabRange = tonumber(t) or 8 end)
+BackstabTab:CreateDropdown({
+	Label = "Mode",
+	Options = {"Behind", "Around"},
+	Default = "Around",
+}, function(v) backstabMode = type(v) == "table" and v[1] or v end)
+BackstabTab:CreateInput("Backdis", "1.8", function(t) backdis = tonumber(t) or 1.8 end)
+
+local function isBehind(hrp, khrp)
+	if (hrp.Position - khrp.Position).Magnitude > backstabRange then return false end
+	if backstabMode == "Around" then return true end
+	return (hrp.Position - khrp.Position):Dot(-khrp.CFrame.LookVector) > 0.5
+end
+
+RunService.Heartbeat:Connect(function()
+	if not backstab or tick() - lastBackstab < BACKSTAB_COOLDOWN then return end
+	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	for _, k in ipairs(KillersFolder:GetChildren()) do
+		local khrp = k:FindFirstChild("HumanoidRootPart")
+		if khrp and isBehind(hrp, khrp) then
+			lastBackstab = tick()
+			click("Dagger")
+			local s = tick()
+			local c
+			c = RunService.Heartbeat:Connect(function()
+				if tick() - s > BACKSTAB_HOLD then c:Disconnect() return end
+				hrp.CFrame = CFrame.new(khrp.Position - khrp.CFrame.LookVector * backdis, khrp.Position)
+			end)
+			break
+		end
+	end
+end)
+
+local VisualTab = Window:CreateTab({ Name = "Visuals", Icon = "eye", SearchBar = false })
+VisualTab:CreateSection("ESP Settings")
+VisualTab:CreateToggle("Highlight", false, function(v) visualEnabled = v end)
+VisualTab:CreateToggle("Killer", false, function(v) showKiller = v end)
+VisualTab:CreateToggle("Survivor", false, function(v) showSurvivor = v end)
+VisualTab:CreateToggle("Generator", false, function(v) showGen = v end)
+VisualTab:CreateToggle("Items (Medkit & BloxyCola)", false, function(v) showItems = v end)
+
+local function addHL(obj, color)
+	if obj:FindFirstChild("VisualHL") then return end
+	local h = Instance.new("Highlight")
+	h.Name = "VisualHL"
+	h.FillTransparency = 1
+	h.OutlineTransparency = 0
+	h.OutlineColor = color
+	h.Parent = obj
+	h.Adornee = obj
+end
+
+local function clearVisual()
+	for _, v in ipairs(workspace:GetDescendants()) do
+		if v:IsA("Highlight") and v.Name == "VisualHL" then v:Destroy() end
+	end
+end
+
+local oldB = Lighting.Brightness
+
+task.spawn(function()
+	while task.wait(1) do
+		if not visualEnabled then clearVisual() Lighting.Brightness = oldB continue end
+		Lighting.Ambient = Color3.new(1,1,1)
+		Lighting.OutdoorAmbient = Color3.new(1,1,1)
+		Lighting.Brightness = 6
+		Lighting.FogEnd = 0
+		clearVisual()
+		local pf = workspace:FindFirstChild("Players")
+		if pf then
+			if showKiller and pf:FindFirstChild("Killers") then
+				for _, k in ipairs(pf.Killers:GetChildren()) do
+					if k:FindFirstChild("Humanoid") then addHL(k, Color3.fromRGB(255,70,70)) end
+				end
+			end
+			if showSurvivor and pf:FindFirstChild("Survivors") then
+				for _, s in ipairs(pf.Survivors:GetChildren()) do
+					if s:FindFirstChild("Humanoid") then addHL(s, Color3.fromRGB(70,255,70)) end
+				end
+			end
+		end
+		if showItems then
+			for _, i in ipairs(workspace:GetDescendants()) do
+				if i.Name == "Medkit" or i.Name == "BloxyCola" then addHL(i, Color3.fromRGB(180,0,255)) end
+			end
+		end
+		if showGen then
+			for _, g in ipairs(workspace:GetDescendants()) do
+				if g.Name:lower():find("generator") then addHL(g, Color3.fromRGB(255,255,0)) end
+			end
+		end
+	end
+end)
+
+local AntiTab = Window:CreateTab({ Name = "Anti", Icon = "ban", SearchBar = false })
+AntiTab:CreateSection("Anti")
+AntiTab:CreateToggle("Anti 1x1x1x1 popups", true, function(v) _G.no1x = v end)
+AntiTab:CreateToggle("Anti Stun", false, function(v) antiStun = v end)
+AntiTab:CreateToggle("Anti Slow", false, function(v) antiSlow = v end)
+AntiTab:CreateToggle("Anti Blindness", true, function(v) antiBlindness = v end)
+AntiTab:CreateToggle("Anti Subspace", false, function(v) antiSubspace = v end)
+AntiTab:CreateToggle("Anti Hidden Stats", false, function(v) getgenv().AntiHiddenStats = v end)
+
+task.spawn(function()
+	while task.wait(0.1) do
+		pcall(function()
+			if antiStun then
+				local char = LocalPlayer.Character
+				if char and char:FindFirstChild("SpeedMultipliers") then
+					local s = char.SpeedMultipliers:FindFirstChild("Stunned")
+					if s then s.Value = 1.2 end
+				end
+			end
+			if antiSlow then
+				local char = LocalPlayer.Character
+				if char and char:FindFirstChild("SpeedMultipliers") then
+					for _, m in ipairs(char.SpeedMultipliers:GetChildren()) do
+						if m.Value < 1 then m.Value = 1.2 end
+					end
+				end
+			end
+			if antiBlindness then
+				local b = Lighting:FindFirstChild("BlindnessBlur")
+				if b then b:Destroy() end
+			end
+			if antiSubspace then
+				local a = Lighting:FindFirstChild("SubspaceVFXBlur")
+				local b = Lighting:FindFirstChild("SubspaceVFXColorCorrection")
+				if a then a:Destroy() end
+				if b then b:Destroy() end
+			end
+		end)
+	end
+end)
+
+task.spawn(function()
+	while task.wait(0.5) do
+		if _G.no1x then
+			pcall(function()
+				local popup = PlayerGui:FindFirstChild("1x1x1x1Popup")
+				if popup then
+					if firesignal then firesignal(popup.MouseButton1Click) end
+				end
+			end)
+		end
+	end
+end)
+
+local OtherTab = Window:CreateTab({ Name = "Other", Icon = "settings", SearchBar = false })
+OtherTab:CreateSection("Misc")
+OtherTab:CreateToggle("Jump", false, function(v) jumpEnabled = v end)
+OtherTab:CreateToggle("Auto Gen", true, function(v) autoGen = v end)
+OtherTab:CreateInput("Gen Speed", "0.08", function(t) autoGenSpeed = tonumber(t) or 0.08 end)
+OtherTab:CreateToggle("Undetected Mode", false, function(v) undetectedMode = v end)
+OtherTab:CreateToggle("Hakari Dance", false, function(v)
+	local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	local humanoid = char:WaitForChild("Humanoid")
+	if v then
+		humanoid.PlatformStand = true
+		pcall(function() Network.RemoteEvent:FireServer("PlayEmote", "Animations", "HakariDance") end)
+	else
+		humanoid.PlatformStand = false
+	end
+end)
+OtherTab:CreateSection("Chat")
+OtherTab:CreateToggle("Always Show Chat", false, function(v)
+	_G.showChat = v
+	if v then
+		task.spawn(function()
+			while _G.showChat and task.wait() do
+				local chatConfig = game:GetService("TextChatService"):FindFirstChildOfClass("ChatWindowConfiguration")
+				if chatConfig then chatConfig.Enabled = true end
+			end
+		end)
+	else
+		local chatConfig = game:GetService("TextChatService"):FindFirstChildOfClass("ChatWindowConfiguration")
+		if chatConfig then chatConfig.Enabled = false end
+	end
+end)
+
+task.spawn(function()
+	while task.wait(0.2) do
+		local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		if hum then hum.JumpPower = jumpEnabled and 60 or 0 end
+	end
+end)
+
+local ConfigTab = Window:CreateTab({ Name = "Config", Icon = "folder", SearchBar = false })
+ConfigTab:CreateSection("Unload")
+ConfigTab:CreateButton("Unload GUI", function() Window:Destroy() end)
+ConfigTab:CreateLabel("Click to destroy UI")
+ConfigTab:CreateSection("Credits")
+ConfigTab:CreateLabel("Credits: Yvaine & Kyiel")
+ConfigTab:CreateLabel("UI by Khub")
+ConfigTab:CreateLabel("Discord: " .. DISCORD)
+ConfigTab:CreateButton("Copy Discord", function()
+	pcall(function()
+		if setclipboard then setclipboard(DISCORD)
+		elseif toclipboard then toclipboard(DISCORD) end
+	end)
+end)
+
+print("Khub | Forsaken loaded")
