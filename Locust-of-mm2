@@ -1,0 +1,949 @@
+--[[
+  ╔══════════════════════════════════════════════════════╗
+  ║   MM2 OF THE LOCUST  ·  KHUB Edition  v2             ║
+  ║   Compact header · ESP · Orbiting dots               ║
+  ║   Credits: Yvaine & Kyiel · UI base by Khub         ║
+  ║   RightShift / RightCtrl / K = toggle               ║
+  ╚══════════════════════════════════════════════════════╝
+]]
+
+repeat task.wait() until game:IsLoaded()
+
+local Players          = game:GetService("Players")
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui          = game:GetService("CoreGui")
+local RunService       = game:GetService("RunService")
+local RS               = game:GetService("ReplicatedStorage")
+local Camera           = workspace.CurrentCamera
+
+local player  = Players.LocalPlayer
+local LOGO_ID = "rbxassetid://140466936910510"
+
+local THEME = {
+    bg      = Color3.fromRGB(8,   14,  8),
+    rail    = Color3.fromRGB(12,  20,  12),
+    card    = Color3.fromRGB(16,  26,  16),
+    accent  = Color3.fromRGB(60,  220, 80),
+    red     = Color3.fromRGB(210, 40,  40),
+    gold    = Color3.fromRGB(120, 255, 100),
+    text    = Color3.fromRGB(210, 240, 210),
+    dim     = Color3.fromRGB(100, 160, 100),
+    mute    = Color3.fromRGB(60,  110, 60),
+    stroke  = Color3.fromRGB(40,  120, 40),
+    redglow = Color3.fromRGB(255, 30,  30),
+}
+
+-- ── Cleanup ───────────────────────────────────────────────────────────────────
+local ParentTarget = (gethui and gethui()) or CoreGui
+pcall(function()
+    local old = ParentTarget:FindFirstChild("KHUB_Locust")
+    if old then old:Destroy() end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name           = "KHUB_Locust"
+ScreenGui.ResetOnSpawn   = false
+ScreenGui.IgnoreGuiInset = true
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then
+    ScreenGui.Parent = player:WaitForChild("PlayerGui")
+end
+
+-- ── Helpers ───────────────────────────────────────────────────────────────────
+local function corner(p, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 10)
+    c.Parent = p
+    return c
+end
+
+local function mkstroke(p, col, th, tr)
+    local s = Instance.new("UIStroke")
+    s.Color        = col or THEME.stroke
+    s.Thickness    = th  or 1.2
+    s.Transparency = tr  or 0.4
+    s.Parent       = p
+    return s
+end
+
+-- ── Window ────────────────────────────────────────────────────────────────────
+-- HEADER_H shrunk: was 155, now 72 — art is tighter, less dead space
+local HEADER_H = 72
+
+local Win = Instance.new("Frame")
+Win.Name                   = "Window"
+Win.Size                   = UDim2.new(0, 520, 0, 380)
+Win.Position               = UDim2.new(0.5, -260, 0.5, -190)
+Win.BackgroundColor3       = THEME.bg
+Win.BackgroundTransparency = 0.06
+Win.BorderSizePixel        = 0
+Win.ClipsDescendants       = true
+Win.Active                 = true
+Win.Parent                 = ScreenGui
+corner(Win, 12)
+
+local winStroke = mkstroke(Win, THEME.accent, 2, 0.4)
+task.spawn(function()
+    local t = 0
+    while winStroke.Parent do
+        t = t + task.wait(0.04)
+        local s = math.abs(math.sin(t * 1.8))
+        if math.floor(t / 3) % 2 == 0 then
+            winStroke.Color        = Color3.fromRGB(30, 200 + s * 55, 30)
+            winStroke.Transparency = 0.35 + s * 0.2
+        else
+            winStroke.Color        = Color3.fromRGB(200 + s * 55, 20, 20)
+            winStroke.Transparency = 0.3 + s * 0.25
+        end
+    end
+end)
+
+-- ── Top accent bar ────────────────────────────────────────────────────────────
+local TopAccent = Instance.new("Frame")
+TopAccent.Size             = UDim2.new(1, 0, 0, 3)
+TopAccent.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TopAccent.BorderSizePixel  = 0
+TopAccent.ZIndex           = 20
+TopAccent.Parent           = Win
+local topGrad = Instance.new("UIGradient")
+topGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,   Color3.fromRGB(20,  180, 20)),
+    ColorSequenceKeypoint.new(0.4, Color3.fromRGB(200, 30,  30)),
+    ColorSequenceKeypoint.new(0.7, Color3.fromRGB(40,  220, 40)),
+    ColorSequenceKeypoint.new(1,   Color3.fromRGB(20,  180, 20)),
+})
+topGrad.Parent = TopAccent
+task.spawn(function()
+    local t = 0
+    while TopAccent.Parent do
+        t = t + task.wait(0.03)
+        topGrad.Offset = Vector2.new(math.sin(t * 1.1) * 0.9, 0)
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════════
+-- ── COMPACT HEADER BAND (title + locust art side by side) ──────────
+-- ═══════════════════════════════════════════════════════════════════
+-- The old design stacked title then art vertically (155px).
+-- New design: title left, art right, both inside 72px band.
+-- Drag covers this entire band so Jason can grab anywhere up top.
+
+local HeaderBand = Instance.new("Frame")
+HeaderBand.Name                   = "HeaderBand"
+HeaderBand.Size                   = UDim2.new(1, 0, 0, HEADER_H)
+HeaderBand.Position               = UDim2.new(0, 0, 0, 3)   -- below accent bar
+HeaderBand.BackgroundTransparency = 1
+HeaderBand.ZIndex                 = 10
+HeaderBand.Active                 = true   -- receives input for drag
+HeaderBand.Parent                 = Win
+
+-- Title (left side of header band)
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size                   = UDim2.new(0, 300, 0, 44)
+TitleLabel.Position               = UDim2.new(0, 12, 0, 14)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text                   = "MM2 OF THE LOCUST"
+TitleLabel.Font                   = Enum.Font.GothamBold
+TitleLabel.TextSize               = 19
+TitleLabel.TextColor3             = THEME.gold
+TitleLabel.TextXAlignment         = Enum.TextXAlignment.Left
+TitleLabel.ZIndex                 = 12
+TitleLabel.Parent                 = HeaderBand
+mkstroke(TitleLabel, THEME.accent, 1.5, 0.1)
+
+local titleGrad = Instance.new("UIGradient")
+titleGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,    Color3.fromRGB(40,  255, 60)),
+    ColorSequenceKeypoint.new(0.35, Color3.fromRGB(200, 255, 200)),
+    ColorSequenceKeypoint.new(0.65, Color3.fromRGB(255, 60,  40)),
+    ColorSequenceKeypoint.new(1,    Color3.fromRGB(40,  255, 60)),
+})
+titleGrad.Parent = TitleLabel
+
+task.spawn(function()
+    local t = 0
+    while TitleLabel.Parent do
+        t = t + task.wait(0.04)
+        titleGrad.Offset   = Vector2.new(math.sin(t * 0.9) * 0.6, 0)
+        titleGrad.Rotation = math.sin(t * 0.4) * 8
+    end
+end)
+
+local SubLabel = Instance.new("TextLabel")
+SubLabel.Size                   = UDim2.new(0, 240, 0, 16)
+SubLabel.Position               = UDim2.new(0, 13, 0, 52)
+SubLabel.BackgroundTransparency = 1
+SubLabel.Text                   = "KHUB Edition  ·  RightShift / K = toggle"
+SubLabel.Font                   = Enum.Font.Code
+SubLabel.TextSize               = 9
+SubLabel.TextColor3             = THEME.mute
+SubLabel.TextXAlignment         = Enum.TextXAlignment.Left
+SubLabel.ZIndex                 = 12
+SubLabel.Parent                 = HeaderBand
+
+-- ── Mini locust art (right side of header band) ───────────────────
+-- Scaled down from original, lives at X=350 inside HeaderBand
+local LocustRoot = Instance.new("Frame")
+LocustRoot.Name                   = "LocustArt"
+LocustRoot.Size                   = UDim2.fromOffset(110, 60)
+LocustRoot.Position               = UDim2.fromOffset(370, 6)
+LocustRoot.BackgroundTransparency = 1
+LocustRoot.ZIndex                 = 11
+LocustRoot.Parent                 = HeaderBand
+
+local function lpart(parent, x, y, w, h, col, zidx, radius)
+    local f = Instance.new("Frame")
+    f.Size                   = UDim2.fromOffset(w, h)
+    f.Position               = UDim2.fromOffset(x, y)
+    f.BackgroundColor3       = col
+    f.BackgroundTransparency = 0.0
+    f.BorderSizePixel        = 0
+    f.ZIndex                 = zidx or 12
+    f.Parent                 = parent
+    if radius then corner(f, radius) end
+    return f
+end
+
+local body   = lpart(LocustRoot, 36, 18, 34, 22, THEME.red, 13, 4)
+mkstroke(body, Color3.fromRGB(255, 80, 80), 1, 0.3)
+local head   = lpart(LocustRoot, 63, 22, 15, 15, Color3.fromRGB(180,25,25), 13, 7)
+local eye    = lpart(LocustRoot, 70, 25, 4,  4,  Color3.fromRGB(255,255,80), 14, 2)
+local wingUL = lpart(LocustRoot, 10, 8,  28, 12, Color3.fromRGB(20,160,30), 12, 3)
+mkstroke(wingUL, Color3.fromRGB(60,255,80), 1, 0.15)
+local wingUR = lpart(LocustRoot, 68, 8,  28, 12, Color3.fromRGB(20,160,30), 12, 3)
+mkstroke(wingUR, Color3.fromRGB(60,255,80), 1, 0.15)
+local wingLL = lpart(LocustRoot, 15, 22, 22, 8,  Color3.fromRGB(15,120,25), 12, 3)
+local wingLR = lpart(LocustRoot, 69, 22, 22, 8,  Color3.fromRGB(15,120,25), 12, 3)
+local antL   = lpart(LocustRoot, 52, 4,  2,  16, Color3.fromRGB(40,220,60), 13)
+antL.Rotation = -30
+local antR   = lpart(LocustRoot, 70, 4,  2,  16, Color3.fromRGB(40,220,60), 13)
+antR.Rotation = 30
+
+local legDef = {
+    {26,24,2,14,-40},{22,29,2,12,-55},{20,34,2,10,-65},
+    {80,24,2,14,40}, {82,29,2,12,55}, {84,34,2,10,65},
+}
+local legs = {}
+for _, d in ipairs(legDef) do
+    local l = lpart(LocustRoot, d[1], d[2], d[3], d[4], Color3.fromRGB(30,200,50), 12)
+    l.Rotation = d[5]
+    table.insert(legs, l)
+end
+
+task.spawn(function()
+    local t = 0
+    while LocustRoot.Parent do
+        t = t + task.wait(0.04)
+        local flap = math.sin(t * 6) * 4
+        wingUL.Size = UDim2.fromOffset(28, math.clamp(12+flap, 5, 18))
+        wingUR.Size = UDim2.fromOffset(28, math.clamp(12+flap, 5, 18))
+        wingLL.Size = UDim2.fromOffset(22, math.clamp(8-flap*0.5, 3, 13))
+        wingLR.Size = UDim2.fromOffset(22, math.clamp(8-flap*0.5, 3, 13))
+        local glow = 0.05 + math.abs(math.sin(t*5))*0.15
+        wingUL.BackgroundTransparency = glow
+        wingUR.BackgroundTransparency = glow
+        wingLL.BackgroundTransparency = glow+0.05
+        wingLR.BackgroundTransparency = glow+0.05
+        for i, leg in ipairs(legs) do
+            leg.Rotation = legDef[i][5] + math.sin(t*8+i*0.9)*4
+        end
+        body.BackgroundColor3 = Color3.fromRGB(
+            180 + math.abs(math.sin(t*3))*30,
+            10  + math.abs(math.sin(t*3))*10,
+            10
+        )
+        -- subtle hover bob
+        LocustRoot.Position = UDim2.fromOffset(370, 6 + math.sin(t*2.2)*3)
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════════
+-- ── ORBITING DOTS (ported from Welcome script) ──────────────────────
+-- 22 rainbow dots orbiting inside the window, behind content
+-- ═══════════════════════════════════════════════════════════════════
+local DOT_COUNT = 22
+local DOT_COLS  = {
+    Color3.fromRGB(255, 80,  80),
+    Color3.fromRGB(255, 170, 50),
+    Color3.fromRGB(80,  255, 120),
+    Color3.fromRGB(60,  160, 255),
+    Color3.fromRGB(200, 90,  255),
+    Color3.fromRGB(255, 230, 60),
+}
+local dots = {}
+for i = 1, DOT_COUNT do
+    local d = Instance.new("Frame")
+    d.Size                   = UDim2.fromOffset(5, 5)
+    d.BackgroundColor3       = DOT_COLS[(i % #DOT_COLS) + 1]
+    d.BackgroundTransparency = 0.25
+    d.BorderSizePixel        = 0
+    d.ZIndex                 = 4   -- behind content (rail = 5)
+    d.Active                 = false
+    d.Parent                 = Win
+    corner(d, 99)
+    dots[i] = d
+end
+
+task.spawn(function()
+    local t  = 0
+    local CX, CY = 260, 190
+    local RX, RY = 240, 155
+    while dots[1].Parent do
+        t = t + task.wait(0.03)
+        for i, d in ipairs(dots) do
+            local angle = t * 0.85 + (i / DOT_COUNT) * (math.pi * 2)
+            local rx = i % 2 == 0 and RX or RX - 20
+            local ry = i % 2 == 0 and RY or RY - 14
+            local px = CX + math.cos(angle) * rx - 2.5
+            local py = CY + math.sin(angle) * ry - 2.5
+            d.Position               = UDim2.fromOffset(px, py)
+            d.BackgroundTransparency = 0.15 + math.sin(angle*2+t)*0.22
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════════
+-- ── LAYOUT: Rail + Main ────────────────────────────────────────────
+-- ═══════════════════════════════════════════════════════════════════
+local Rail = Instance.new("Frame")
+Rail.Name                   = "Rail"
+Rail.Size                   = UDim2.new(0, 138, 1, -HEADER_H - 3)
+Rail.Position               = UDim2.new(0, 0, 0, HEADER_H + 3)
+Rail.BackgroundColor3       = THEME.rail
+Rail.BackgroundTransparency = 0.06
+Rail.BorderSizePixel        = 0
+Rail.ZIndex                 = 5
+Rail.ClipsDescendants       = true
+Rail.Parent                 = Win
+
+local BrandLogo = Instance.new("ImageLabel")
+BrandLogo.Size                   = UDim2.fromOffset(22, 22)
+BrandLogo.Position               = UDim2.fromOffset(8, 8)
+BrandLogo.BackgroundTransparency = 1
+BrandLogo.Image                  = LOGO_ID
+BrandLogo.ZIndex                 = 7
+BrandLogo.Parent                 = Rail
+
+local BrandTitle = Instance.new("TextLabel")
+BrandTitle.Size                  = UDim2.new(1, -36, 0, 14)
+BrandTitle.Position              = UDim2.fromOffset(34, 8)
+BrandTitle.BackgroundTransparency= 1
+BrandTitle.Text                  = "KHUB"
+BrandTitle.Font                  = Enum.Font.GothamBold
+BrandTitle.TextSize              = 12
+BrandTitle.TextColor3            = THEME.text
+BrandTitle.TextXAlignment        = Enum.TextXAlignment.Left
+BrandTitle.ZIndex                = 7
+BrandTitle.Parent                = Rail
+
+local BrandSub = Instance.new("TextLabel")
+BrandSub.Size                    = UDim2.new(1, -36, 0, 11)
+BrandSub.Position                = UDim2.fromOffset(34, 23)
+BrandSub.BackgroundTransparency  = 1
+BrandSub.Text                    = "MM2 Locust"
+BrandSub.Font                    = Enum.Font.Code
+BrandSub.TextSize                = 9
+BrandSub.TextColor3              = THEME.mute
+BrandSub.TextXAlignment          = Enum.TextXAlignment.Left
+BrandSub.ZIndex                  = 7
+BrandSub.Parent                  = Rail
+
+local div = Instance.new("Frame")
+div.Size                 = UDim2.new(1, -12, 0, 1)
+div.Position             = UDim2.fromOffset(6, 44)
+div.BackgroundColor3     = THEME.stroke
+div.BackgroundTransparency = 0.4
+div.BorderSizePixel      = 0
+div.ZIndex               = 7
+div.Parent               = Rail
+
+local railBtns = {
+    { "🦗 Locust",   "locust" },
+    { "🗺️ Teleport", "tele"  },
+    { "👁️ Reveal",   "reveal" },
+    { "💀 Kill",     "kill"   },
+    { "🔲 ESP",      "esp"    },
+}
+local currentTab = "locust"
+local tabBtnRefs = {}
+
+local Main = Instance.new("Frame")
+Main.Name                   = "Main"
+Main.Size                   = UDim2.new(1, -138, 1, -HEADER_H - 3)
+Main.Position               = UDim2.new(0, 138, 0, HEADER_H + 3)
+Main.BackgroundTransparency = 1
+Main.ZIndex                 = 5
+Main.Parent                 = Win
+
+local Head = Instance.new("Frame")
+Head.Size                   = UDim2.new(1, 0, 0, 38)
+Head.BackgroundColor3       = THEME.rail
+Head.BackgroundTransparency = 0.08
+Head.BorderSizePixel        = 0
+Head.ZIndex                 = 6
+Head.Parent                 = Main
+
+local HeadTitle = Instance.new("TextLabel")
+HeadTitle.Size                = UDim2.new(1, -50, 0, 38)
+HeadTitle.Position            = UDim2.fromOffset(10, 0)
+HeadTitle.BackgroundTransparency = 1
+HeadTitle.Text                = "Locust Panel"
+HeadTitle.Font                = Enum.Font.GothamBold
+HeadTitle.TextSize            = 13
+HeadTitle.TextColor3          = THEME.accent
+HeadTitle.TextXAlignment      = Enum.TextXAlignment.Left
+HeadTitle.ZIndex              = 7
+HeadTitle.Parent              = Head
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size                   = UDim2.fromOffset(26, 22)
+MinBtn.Position               = UDim2.new(1, -30, 0.5, -11)
+MinBtn.BackgroundColor3       = Color3.fromRGB(30, 50, 30)
+MinBtn.Text                   = "–"
+MinBtn.Font                   = Enum.Font.GothamBold
+MinBtn.TextSize               = 14
+MinBtn.TextColor3             = THEME.text
+MinBtn.ZIndex                 = 8
+MinBtn.Parent                 = Head
+corner(MinBtn, 6)
+
+local ContentArea = Instance.new("Frame")
+ContentArea.Size               = UDim2.new(1, -10, 1, -46)
+ContentArea.Position           = UDim2.new(0, 5, 0, 42)
+ContentArea.BackgroundTransparency = 1
+ContentArea.ZIndex             = 6
+ContentArea.ClipsDescendants   = true
+ContentArea.Parent             = Main
+
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size               = UDim2.new(1, 0, 0, 18)
+StatusLabel.Position           = UDim2.new(0, 0, 1, -22)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text               = "idle."
+StatusLabel.Font               = Enum.Font.Code
+StatusLabel.TextSize           = 10
+StatusLabel.TextColor3         = THEME.dim
+StatusLabel.TextXAlignment     = Enum.TextXAlignment.Center
+StatusLabel.ZIndex             = 12
+StatusLabel.Parent             = ContentArea
+
+local function setStatus(msg, col)
+    StatusLabel.Text       = msg
+    StatusLabel.TextColor3 = col or THEME.dim
+end
+
+-- ── Pages ──────────────────────────────────────────────────────────
+local pages = {}
+local function makePage(name)
+    local f = Instance.new("ScrollingFrame")
+    f.Name                    = name
+    f.Size                    = UDim2.new(1, 0, 1, -22)
+    f.BackgroundTransparency  = 1
+    f.BorderSizePixel         = 0
+    f.ScrollBarThickness      = 3
+    f.ScrollBarImageColor3    = THEME.mute
+    f.CanvasSize              = UDim2.new(0, 0, 0, 0)
+    f.AutomaticCanvasSize     = Enum.AutomaticSize.Y
+    f.Visible                 = false
+    f.ZIndex                  = 7
+    f.Parent                  = ContentArea
+    pages[name] = f
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop    = UDim.new(0, 5)
+    pad.PaddingBottom = UDim.new(0, 5)
+    pad.Parent        = f
+    local layout = Instance.new("UIListLayout")
+    layout.Padding   = UDim.new(0, 6)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent    = f
+    return f
+end
+
+local pgLocust = makePage("locust")
+local pgTele   = makePage("tele")
+local pgReveal = makePage("reveal")
+local pgKill   = makePage("kill")
+local pgEsp    = makePage("esp")
+
+local function exBtn(parent, label_text, col, callback, order)
+    local b = Instance.new("TextButton")
+    b.Size              = UDim2.new(1, -4, 0, 34)
+    b.BackgroundColor3  = col or Color3.fromRGB(20, 50, 20)
+    b.Text              = label_text
+    b.Font              = Enum.Font.GothamBold
+    b.TextSize          = 12
+    b.TextColor3        = THEME.text
+    b.ZIndex            = 9
+    b.AutoButtonColor   = false
+    b.LayoutOrder       = order or 1
+    b.Parent            = parent
+    corner(b, 7)
+    mkstroke(b, THEME.stroke, 1, 0.4)
+    b.MouseButton1Click:Connect(function()
+        b.BackgroundColor3 = Color3.fromRGB(40, 120, 40)
+        task.delay(0.18, function() b.BackgroundColor3 = col or Color3.fromRGB(20,50,20) end)
+        callback()
+    end)
+    return b
+end
+
+local function descLabel(parent, text, order)
+    local l = Instance.new("TextLabel")
+    l.Size                    = UDim2.new(1, -4, 0, 28)
+    l.BackgroundColor3        = THEME.card
+    l.BackgroundTransparency  = 0.1
+    l.Text                    = text
+    l.Font                    = Enum.Font.Code
+    l.TextSize                = 9
+    l.TextColor3              = THEME.dim
+    l.TextXAlignment          = Enum.TextXAlignment.Left
+    l.TextWrapped             = true
+    l.ZIndex                  = 9
+    l.LayoutOrder             = order or 2
+    l.Parent                  = parent
+    corner(l, 5)
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 6)
+    pad.Parent      = l
+    return l
+end
+
+-- ── PAGE: LOCUST ────────────────────────────────────────────────────
+descLabel(pgLocust, "Fires RoleReveal (Innocent) + AllPlayersRevealed via firesignal", 1)
+
+exBtn(pgLocust, "🦗  Force Role: Innocent", Color3.fromRGB(18,55,18), function()
+    local ok, err = pcall(function()
+        firesignal(RS.NightfallGame.Remotes.RoleReveal.OnClientEvent,
+            "Innocent", 4, 1788585368.4805, nil, false)
+    end)
+    setStatus(ok and "✓ RoleReveal → Innocent" or "✗ "..tostring(err), ok and THEME.accent or THEME.red)
+end, 2)
+
+exBtn(pgLocust, "🕵️  Force Role: Murderer", Color3.fromRGB(55,14,14), function()
+    local ok, err = pcall(function()
+        firesignal(RS.NightfallGame.Remotes.RoleReveal.OnClientEvent,
+            "Murderer", 4, tick(), nil, false)
+    end)
+    setStatus(ok and "✓ RoleReveal → Murderer" or "✗ "..tostring(err), ok and THEME.accent or THEME.red)
+end, 3)
+
+exBtn(pgLocust, "👁️  Trigger MurdererCrawl Visual", Color3.fromRGB(40,14,14), function()
+    local ok, err = pcall(function()
+        firesignal(RS.NightfallGame.Remotes.VisualEffect.OnClientEvent,
+            "MurdererCrawl", { UserId = player.UserId })
+    end)
+    setStatus(ok and "✓ MurdererCrawl fired" or "✗ "..tostring(err), ok and THEME.accent or THEME.red)
+end, 4)
+
+exBtn(pgLocust, "🔦  AllPlayers Revealed (6s)", Color3.fromRGB(14,50,30), function()
+    local ok, err = pcall(function()
+        firesignal(RS.NightfallGame.Remotes.VisualEffect.OnClientEvent,
+            "AllPlayersRevealed", { Duration = 6 })
+    end)
+    setStatus(ok and "✓ AllPlayersRevealed 6s" or "✗ "..tostring(err), ok and THEME.accent or THEME.red)
+end, 5)
+
+-- ── PAGE: TELEPORT ──────────────────────────────────────────────────
+local SAFE_VEC = Vector3.new(336.38,  51.59,  1051.44)
+local KEY_VEC  = Vector3.new(915.327, 93.733, -9.198)
+
+local vecCard = Instance.new("Frame")
+vecCard.Size                   = UDim2.new(1,-4,0,52)
+vecCard.BackgroundColor3       = THEME.card
+vecCard.BackgroundTransparency = 0.05
+vecCard.BorderSizePixel        = 0
+vecCard.ZIndex                 = 9
+vecCard.LayoutOrder            = 1
+vecCard.Parent                 = pgTele
+corner(vecCard, 8)
+mkstroke(vecCard, THEME.accent, 1, 0.3)
+local vt = Instance.new("TextLabel")
+vt.Size=UDim2.new(1,-10,0,16) vt.Position=UDim2.fromOffset(6,4)
+vt.BackgroundTransparency=1 vt.Text="🗺️  SAFE PLACE VECTOR (from RSPY dump)"
+vt.Font=Enum.Font.GothamBold vt.TextSize=10 vt.TextColor3=THEME.gold
+vt.TextXAlignment=Enum.TextXAlignment.Left vt.ZIndex=10 vt.Parent=vecCard
+local vv = Instance.new("TextLabel")
+vv.Size=UDim2.new(1,-10,0,14) vv.Position=UDim2.fromOffset(6,20)
+vv.BackgroundTransparency=1
+vv.Text=string.format("X:%.2f  Y:%.2f  Z:%.2f",SAFE_VEC.X,SAFE_VEC.Y,SAFE_VEC.Z)
+vv.Font=Enum.Font.Code vv.TextSize=10 vv.TextColor3=THEME.accent
+vv.TextXAlignment=Enum.TextXAlignment.Left vv.ZIndex=10 vv.Parent=vecCard
+local vv2 = Instance.new("TextLabel")
+vv2.Size=UDim2.new(1,-10,0,13) vv2.Position=UDim2.fromOffset(6,35)
+vv2.BackgroundTransparency=1 vv2.Text="KeyCollected anchor: X:915 Y:93 Z:-9"
+vv2.Font=Enum.Font.Code vv2.TextSize=9 vv2.TextColor3=THEME.mute
+vv2.TextXAlignment=Enum.TextXAlignment.Left vv2.ZIndex=10 vv2.Parent=vecCard
+
+exBtn(pgTele,"⚡  Teleport → Safe Place",Color3.fromRGB(14,55,30),function()
+    local char=player.Character if not char then setStatus("✗ No character",THEME.red) return end
+    local hrp=char:FindFirstChild("HumanoidRootPart") if not hrp then setStatus("✗ No HRP",THEME.red) return end
+    hrp.CFrame=CFrame.new(SAFE_VEC)
+    setStatus(string.format("✓ TP → %.1f %.1f %.1f",SAFE_VEC.X,SAFE_VEC.Y,SAFE_VEC.Z),THEME.accent)
+end,2)
+
+exBtn(pgTele,"🗝️  Teleport → Key Spawn",Color3.fromRGB(40,40,14),function()
+    local char=player.Character if not char then setStatus("✗ No character",THEME.red) return end
+    local hrp=char:FindFirstChild("HumanoidRootPart") if not hrp then setStatus("✗ No HRP",THEME.red) return end
+    hrp.CFrame=CFrame.new(KEY_VEC)
+    setStatus("✓ TP → Key spawn",THEME.accent)
+end,3)
+
+exBtn(pgTele,"🔑  Fire KeyCollected Event",Color3.fromRGB(30,30,14),function()
+    local ok,err=pcall(function()
+        firesignal(RS.NightfallGame.Remotes.KeyCollected.OnClientEvent, KEY_VEC, 7, 30)
+    end)
+    setStatus(ok and "✓ KeyCollected fired" or "✗ "..tostring(err), ok and THEME.accent or THEME.red)
+end,4)
+
+-- ── PAGE: REVEAL ────────────────────────────────────────────────────
+descLabel(pgReveal,"Injects RoundResult + AllPlayersRevealed client-side",1)
+
+exBtn(pgReveal,"🏆  Fire RoundResult: Innocents Win",Color3.fromRGB(14,50,20),function()
+    local ok,err=pcall(function()
+        firesignal(RS.NightfallGame.Remotes.RoundResult.OnClientEvent,{
+            Message="Dawn arrived. The survivors escaped.",
+            Winner="Innocents", Survivors={player.Name}
+        })
+    end)
+    setStatus(ok and "✓ RoundResult → Innocents" or "✗ "..tostring(err), ok and THEME.accent or THEME.red)
+end,2)
+
+exBtn(pgReveal,"💀  Fire RoundResult: Murderer Win",Color3.fromRGB(50,14,14),function()
+    local ok,err=pcall(function()
+        firesignal(RS.NightfallGame.Remotes.RoundResult.OnClientEvent,{
+            Message="The Locust consumed them all.",
+            Winner="Murderer", Survivors={}
+        })
+    end)
+    setStatus(ok and "✓ RoundResult → Murderer" or "✗ "..tostring(err), ok and THEME.accent or THEME.red)
+end,3)
+
+exBtn(pgReveal,"👁️  AllPlayers Revealed (12s)",Color3.fromRGB(14,40,40),function()
+    local ok,err=pcall(function()
+        firesignal(RS.NightfallGame.Remotes.VisualEffect.OnClientEvent,
+            "AllPlayersRevealed",{Duration=12})
+    end)
+    setStatus(ok and "✓ Revealed 12s" or "✗ "..tostring(err), ok and THEME.accent or THEME.red)
+end,4)
+
+-- ── PAGE: KILL ──────────────────────────────────────────────────────
+descLabel(pgKill,"Fires LocustKillBridge RemoteEvent. Path: RS.LocustKillBridge",1)
+
+exBtn(pgKill,"🦗  Fire LocustKillBridge",Color3.fromRGB(55,10,10),function()
+    local ok,err=pcall(function()
+        local bridge=RS:WaitForChild("LocustKillBridge",3)
+        if not bridge then error("LocustKillBridge not found") end
+        if bridge:IsA("RemoteEvent") then bridge:FireServer()
+        elseif bridge:IsA("BindableEvent") then bridge:Fire()
+        else firesignal(bridge.OnClientEvent) end
+    end)
+    setStatus(ok and "✓ LocustKillBridge fired" or "✗ "..tostring(err), ok and THEME.accent or THEME.red)
+end,2)
+
+exBtn(pgKill,"🧬  Get LocustElite Skin Ref",Color3.fromRGB(20,40,14),function()
+    local ok,err=pcall(function()
+        local elite=RS.NightfallGame.Assets.MonsterSkins.LocustElite
+        setStatus("✓ LocustElite: "..elite.ClassName,THEME.gold)
+    end)
+    if not ok then setStatus("✗ "..tostring(err),THEME.red) end
+end,3)
+
+exBtn(pgKill,"🧬  Get LocustEntity Skin Ref",Color3.fromRGB(20,40,14),function()
+    local ok,err=pcall(function()
+        local entity=RS.NightfallGame.Assets.MonsterSkins.LocustEntity
+        setStatus("✓ LocustEntity: "..entity.ClassName,THEME.gold)
+    end)
+    if not ok then setStatus("✗ "..tostring(err),THEME.red) end
+end,4)
+
+-- ═══════════════════════════════════════════════════════════════════
+-- ── PAGE: ESP ──────────────────────────────────────────────────────
+-- BillboardGui name tags drawn on every player's HumanoidRootPart.
+-- Box drawn via a 2D Frame border technique on the Highlight instance
+-- (Roblox executor environments have Highlight; fallback is Billboard).
+-- Color: green for same-team / unknown, red for flagged Murderer role.
+-- ═══════════════════════════════════════════════════════════════════
+descLabel(pgEsp,
+    "Player ESP: name tags + highlights. Green = innocent side, Red = murderer flagged.",1)
+
+local espEnabled   = false
+local espHighlights = {}  -- [Player] = Highlight instance
+local espBills      = {}  -- [Player] = BillboardGui name tag
+
+-- role tracking: firesignal intercept sets this
+local murdererUserId = nil
+
+-- intercept RoleReveal so ESP knows who the murderer is
+pcall(function()
+    local ev = RS.NightfallGame.Remotes.RoleReveal
+    ev.OnClientEvent:Connect(function(role, ...)
+        if role == "Murderer" then
+            murdererUserId = player.UserId   -- local player got murderer
+        end
+    end)
+end)
+
+local function espColorFor(p)
+    if murdererUserId and p.UserId == murdererUserId then
+        return Color3.fromRGB(255, 40, 40)
+    end
+    return Color3.fromRGB(40, 255, 80)
+end
+
+local function buildEspFor(p)
+    if p == player then return end  -- skip self
+    local function tryAttach()
+        local char = p.Character or p.CharacterAdded:Wait()
+        local hrp  = char:WaitForChild("HumanoidRootPart", 10)
+        if not hrp then return end
+
+        -- Highlight (outline + fill)
+        local hl = Instance.new("Highlight")
+        hl.Adornee        = char
+        hl.OutlineColor   = espColorFor(p)
+        hl.FillColor      = espColorFor(p)
+        hl.FillTransparency    = 0.78
+        hl.OutlineTransparency = 0.0
+        hl.DepthMode      = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Parent         = ScreenGui
+        espHighlights[p]  = hl
+
+        -- Name tag BillboardGui
+        local bill = Instance.new("BillboardGui")
+        bill.Adornee        = hrp
+        bill.Size           = UDim2.fromOffset(120, 30)
+        bill.StudsOffset    = Vector3.new(0, 3.2, 0)
+        bill.AlwaysOnTop    = true
+        bill.ResetOnSpawn   = false
+        bill.Parent         = ScreenGui
+        espBills[p]         = bill
+
+        local nameTag = Instance.new("TextLabel")
+        nameTag.Size                 = UDim2.new(1, 0, 1, 0)
+        nameTag.BackgroundTransparency = 1
+        nameTag.Text                 = p.DisplayName .. "\n[" .. p.Name .. "]"
+        nameTag.Font                 = Enum.Font.GothamBold
+        nameTag.TextSize             = 11
+        nameTag.TextColor3           = espColorFor(p)
+        nameTag.TextStrokeColor3     = Color3.new(0,0,0)
+        nameTag.TextStrokeTransparency = 0.3
+        nameTag.ZIndex               = 99
+        nameTag.Parent               = bill
+
+        -- keep color updated as murderer flag changes
+        RunService.Heartbeat:Connect(function()
+            if not espEnabled then return end
+            local col = espColorFor(p)
+            hl.OutlineColor   = col
+            hl.FillColor      = col
+            nameTag.TextColor3 = col
+        end)
+    end
+    task.spawn(tryAttach)
+    p.CharacterAdded:Connect(function()
+        task.wait(0.5)
+        -- re-attach on respawn
+        if espEnabled then task.spawn(tryAttach) end
+    end)
+end
+
+local function enableEsp()
+    espEnabled = true
+    for _, p in ipairs(Players:GetPlayers()) do
+        buildEspFor(p)
+    end
+    Players.PlayerAdded:Connect(function(p)
+        if espEnabled then buildEspFor(p) end
+    end)
+    setStatus("✓ ESP active — "..#Players:GetPlayers().." players tagged", THEME.accent)
+end
+
+local function disableEsp()
+    espEnabled = false
+    for p, hl in pairs(espHighlights) do
+        pcall(function() hl:Destroy() end)
+        espHighlights[p] = nil
+    end
+    for p, bill in pairs(espBills) do
+        pcall(function() bill:Destroy() end)
+        espBills[p] = nil
+    end
+    setStatus("ESP disabled", THEME.dim)
+end
+
+-- toggle button (green when on, dark when off)
+local espToggleBtn = Instance.new("TextButton")
+espToggleBtn.Size             = UDim2.new(1,-4,0,34)
+espToggleBtn.BackgroundColor3 = Color3.fromRGB(20,50,20)
+espToggleBtn.Text             = "🔲  ESP  [ OFF ]"
+espToggleBtn.Font             = Enum.Font.GothamBold
+espToggleBtn.TextSize         = 13
+espToggleBtn.TextColor3       = THEME.text
+espToggleBtn.ZIndex           = 9
+espToggleBtn.AutoButtonColor  = false
+espToggleBtn.LayoutOrder      = 2
+espToggleBtn.Parent           = pgEsp
+corner(espToggleBtn, 7)
+mkstroke(espToggleBtn, THEME.stroke, 1, 0.4)
+
+espToggleBtn.MouseButton1Click:Connect(function()
+    if espEnabled then
+        disableEsp()
+        espToggleBtn.Text             = "🔲  ESP  [ OFF ]"
+        espToggleBtn.BackgroundColor3 = Color3.fromRGB(20,50,20)
+    else
+        enableEsp()
+        espToggleBtn.Text             = "✅  ESP  [ ON ]"
+        espToggleBtn.BackgroundColor3 = Color3.fromRGB(20,90,30)
+    end
+end)
+
+descLabel(pgEsp, "Murderer highlight turns RED automatically when role is revealed.", 3)
+
+-- ═══════════════════════════════════════════════════════════════════
+-- ── RAIL BUTTONS WIRED ─────────────────────────────────────────────
+-- ═══════════════════════════════════════════════════════════════════
+local function showTab(name)
+    currentTab = name
+    for k, pg in pairs(pages) do pg.Visible = (k==name) end
+    for _, ref in ipairs(tabBtnRefs) do
+        ref.btn.BackgroundColor3 = ref.tab==name
+            and Color3.fromRGB(20,70,24)
+            or  Color3.fromRGB(14,30,14)
+    end
+    HeadTitle.Text = name:upper().." PANEL"
+end
+
+for i, def in ipairs(railBtns) do
+    local rb = Instance.new("TextButton")
+    rb.Size              = UDim2.new(1,-10,0,30)
+    rb.Position          = UDim2.fromOffset(5, 48+(i-1)*36)
+    rb.BackgroundColor3  = Color3.fromRGB(14,30,14)
+    rb.Text              = def[1]
+    rb.Font              = Enum.Font.GothamBold
+    rb.TextSize          = 11
+    rb.TextColor3        = THEME.text
+    rb.ZIndex            = 7
+    rb.AutoButtonColor   = false
+    rb.Parent            = Rail
+    corner(rb, 7)
+    mkstroke(rb, THEME.stroke, 1, 0.5)
+    local tabKey = def[2]
+    rb.MouseButton1Click:Connect(function() showTab(tabKey) end)
+    table.insert(tabBtnRefs, { btn=rb, tab=tabKey })
+end
+
+showTab("locust")
+
+-- ═══════════════════════════════════════════════════════════════════
+-- ── FLOATING ORB ───────────────────────────────────────────────────
+-- ═══════════════════════════════════════════════════════════════════
+local Orb = Instance.new("ImageButton")
+Orb.Size             = UDim2.fromOffset(52,52)
+Orb.Position         = UDim2.new(0,20,1,-82)
+Orb.BackgroundColor3 = THEME.rail
+Orb.Image            = LOGO_ID
+Orb.ScaleType        = Enum.ScaleType.Fit
+Orb.Visible          = false
+Orb.ZIndex           = 50
+Orb.Parent           = ScreenGui
+corner(Orb,26)
+mkstroke(Orb, THEME.accent, 1.5, 0.25)
+
+local pulse  = Instance.new("Frame")
+pulse.Size              = UDim2.new(1,0,1,0)
+pulse.Position          = UDim2.new(0.5,0,0.5,0)
+pulse.AnchorPoint       = Vector2.new(0.5,0.5)
+pulse.BackgroundTransparency = 1
+pulse.ZIndex            = 49
+pulse.Parent            = Orb
+corner(pulse,99)
+local pStroke = Instance.new("UIStroke")
+pStroke.Color       = THEME.gold
+pStroke.Thickness   = 2
+pStroke.Transparency = 0.15
+pStroke.Parent      = pulse
+task.spawn(function()
+    while pulse.Parent do
+        pulse.Size=UDim2.new(1,0,1,0) pStroke.Transparency=0.1
+        TweenService:Create(pulse,TweenInfo.new(1.1,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),
+            {Size=UDim2.new(1,16,1,16)}):Play()
+        TweenService:Create(pStroke,TweenInfo.new(1.1,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),
+            {Transparency=1}):Play()
+        task.wait(1.35)
+    end
+end)
+
+local orbTag = Instance.new("TextLabel")
+orbTag.Size               = UDim2.fromOffset(52,11)
+orbTag.Position           = UDim2.new(0.5,-26,1,2)
+orbTag.BackgroundTransparency = 1
+orbTag.Text               = "LOCUST"
+orbTag.Font               = Enum.Font.GothamBold
+orbTag.TextSize           = 8
+orbTag.TextColor3         = THEME.accent
+orbTag.ZIndex             = 51
+orbTag.Parent             = Orb
+
+-- ═══════════════════════════════════════════════════════════════════
+-- ── VISIBILITY + FULL-WINDOW DRAG ──────────────────────────────────
+-- ═══════════════════════════════════════════════════════════════════
+local function setVisible(on)
+    Win.Visible = on
+    Orb.Visible = not on
+end
+
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function()   setVisible(true)  end)
+
+-- drag from HeaderBand (covers the full top band including locust art)
+local dragging, dragStart, startPos
+HeaderBand.InputBegan:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1
+    or i.UserInputType==Enum.UserInputType.Touch then
+        dragging=true dragStart=i.Position startPos=Win.Position
+    end
+end)
+HeaderBand.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1
+    or i.UserInputType==Enum.UserInputType.Touch then dragging=false end
+end)
+
+local orbDrag, orbStart, orbPos
+Orb.InputBegan:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1
+    or i.UserInputType==Enum.UserInputType.Touch then
+        orbDrag=true orbStart=i.Position orbPos=Orb.Position
+    end
+end)
+Orb.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1
+    or i.UserInputType==Enum.UserInputType.Touch then orbDrag=false end
+end)
+
+UserInputService.InputChanged:Connect(function(i)
+    if i.UserInputType~=Enum.UserInputType.MouseMovement
+    and i.UserInputType~=Enum.UserInputType.Touch then return end
+    if dragging and dragStart then
+        local d=i.Position-dragStart
+        Win.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,
+            startPos.Y.Scale,startPos.Y.Offset+d.Y)
+    end
+    if orbDrag and orbStart then
+        local d=i.Position-orbStart
+        Orb.Position=UDim2.new(orbPos.X.Scale,orbPos.X.Offset+d.X,
+            orbPos.Y.Scale,orbPos.Y.Offset+d.Y)
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(i,gp)
+    if gp then return end
+    if i.KeyCode==Enum.KeyCode.RightShift
+    or i.KeyCode==Enum.KeyCode.RightControl
+    or i.KeyCode==Enum.KeyCode.K then
+        setVisible(not Win.Visible)
+    end
+end)
+
+print("[KHUB · MM2 OF THE LOCUST v2] loaded — RightShift/K to toggle")
