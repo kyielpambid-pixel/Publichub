@@ -1,0 +1,1518 @@
+--[[
+    KHUB · Cheating During Testing  v4
+    Improved: Floating Radar (outside UI) · Box Tab UI · Dark Violet Theme
+    Teacher ESP (red highlight + name) · Desk ESP · All Players Violet on Radar
+    3s Answer Load with Countdown · Auto Pencil + Auto Answer · Highlights persist
+    Credits: Yvaine & Kyiel · UI by Khub
+    Discord: https://discord.gg/rU9FyNEUQ7
+    Toggle: RightShift / RightCtrl / K
+]]
+
+repeat task.wait() until game:IsLoaded()
+
+-- ══════════════════════════════════════════════════════════
+--  SERVICES
+-- ══════════════════════════════════════════════════════════
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local UserInputService  = game:GetService("UserInputService")
+local CoreGui           = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace         = game:GetService("Workspace")
+local RunService        = game:GetService("RunService")
+local HttpService       = game:GetService("HttpService")
+
+local player  = Players.LocalPlayer
+local Camera  = Workspace.CurrentCamera
+
+-- ══════════════════════════════════════════════════════════
+--  THEME  (Dark Violet palette, more vivid blocks)
+-- ══════════════════════════════════════════════════════════
+local THEME = {
+    bg       = Color3.fromRGB(8,   5,  18),   -- near-black violet
+    rail     = Color3.fromRGB(14,  9,  30),
+    card     = Color3.fromRGB(22,  14, 44),   -- richer card bg
+    cardAlt  = Color3.fromRGB(28,  16, 55),   -- alternate card
+    accent   = Color3.fromRGB(160, 80, 255),  -- bright violet
+    accentDk = Color3.fromRGB(90,  30, 180),  -- dark violet
+    gold     = Color3.fromRGB(255, 200, 100),
+    text     = Color3.fromRGB(230, 215, 255),
+    dim      = Color3.fromRGB(140, 110, 190),
+    mute     = Color3.fromRGB(80,  55, 120),
+    stroke   = Color3.fromRGB(110, 55, 190),
+    danger   = Color3.fromRGB(255,  60,  60),
+    safe     = Color3.fromRGB(60,  220, 120),
+    caution  = Color3.fromRGB(255, 190,  50),
+    hi       = Color3.fromRGB(255, 230,  50),
+    violet   = Color3.fromRGB(180,  80, 255),
+    violetDk = Color3.fromRGB(100,  30, 200),
+    cyan     = Color3.fromRGB(80,  200, 255),
+    pink     = Color3.fromRGB(255, 100, 200),
+}
+
+local BAR_COLS = {
+    Color3.fromRGB(80,  20, 180),
+    Color3.fromRGB(160, 60, 255),
+    Color3.fromRGB(255,180,  60),
+    Color3.fromRGB(255,240, 180),
+    Color3.fromRGB(255,100, 200),
+    Color3.fromRGB(80, 200, 255),
+    Color3.fromRGB(80,  20, 180),
+}
+
+-- ══════════════════════════════════════════════════════════
+--  STATE
+-- ══════════════════════════════════════════════════════════
+local State = {
+    AutoFlow          = true,
+    AntiCaught        = true,
+    Radar             = true,
+    TeacherESP        = true,
+    DeskESP           = true,
+    SafeDistance      = 24,
+    PhotoSafeDistance = 28,
+    DelayAnswer       = 0.18,
+    DelayPhoto        = 1.4,
+    DelayLoad         = 3.0,
+    Running           = false,
+    SavedAnswers      = {},
+    Phase             = "idle",
+    HighlightFrames   = {},
+}
+
+local TeacherESPHighlights  = {}
+local DeskESPHighlights     = {}
+local TeacherNameBillboards = {}
+local SavedLabelRef
+local StatusRef
+local PhaseRef
+local CountdownRef
+
+-- ══════════════════════════════════════════════════════════
+--  REMOTES
+-- ══════════════════════════════════════════════════════════
+local RS            = ReplicatedStorage
+local TE            = RS:WaitForChild("ToolEvents", 8)
+local RemPlayAnim   = TE and TE:FindFirstChild("PlayAnimation")
+local RemToolAction = TE and TE:FindFirstChild("ToolAction")
+local RemAnswer     = RS:FindFirstChild("PlayerAnswerTable")
+
+if not RemAnswer then
+    task.spawn(function()
+        RemAnswer = RS:WaitForChild("PlayerAnswerTable", 15)
+    end)
+end
+
+-- ══════════════════════════════════════════════════════════
+--  HELPERS
+-- ══════════════════════════════════════════════════════════
+local function lerpColor(a, b, t)
+    return Color3.new(
+        a.R+(b.R-a.R)*t,
+        a.G+(b.G-a.G)*t,
+        a.B+(b.B-a.B)*t
+    )
+end
+
+local function corner(p, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 8)
+    c.Parent = p; return c
+end
+
+local function mkStroke(p, col, th, tr)
+    local s = Instance.new("UIStroke")
+    s.Color       = col or THEME.stroke
+    s.Thickness   = th  or 1.2
+    s.Transparency = tr or 0.4
+    s.Parent = p; return s
+end
+
+local function gradient(p, c0, c1, rot)
+    local g = Instance.new("UIGradient", p)
+    g.Color    = ColorSequence.new(c0, c1)
+    g.Rotation = rot or 0
+    return g
+end
+
+local function setPhase(ph)
+    State.Phase = ph
+    if PhaseRef and PhaseRef.Parent then
+        local labels = {
+            idle    = "⏸  idle",
+            photo   = "📷  taking photo",
+            load    = "📱  loading answers",
+            answer  = "✍  answering",
+            danger  = "⚠  teacher near",
+        }
+        PhaseRef.Text = labels[ph] or ph
+        local cols = {
+            idle    = THEME.dim,
+            photo   = THEME.gold,
+            load    = THEME.accent,
+            answer  = THEME.safe,
+            danger  = THEME.danger,
+        }
+        PhaseRef.TextColor3 = cols[ph] or THEME.text
+    end
+end
+
+local function notify(msg)
+    print("[KHUB]", msg)
+    if StatusRef and StatusRef.Parent then
+        StatusRef.Text = msg
+    end
+end
+
+-- ══════════════════════════════════════════════════════════
+--  TEACHER DETECTION
+-- ══════════════════════════════════════════════════════════
+local cachedTeacherHRP = nil
+
+local function findTeacherModels()
+    local models = {}
+    for _, m in ipairs(Workspace:GetDescendants()) do
+        if m:IsA("Model") then
+            local n = string.lower(m.Name)
+            if n:find("teacher") or m:GetAttribute("IsTeacher") then
+                table.insert(models, m)
+            end
+        end
+    end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player then
+            local n = string.lower(p.Name .. (p.DisplayName or ""))
+            if n:find("teacher") and p.Character then
+                table.insert(models, p.Character)
+            end
+        end
+    end
+    return models
+end
+
+local function findTeacherHRP()
+    local models = findTeacherModels()
+    for _, m in ipairs(models) do
+        local r = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
+        if r then cachedTeacherHRP = r; return r end
+    end
+    return cachedTeacherHRP
+end
+
+local function findDeskModels()
+    local desks = {}
+    for _, m in ipairs(Workspace:GetDescendants()) do
+        if m:IsA("Model") or m:IsA("BasePart") then
+            local n = string.lower(m.Name)
+            if n:find("desk") or n:find("table") or n:find("seat") then
+                table.insert(desks, m)
+            end
+        end
+    end
+    return desks
+end
+
+local function distToTeacher()
+    local myChar = player.Character
+    local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return 999 end
+    local t = findTeacherHRP()
+    if not t then return 999 end
+    return (myHRP.Position - t.Position).Magnitude
+end
+
+local function isDanger()       return distToTeacher() < State.SafeDistance      end
+local function isSafeForPhoto() return distToTeacher() >= State.PhotoSafeDistance end
+
+-- ══════════════════════════════════════════════════════════
+--  TEACHER ESP  (red highlight + floating name)
+-- ══════════════════════════════════════════════════════════
+local function clearTeacherESP()
+    for _, h in pairs(TeacherESPHighlights) do
+        pcall(function() h:Destroy() end)
+    end
+    for _, bb in pairs(TeacherNameBillboards) do
+        pcall(function() bb:Destroy() end)
+    end
+    TeacherESPHighlights  = {}
+    TeacherNameBillboards = {}
+end
+
+local function applyTeacherESP()
+    clearTeacherESP()
+    if not State.TeacherESP then return end
+    for _, m in ipairs(findTeacherModels()) do
+        -- red highlight
+        local h = Instance.new("Highlight")
+        h.FillColor        = Color3.fromRGB(255, 40, 40)
+        h.OutlineColor     = Color3.fromRGB(255, 180, 180)
+        h.FillTransparency = 0.45
+        h.OutlineTransparency = 0.1
+        h.Parent           = m
+        TeacherESPHighlights[m] = h
+
+        -- floating name billboard above head
+        local head = m:FindFirstChild("Head")
+        if head then
+            local bb = Instance.new("BillboardGui")
+            bb.Size            = UDim2.new(0, 120, 0, 28)
+            bb.StudsOffset     = Vector3.new(0, 3.2, 0)
+            bb.AlwaysOnTop     = true
+            bb.Parent          = head
+            TeacherNameBillboards[m] = bb
+
+            local bg = Instance.new("Frame", bb)
+            bg.Size              = UDim2.new(1, 0, 1, 0)
+            bg.BackgroundColor3  = Color3.fromRGB(18, 5, 5)
+            bg.BackgroundTransparency = 0.15
+            bg.BorderSizePixel   = 0
+            corner(bg, 5)
+            mkStroke(bg, THEME.danger, 1.5, 0.1)
+
+            local lbl = Instance.new("TextLabel", bg)
+            lbl.Size              = UDim2.new(1, 0, 1, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.Text              = "👁 TEACHER — " .. m.Name
+            lbl.Font              = Enum.Font.GothamBold
+            lbl.TextSize          = 11
+            lbl.TextColor3        = THEME.danger
+            lbl.TextScaled        = true
+        end
+    end
+end
+
+-- ══════════════════════════════════════════════════════════
+--  DESK ESP  (violet outline highlight)
+-- ══════════════════════════════════════════════════════════
+local function clearDeskESP()
+    for _, h in pairs(DeskESPHighlights) do
+        pcall(function() h:Destroy() end)
+    end
+    DeskESPHighlights = {}
+end
+
+local function applyDeskESP()
+    clearDeskESP()
+    if not State.DeskESP then return end
+    for _, m in ipairs(findDeskModels()) do
+        local h = Instance.new("SelectionBox")
+        h.Color3            = THEME.violet
+        h.LineThickness     = 0.04
+        h.SurfaceTransparency = 0.85
+        h.SurfaceColor3     = THEME.violetDk
+        if m:IsA("Model") then
+            h.Adornee = m.PrimaryPart or m:FindFirstChildWhichIsA("BasePart")
+        else
+            h.Adornee = m
+        end
+        h.Parent = Workspace
+        table.insert(DeskESPHighlights, h)
+    end
+end
+
+-- Run ESP on boot
+task.spawn(function()
+    task.wait(2)
+    applyTeacherESP()
+    applyDeskESP()
+end)
+
+-- Re-apply ESP when workspace changes
+Workspace.DescendantAdded:Connect(function(d)
+    if d:IsA("Model") then task.wait(0.5); applyTeacherESP(); applyDeskESP() end
+end)
+
+-- ══════════════════════════════════════════════════════════
+--  TOOL WRAPPERS
+-- ══════════════════════════════════════════════════════════
+local function phonePlay(a)
+    pcall(function()
+        if RemPlayAnim then RemPlayAnim:FireServer("Phone1", a) end
+    end)
+end
+local function phoneTool(a)
+    pcall(function()
+        if RemToolAction then RemToolAction:FireServer("Phone1", a) end
+    end)
+end
+local function pencilPlay(a)
+    pcall(function()
+        if RemPlayAnim then RemPlayAnim:FireServer("Pencil", a) end
+    end)
+end
+local function equipTool(namePart)
+    pcall(function()
+        local bp  = player:FindFirstChild("Backpack")
+        local ch  = player.Character
+        if not bp or not ch then return end
+        local hum = ch:FindFirstChildOfClass("Humanoid")
+        for _, t in ipairs(bp:GetChildren()) do
+            if t:IsA("Tool") and string.lower(t.Name):find(namePart) then
+                if hum then hum:EquipTool(t) end; return
+            end
+        end
+    end)
+end
+local function equipPencil() equipTool("pencil"); pencilPlay("Idle") end
+local function equipPhone()  equipTool("phone");  phonePlay("Idle")  end
+local function putAway()
+    pcall(function()
+        local hum = (player.Character or {}):FindFirstChildOfClass("Humanoid")
+        if hum then hum:UnequipTools() end
+    end)
+    phonePlay("stop"); phoneTool("Unequip"); phonePlay("Idle")
+end
+
+local function takePhoto()
+    equipPhone(); task.wait(0.15)
+    phonePlay("Idle"); phonePlay("Use"); phoneTool("Use")
+    task.wait(0.2);  phonePlay("Idle")
+end
+
+local function openPhoneAnswers()
+    equipPhone(); task.wait(0.15)
+    phonePlay("Idle"); phonePlay("SecondUse"); phoneTool("SecondUse")
+    task.wait(0.3);  phonePlay("stop"); phoneTool("Unequip"); phonePlay("Idle")
+end
+
+-- ══════════════════════════════════════════════════════════
+--  SUBMIT ANSWER
+-- ══════════════════════════════════════════════════════════
+local function submitAnswer(q, choice)
+    -- *the pencil exhales and marks the bubble with cold certainty*
+    pencilPlay("Idle")
+    pcall(function()
+        local rem = RemAnswer or RS:FindFirstChild("PlayerAnswerTable")
+        if not rem then return end
+        if rem:IsA("RemoteFunction") then
+            rem:InvokeServer(q, choice)
+        elseif rem:IsA("RemoteEvent") then
+            rem:FireServer(q, choice)
+        end
+    end)
+    task.wait(State.DelayAnswer)
+end
+
+-- ══════════════════════════════════════════════════════════
+--  PARSE + READ PHONE GUI ANSWERS
+-- ══════════════════════════════════════════════════════════
+local function parseAnswerText(text)
+    local found = {}
+    if not text or text == "" then return found end
+    local up = string.upper(text)
+    for q, a in up:gmatch("(%d+)%s*[%.%):%-%s]%s*([ABCD])") do
+        found[tonumber(q)] = a
+    end
+    for q, a in up:gmatch("(%d+)%s+([ABCD])%f[%s%z%p]") do
+        if not found[tonumber(q)] then found[tonumber(q)] = a end
+    end
+    return found
+end
+
+local function readPhoneAnswers()
+    local answers = {}
+    local function scanGui(root)
+        if not root then return end
+        for _, d in ipairs(root:GetDescendants()) do
+            if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+                local t = d.Text or ""
+                if #t > 0 then
+                    for q, a in pairs(parseAnswerText(t)) do
+                        answers[q] = a
+                    end
+                end
+            end
+        end
+    end
+    pcall(function() scanGui(player:FindFirstChild("PlayerGui")) end)
+    pcall(function()
+        local ch = player.Character
+        if ch then
+            for _, t in ipairs(ch:GetChildren()) do
+                if t:IsA("Tool") and string.lower(t.Name):find("phone") then
+                    scanGui(t)
+                end
+            end
+        end
+    end)
+    local count = 0
+    for q, a in pairs(answers) do
+        State.SavedAnswers[q] = a; count = count + 1
+    end
+    return count
+end
+
+local function getMaxQ(tbl)
+    local mx = 0
+    for q in pairs(tbl or {}) do
+        if type(q)=="number" and q>mx then mx=q end
+    end
+    return mx
+end
+
+local function formatSavedAnswers()
+    local keys = {}
+    for q in pairs(State.SavedAnswers) do table.insert(keys, q) end
+    table.sort(keys)
+    if #keys == 0 then return "No answers yet.\nAuto flow will load them." end
+    local lines = { "📋 Answers  (" .. #keys .. " loaded)" }
+    for _, q in ipairs(keys) do
+        table.insert(lines, string.format("  %2d.  %s", q, State.SavedAnswers[q]))
+    end
+    return table.concat(lines, "\n")
+end
+
+local function refreshSavedUI()
+    if SavedLabelRef and SavedLabelRef.Parent then
+        SavedLabelRef.Text = formatSavedAnswers()
+    end
+end
+
+-- ══════════════════════════════════════════════════════════
+--  ANSWER HIGHLIGHTS  (persist even after answered)
+-- ══════════════════════════════════════════════════════════
+local function clearHighlights()
+    for _, h in ipairs(State.HighlightFrames) do
+        pcall(function() h:Destroy() end)
+    end
+    State.HighlightFrames = {}
+end
+
+local function applyHighlights()
+    -- *highlights stay — answered or not, they burn into the paper*
+    if next(State.SavedAnswers) == nil then return end
+    local pg = player:FindFirstChild("PlayerGui")
+    if not pg then return end
+
+    -- kill old highlights first, then re-stamp
+    clearHighlights()
+
+    local rows = {}
+    for _, inst in ipairs(pg:GetDescendants()) do
+        if inst:IsA("Frame") or inst:IsA("ScrollingFrame") then
+            local letters = {}
+            for _, k in ipairs(inst:GetChildren()) do
+                if k:IsA("TextButton") or k:IsA("TextLabel") then
+                    local t = (k.Text or ""):upper():gsub("%s","")
+                    if t=="A" or t=="B" or t=="C" or t=="D" then
+                        letters[t] = k
+                    end
+                end
+            end
+            local cnt = 0; for _ in pairs(letters) do cnt=cnt+1 end
+            if cnt >= 2 then
+                table.insert(rows, { frame=inst, letters=letters })
+            end
+        end
+    end
+    table.sort(rows, function(a,b)
+        return a.frame.AbsolutePosition.Y < b.frame.AbsolutePosition.Y
+    end)
+
+    local applied = 0
+    for i, rowData in ipairs(rows) do
+        local ans = State.SavedAnswers[i]
+        if ans then
+            local target = rowData.letters[ans]
+            if target then
+                local hl = Instance.new("Frame")
+                hl.Size                  = UDim2.new(1,6,1,6)
+                hl.Position              = UDim2.new(0,-3,0,-3)
+                hl.BackgroundColor3      = THEME.hi
+                hl.BackgroundTransparency = 0.45
+                hl.BorderSizePixel       = 0
+                hl.ZIndex                = target.ZIndex + 5
+                hl.Parent               = target
+                corner(hl, 99)
+
+                local st = Instance.new("UIStroke", hl)
+                st.Color = THEME.gold; st.Thickness=2.5; st.Transparency=0.05
+
+                -- question number badge
+                local numLbl = Instance.new("TextLabel", hl)
+                numLbl.Size                  = UDim2.new(0,15,0,11)
+                numLbl.Position              = UDim2.new(0,-7,0,-9)
+                numLbl.BackgroundColor3      = Color3.fromRGB(15,10,30)
+                numLbl.BackgroundTransparency = 0.1
+                numLbl.Text                  = tostring(i)
+                numLbl.Font                  = Enum.Font.GothamBold
+                numLbl.TextSize              = 8
+                numLbl.TextColor3            = THEME.gold
+                numLbl.BorderSizePixel       = 0
+                numLbl.ZIndex                = hl.ZIndex+1
+                corner(numLbl, 3)
+
+                table.insert(State.HighlightFrames, hl)
+                applied = applied+1
+            end
+        end
+    end
+    notify("✨ Highlighted " .. applied .. " answers")
+end
+
+-- ══════════════════════════════════════════════════════════
+--  SUBMIT ALL SAVED
+-- ══════════════════════════════════════════════════════════
+local function submitSaved()
+    local keys = {}
+    for q in pairs(State.SavedAnswers) do table.insert(keys,q) end
+    table.sort(keys)
+    local n = 0
+    for _, q in ipairs(keys) do
+        if State.AntiCaught and isDanger() then
+            equipPencil(); setPhase("danger")
+            notify("Stopped – teacher near"); break
+        end
+        submitAnswer(q, State.SavedAnswers[q])
+        -- highlights persist — don't clear them here
+        n = n+1
+    end
+    return n
+end
+
+-- ══════════════════════════════════════════════════════════
+--  3-SECOND COUNTDOWN LOAD  (visible in UI)
+-- ══════════════════════════════════════════════════════════
+local function doCountdownLoad()
+    -- *the phone screen flickers; numbers descend like a detonator*
+    for i = 3, 1, -1 do
+        notify("📱 Loading answers... " .. i)
+        if CountdownRef and CountdownRef.Parent then
+            CountdownRef.Text = tostring(i)
+            CountdownRef.Visible = true
+        end
+        task.wait(1)
+    end
+    if CountdownRef and CountdownRef.Parent then
+        CountdownRef.Visible = false
+    end
+end
+
+-- ══════════════════════════════════════════════════════════
+--  AUTO FLOW  photo → 3s countdown load → highlight → answer
+-- ══════════════════════════════════════════════════════════
+local function runAutoFlow()
+    if State.Running then return end
+    if not State.AutoFlow then return end
+    State.Running = true
+
+    task.spawn(function()
+        while State.Running and State.AutoFlow do
+            if isDanger() then
+                if State.AntiCaught then
+                    putAway(); equipPencil(); setPhase("danger")
+                end
+                task.wait(0.5); continue
+            end
+
+            -- PHASE 1: take photo
+            if isSafeForPhoto() then
+                setPhase("photo"); notify("📷 Taking photo...")
+                takePhoto(); task.wait(State.DelayPhoto)
+            end
+
+            if isDanger() then task.wait(0.4); continue end
+
+            -- PHASE 2: open phone, countdown 3s, read answers
+            if isSafeForPhoto() then
+                setPhase("load")
+                openPhoneAnswers()
+                doCountdownLoad()
+
+                local count = readPhoneAnswers()
+                refreshSavedUI()
+                if count > 0 then
+                    notify("Loaded " .. count .. " answers ✓")
+                    applyHighlights()
+                else
+                    notify("No answers parsed — retrying next cycle")
+                end
+            end
+
+            if isDanger() then task.wait(0.4); continue end
+
+            -- PHASE 3: auto equip pencil → auto answer all
+            if isSafeForPhoto() and next(State.SavedAnswers) ~= nil then
+                setPhase("answer")
+                equipPencil(); task.wait(0.2)
+                local n = submitSaved()
+                -- re-apply highlights so they stay visible after answering
+                applyHighlights()
+                if n > 0 then notify("✍ Auto answered " .. n .. " questions") end
+                task.wait(0.6)
+            end
+
+            setPhase("idle"); task.wait(2.0)
+        end
+
+        State.Running = false; setPhase("idle")
+    end)
+end
+
+-- ══════════════════════════════════════════════════════════
+--  CONFIG
+-- ══════════════════════════════════════════════════════════
+local CFG_PATH = "KHUB_CDT/config.json"
+local function saveConfig()
+    pcall(function()
+        if not isfolder then return end
+        if not isfolder("KHUB_CDT") then makefolder("KHUB_CDT") end
+        writefile(CFG_PATH, HttpService:JSONEncode({
+            AntiCaught        = State.AntiCaught,
+            SafeDistance      = State.SafeDistance,
+            PhotoSafeDistance = State.PhotoSafeDistance,
+            SavedAnswers      = State.SavedAnswers,
+            Radar             = State.Radar,
+            TeacherESP        = State.TeacherESP,
+            DeskESP           = State.DeskESP,
+        })); notify("Config saved")
+    end)
+end
+local function loadConfig()
+    pcall(function()
+        if not isfile or not isfile(CFG_PATH) then notify("No config"); return end
+        local d = HttpService:JSONDecode(readfile(CFG_PATH))
+        if type(d)~="table" then return end
+        if d.SafeDistance      then State.SafeDistance      = d.SafeDistance      end
+        if d.PhotoSafeDistance then State.PhotoSafeDistance = d.PhotoSafeDistance end
+        if d.AntiCaught ~= nil then State.AntiCaught        = d.AntiCaught        end
+        if d.Radar      ~= nil then State.Radar             = d.Radar             end
+        if d.TeacherESP ~= nil then State.TeacherESP        = d.TeacherESP        end
+        if d.DeskESP    ~= nil then State.DeskESP           = d.DeskESP           end
+        if d.SavedAnswers      then State.SavedAnswers       = d.SavedAnswers; refreshSavedUI() end
+        notify("Config loaded")
+    end)
+end
+
+-- ══════════════════════════════════════════════════════════
+--  SCREEN GUI ROOT
+-- ══════════════════════════════════════════════════════════
+local ParentTarget = (gethui and gethui()) or CoreGui
+pcall(function()
+    local old = ParentTarget:FindFirstChild("KHUB_CDT")
+    if old then old:Destroy() end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name              = "KHUB_CDT"
+ScreenGui.ResetOnSpawn      = false
+ScreenGui.IgnoreGuiInset    = true
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then
+    ScreenGui.Parent = player:WaitForChild("PlayerGui")
+end
+
+-- ══════════════════════════════════════════════════════════
+--  ████  FLOATING RADAR  (outside main UI, own draggable frame)  ████
+-- ══════════════════════════════════════════════════════════
+local RADAR_SIZE  = 150
+local RADAR_RANGE = 80
+
+local RadarFrame = Instance.new("Frame", ScreenGui)
+RadarFrame.Name              = "FloatingRadar"
+RadarFrame.Size              = UDim2.new(0, RADAR_SIZE+20, 0, RADAR_SIZE+70)
+RadarFrame.Position          = UDim2.new(1, -(RADAR_SIZE+40), 0, 60)
+RadarFrame.BackgroundColor3  = Color3.fromRGB(8, 4, 20)
+RadarFrame.BorderSizePixel   = 0
+RadarFrame.Active            = true
+RadarFrame.ZIndex            = 60
+corner(RadarFrame, 12)
+local radarFrameStroke = mkStroke(RadarFrame, THEME.violet, 1.8, 0.1)
+
+-- header bar (drag handle)
+local RadarHeader = Instance.new("Frame", RadarFrame)
+RadarHeader.Size             = UDim2.new(1, 0, 0, 22)
+RadarHeader.BackgroundColor3 = Color3.fromRGB(20, 8, 50)
+RadarHeader.BorderSizePixel  = 0
+RadarHeader.ZIndex           = 61
+corner(RadarHeader, 10)
+
+local RadarHeaderLbl = Instance.new("TextLabel", RadarHeader)
+RadarHeaderLbl.Size               = UDim2.new(1, 0, 1, 0)
+RadarHeaderLbl.BackgroundTransparency = 1
+RadarHeaderLbl.Text               = "☽ RADAR"
+RadarHeaderLbl.Font               = Enum.Font.GothamBold
+RadarHeaderLbl.TextSize           = 11
+RadarHeaderLbl.TextColor3         = THEME.violet
+RadarHeaderLbl.ZIndex             = 62
+
+-- radar circle
+local RadarCircle = Instance.new("Frame", RadarFrame)
+RadarCircle.Size             = UDim2.new(0, RADAR_SIZE, 0, RADAR_SIZE)
+RadarCircle.Position         = UDim2.new(0.5, -RADAR_SIZE/2, 0, 26)
+RadarCircle.BackgroundColor3 = Color3.fromRGB(5, 3, 14)
+RadarCircle.BorderSizePixel  = 0
+RadarCircle.ClipsDescendants = true
+RadarCircle.ZIndex           = 61
+corner(RadarCircle, 999)
+mkStroke(RadarCircle, Color3.fromRGB(70, 30, 140), 1.5, 0.1)
+
+-- inner rings
+for _, sc in ipairs({0.65, 0.35}) do
+    local ring = Instance.new("Frame", RadarCircle)
+    local sz   = math.floor(RADAR_SIZE * sc)
+    ring.Size            = UDim2.new(0, sz, 0, sz)
+    ring.Position        = UDim2.new(0.5, -sz/2, 0.5, -sz/2)
+    ring.BackgroundTransparency = 1
+    ring.BorderSizePixel = 0
+    ring.ZIndex          = 62
+    corner(ring, 999)
+    mkStroke(ring, Color3.fromRGB(60, 20, 110), 1, 0.4)
+end
+
+-- crosshairs
+local function mkCross(h)
+    local ln = Instance.new("Frame", RadarCircle)
+    ln.BackgroundColor3 = Color3.fromRGB(45, 20, 80)
+    ln.BorderSizePixel  = 0; ln.ZIndex = 62
+    if h then ln.Size=UDim2.new(1,0,0,1); ln.Position=UDim2.new(0,0,0.5,0)
+    else      ln.Size=UDim2.new(0,1,1,0); ln.Position=UDim2.new(0.5,0,0,0) end
+end
+mkCross(true); mkCross(false)
+
+-- self dot (green center)
+local SelfDot = Instance.new("Frame", RadarCircle)
+SelfDot.Size             = UDim2.new(0,7,0,7)
+SelfDot.Position         = UDim2.new(0.5,-3.5,0.5,-3.5)
+SelfDot.BackgroundColor3 = THEME.safe
+SelfDot.BorderSizePixel  = 0; SelfDot.ZIndex = 65
+corner(SelfDot, 999)
+
+-- teacher dot (red)
+local TeacherDot = Instance.new("Frame", RadarCircle)
+TeacherDot.Size            = UDim2.new(0,10,0,10)
+TeacherDot.BackgroundColor3 = THEME.danger
+TeacherDot.BorderSizePixel = 0; TeacherDot.ZIndex = 66
+TeacherDot.Visible         = false
+corner(TeacherDot, 999)
+-- pulsing stroke on teacher dot
+local tDotStroke = mkStroke(TeacherDot, THEME.danger, 2, 0)
+
+-- tracker line (center → teacher dot)
+local TrackerLine = Instance.new("Frame", RadarCircle)
+TrackerLine.BackgroundColor3 = THEME.violet
+TrackerLine.BorderSizePixel  = 0
+TrackerLine.AnchorPoint      = Vector2.new(0, 0.5)
+TrackerLine.ZIndex           = 63; TrackerLine.Visible = false
+
+-- player dot pool (violet dots for other players)
+local playerDotPool = {}
+local function getPlayerDot(uid)
+    if not playerDotPool[uid] then
+        local d = Instance.new("Frame", RadarCircle)
+        d.Size             = UDim2.new(0,7,0,7)
+        d.BackgroundColor3 = THEME.violet
+        d.BorderSizePixel  = 0; d.ZIndex = 64; d.Visible = false
+        corner(d, 999)
+        mkStroke(d, Color3.fromRGB(200,130,255), 1, 0.3)
+        playerDotPool[uid] = d
+    end
+    return playerDotPool[uid]
+end
+
+-- radar status label
+local RadarStatus = Instance.new("TextLabel", RadarFrame)
+RadarStatus.Size             = UDim2.new(1,-6,0,28)
+RadarStatus.Position         = UDim2.new(0,3,0,RADAR_SIZE+30)
+RadarStatus.BackgroundTransparency = 1
+RadarStatus.Font             = Enum.Font.GothamBold
+RadarStatus.TextSize         = 11
+RadarStatus.TextColor3       = THEME.danger
+RadarStatus.Text             = "SCANNING..."
+RadarStatus.ZIndex           = 62
+
+-- radar toggle button (top-right of radar)
+local RadarToggleBtn = Instance.new("TextButton", RadarFrame)
+RadarToggleBtn.Size          = UDim2.new(0,18,0,16)
+RadarToggleBtn.Position      = UDim2.new(1,-20,0,3)
+RadarToggleBtn.BackgroundColor3 = Color3.fromRGB(30,10,60)
+RadarToggleBtn.Text          = "×"
+RadarToggleBtn.Font          = Enum.Font.GothamBold
+RadarToggleBtn.TextSize      = 13; RadarToggleBtn.TextColor3 = THEME.dim
+RadarToggleBtn.ZIndex        = 70
+corner(RadarToggleBtn, 4)
+RadarToggleBtn.MouseButton1Click:Connect(function()
+    RadarFrame.Visible = false
+end)
+
+-- radar drag
+local rDragging, rDragStart, rDragPos
+RadarHeader.InputBegan:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+        rDragging=true; rDragStart=i.Position; rDragPos=RadarFrame.Position
+    end
+end)
+RadarHeader.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+        rDragging=false
+    end
+end)
+UserInputService.InputChanged:Connect(function(i)
+    if rDragging and rDragStart then
+        local d = i.Position - rDragStart
+        RadarFrame.Position = UDim2.new(
+            rDragPos.X.Scale, rDragPos.X.Offset+d.X,
+            rDragPos.Y.Scale, rDragPos.Y.Offset+d.Y
+        )
+    end
+end)
+
+-- world-to-radar projection
+local RADAR_HALF = RADAR_SIZE / 2
+local function worldToRadar(myPos, targetPos)
+    local camCF = Camera.CFrame
+    local look  = camCF.LookVector
+    local fl    = Vector3.new(look.X,0,look.Z)
+    if fl.Magnitude > 0.01 then fl=fl.Unit else fl=Vector3.new(0,0,-1) end
+    local right = Vector3.new(-fl.Z,0,fl.X)
+    local delta = targetPos - myPos
+    local lx    = delta:Dot(right)
+    local lz    = delta:Dot(fl)
+    local scale = RADAR_HALF / RADAR_RANGE
+    local px    = RADAR_HALF + lx*scale
+    local py    = RADAR_HALF - lz*scale
+    local cx,cy = px-RADAR_HALF, py-RADAR_HALF
+    local dist  = math.sqrt(cx*cx+cy*cy)
+    if dist > RADAR_HALF then
+        local norm = RADAR_HALF/dist
+        px = RADAR_HALF + cx*norm
+        py = RADAR_HALF + cy*norm
+    end
+    return px, py
+end
+
+-- radar render loop (pulse teacher dot)
+local tPulse = 0
+RunService.RenderStepped:Connect(function(dt)
+    if not State.Radar then return end
+    local myChar = player.Character
+    local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+    local myPos  = myHRP.Position
+
+    -- teacher dot
+    local tHRP = findTeacherHRP()
+    if tHRP then
+        local tx, ty = worldToRadar(myPos, tHRP.Position)
+        TeacherDot.Position = UDim2.new(0,tx-5,0,ty-5)
+        TeacherDot.Visible  = true
+
+        -- pulse stroke
+        tPulse = tPulse + dt*3
+        tDotStroke.Transparency = (math.sin(tPulse)+1)/2 * 0.7
+
+        -- tracker line
+        local dx, dy = tx-RADAR_HALF, ty-RADAR_HALF
+        local len    = math.sqrt(dx*dx+dy*dy)
+        TrackerLine.Size     = UDim2.new(0,math.max(1,len),0,1)
+        TrackerLine.Position = UDim2.new(0,RADAR_HALF,0,RADAR_HALF)
+        TrackerLine.Rotation = math.deg(math.atan2(dy,dx))
+        TrackerLine.Visible  = true
+
+        local dist = (myPos - tHRP.Position).Magnitude
+        if dist < State.SafeDistance then
+            RadarStatus.Text       = string.format("⚠ DANGER  %.0fm", dist)
+            RadarStatus.TextColor3 = THEME.danger
+            radarFrameStroke.Color = THEME.danger
+        elseif dist < State.PhotoSafeDistance then
+            RadarStatus.Text       = string.format("⚡ CAUTION  %.0fm", dist)
+            RadarStatus.TextColor3 = THEME.caution
+            radarFrameStroke.Color = THEME.caution
+        else
+            RadarStatus.Text       = string.format("✓ CLEAR  %.0fm", dist)
+            RadarStatus.TextColor3 = THEME.safe
+            radarFrameStroke.Color = THEME.safe
+        end
+    else
+        TeacherDot.Visible   = false
+        TrackerLine.Visible  = false
+        RadarStatus.Text     = "NO TEACHER"
+        RadarStatus.TextColor3 = THEME.dim
+        radarFrameStroke.Color = THEME.violet
+    end
+
+    -- other player dots (violet)
+    local seen = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            local pHRP = p.Character:FindFirstChild("HumanoidRootPart")
+            if pHRP then
+                seen[p.UserId] = true
+                local dot    = getPlayerDot(p.UserId)
+                local px, py = worldToRadar(myPos, pHRP.Position)
+                dot.Position = UDim2.new(0,px-3,0,py-3)
+                dot.Visible  = true
+            end
+        end
+    end
+    for uid, dot in pairs(playerDotPool) do
+        if not seen[uid] then dot.Visible=false end
+    end
+end)
+
+-- ══════════════════════════════════════════════════════════
+--  MAIN WINDOW  (tabs as boxes, not full sidebar block)
+-- ══════════════════════════════════════════════════════════
+local WIN_W = 460
+local WIN_H = 360
+
+local Win = Instance.new("Frame", ScreenGui)
+Win.Name             = "Window"
+Win.Size             = UDim2.new(0,WIN_W,0,WIN_H)
+Win.Position         = UDim2.new(0.5,-WIN_W/2,0.5,-WIN_H/2)
+Win.BackgroundColor3 = THEME.bg
+Win.BorderSizePixel  = 0
+Win.ClipsDescendants = true
+Win.Active           = true
+Win.ZIndex           = 10
+corner(Win, 12)
+mkStroke(Win, Color3.fromRGB(130,60,220), 1.5, 0.2)
+
+-- gradient bg
+gradient(Win,
+    Color3.fromRGB(8,5,20),
+    Color3.fromRGB(14,6,32), 135)
+
+-- ── Title bar ──────────────────────────────────────────────
+local TitleBar = Instance.new("Frame", Win)
+TitleBar.Size            = UDim2.new(1,0,0,44)
+TitleBar.BackgroundColor3 = Color3.fromRGB(12,6,28)
+TitleBar.BorderSizePixel = 0; TitleBar.ZIndex = 11
+corner(TitleBar, 10)
+
+-- animated top accent stripe
+local TopAccent = Instance.new("Frame", TitleBar)
+TopAccent.Size           = UDim2.new(1,0,0,3)
+TopAccent.BorderSizePixel = 0
+TopAccent.BackgroundColor3 = Color3.new(1,1,1)
+TopAccent.ZIndex         = 20
+local aGrad = Instance.new("UIGradient", TopAccent)
+task.spawn(function()
+    local t=0; local n=#BAR_COLS
+    while TopAccent.Parent do
+        t=t+task.wait(0.025); local kps={}
+        for i=1,n do
+            local fr=(i-1)/(n-1)
+            local ph=(fr+t*0.14)%1
+            local ix=math.floor(ph*(n-1))+1
+            local nx=(ix%(n-1))+1
+            local sub=(ph*(n-1))%1
+            kps[i]=ColorSequenceKeypoint.new(fr, lerpColor(BAR_COLS[ix],BAR_COLS[nx],sub))
+        end
+        aGrad.Color=ColorSequence.new(kps)
+    end
+end)
+
+-- logo area
+local LogoLbl = Instance.new("TextLabel", TitleBar)
+LogoLbl.Size             = UDim2.new(0,80,1,0)
+LogoLbl.Position         = UDim2.new(0,10,0,0)
+LogoLbl.BackgroundTransparency = 1
+LogoLbl.Text             = "KHUB"
+LogoLbl.Font             = Enum.Font.GothamBold
+LogoLbl.TextSize         = 18; LogoLbl.ZIndex=12
+local logoGrad = Instance.new("UIGradient", LogoLbl)
+logoGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,   Color3.fromRGB(200,140,255)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255,210,120)),
+    ColorSequenceKeypoint.new(1,   Color3.fromRGB(200,140,255)),
+})
+task.spawn(function()
+    local t=0
+    while LogoLbl.Parent do
+        t=t+task.wait(0.03)
+        logoGrad.Offset=Vector2.new(math.sin(t*0.8)*0.8,0)
+    end
+end)
+
+local SubLbl = Instance.new("TextLabel", TitleBar)
+SubLbl.Size             = UDim2.new(0,220,0,12)
+SubLbl.Position         = UDim2.new(0,10,0,26)
+SubLbl.BackgroundTransparency = 1
+SubLbl.Text             = "Steal an Egg  •  KHUB  |  Cheating During Testing"
+SubLbl.Font             = Enum.Font.Code
+SubLbl.TextSize         = 9
+SubLbl.TextColor3       = THEME.dim
+SubLbl.ZIndex           = 12
+
+-- status strip inside title bar
+local statCard = Instance.new("Frame", TitleBar)
+statCard.Size            = UDim2.new(0,170,0,22)
+statCard.Position        = UDim2.new(0,230,0.5,-11)
+statCard.BackgroundColor3 = Color3.fromRGB(14,8,32)
+statCard.BorderSizePixel = 0; statCard.ZIndex=12
+corner(statCard,6); mkStroke(statCard,THEME.stroke,1,0.5)
+
+StatusRef = Instance.new("TextLabel", statCard)
+StatusRef.Size           = UDim2.new(1,-6,1,0)
+StatusRef.Position       = UDim2.new(0,3,0,0)
+StatusRef.BackgroundTransparency=1
+StatusRef.Text           = "Ready"
+StatusRef.Font           = Enum.Font.Gotham
+StatusRef.TextSize       = 9; StatusRef.TextColor3=THEME.dim
+StatusRef.TextXAlignment = Enum.TextXAlignment.Left
+StatusRef.ZIndex         = 13; StatusRef.TextTruncate=Enum.TextTruncate.AtEnd
+
+local MinBtn = Instance.new("TextButton", TitleBar)
+MinBtn.Size          = UDim2.new(0,24,0,20)
+MinBtn.Position      = UDim2.new(1,-28,0.5,-10)
+MinBtn.BackgroundColor3 = Color3.fromRGB(30,12,55)
+MinBtn.Text          = "–"; MinBtn.Font=Enum.Font.GothamBold
+MinBtn.TextSize      = 14; MinBtn.TextColor3=THEME.dim
+MinBtn.ZIndex        = 15
+corner(MinBtn,5); mkStroke(MinBtn,THEME.stroke,1,0.5)
+
+-- ── TAB ROW  (box tabs, not sidebar block) ─────────────────
+local TAB_NAMES = { "Main", "Answers", "ESP", "Settings" }
+local tabBtns   = {}
+
+local TabRow = Instance.new("Frame", Win)
+TabRow.Size            = UDim2.new(1,-20,0,28)
+TabRow.Position        = UDim2.new(0,10,0,48)
+TabRow.BackgroundTransparency = 1
+TabRow.ZIndex          = 11
+
+-- layout for tab buttons
+local tabLayout = Instance.new("UIListLayout", TabRow)
+tabLayout.FillDirection = Enum.FillDirection.Horizontal
+tabLayout.Padding       = UDim.new(0,4)
+tabLayout.SortOrder     = Enum.SortOrder.LayoutOrder
+
+for i, name in ipairs(TAB_NAMES) do
+    local b = Instance.new("TextButton", TabRow)
+    b.LayoutOrder        = i
+    b.Size               = UDim2.new(0.24,0,1,0)
+    b.BackgroundColor3   = (i==1) and Color3.fromRGB(50,20,110) or Color3.fromRGB(20,10,45)
+    b.BackgroundTransparency = (i==1) and 0 or 0.3
+    b.Text               = name
+    b.Font               = Enum.Font.GothamBold
+    b.TextSize           = 11
+    b.TextColor3         = (i==1) and THEME.gold or THEME.dim
+    b.AutoButtonColor    = false
+    b.ZIndex             = 12
+    corner(b, 7)
+    if i==1 then mkStroke(b, THEME.accent, 1.2, 0.3) end
+    tabBtns[name] = b
+end
+
+-- phase pill (right of tabs)
+local PhasePill = Instance.new("Frame", Win)
+PhasePill.Size           = UDim2.new(0,140,0,26)
+PhasePill.Position       = UDim2.new(1,-150,0,49)
+PhasePill.BackgroundColor3 = Color3.fromRGB(12,7,28)
+PhasePill.BorderSizePixel= 0; PhasePill.ZIndex=12
+corner(PhasePill,7); mkStroke(PhasePill,THEME.stroke,1,0.5)
+
+PhaseRef = Instance.new("TextLabel", PhasePill)
+PhaseRef.Size            = UDim2.new(1,-6,1,0)
+PhaseRef.Position        = UDim2.new(0,3,0,0)
+PhaseRef.BackgroundTransparency=1
+PhaseRef.Text            = "⏸  idle"
+PhaseRef.Font            = Enum.Font.GothamBold
+PhaseRef.TextSize        = 9; PhaseRef.TextColor3=THEME.dim
+PhaseRef.TextXAlignment  = Enum.TextXAlignment.Left; PhaseRef.ZIndex=13
+
+-- countdown big number (center of screen, shows during load)
+CountdownRef = Instance.new("TextLabel", ScreenGui)
+CountdownRef.Size            = UDim2.new(0,80,0,80)
+CountdownRef.Position        = UDim2.new(0.5,-40,0.5,-40)
+CountdownRef.BackgroundColor3 = Color3.fromRGB(10,5,25)
+CountdownRef.BackgroundTransparency = 0.1
+CountdownRef.Text            = "3"
+CountdownRef.Font            = Enum.Font.GothamBold
+CountdownRef.TextSize        = 52
+CountdownRef.TextColor3      = THEME.accent
+CountdownRef.TextStrokeColor3 = THEME.violet
+CountdownRef.TextStrokeTransparency = 0.3
+CountdownRef.ZIndex          = 80; CountdownRef.Visible=false
+corner(CountdownRef, 16); mkStroke(CountdownRef, THEME.violet, 2.5, 0.1)
+
+-- ── PAGE CONTAINER ─────────────────────────────────────────
+local Pages = {}
+local function makePage(name)
+    local p = Instance.new("ScrollingFrame", Win)
+    p.Name               = name
+    p.Size               = UDim2.new(1,-16,1,-84)
+    p.Position           = UDim2.new(0,8,0,80)
+    p.BackgroundTransparency = 1
+    p.BorderSizePixel    = 0
+    p.ScrollBarThickness = 3
+    p.ScrollBarImageColor3 = THEME.mute
+    p.CanvasSize         = UDim2.new(0,0,0,480)
+    p.ZIndex             = 11; p.Visible=false
+    Pages[name]=p; return p
+end
+
+local pageMain    = makePage("Main")
+local pageAnswers = makePage("Answers")
+local pageESP     = makePage("ESP")
+local pageSet     = makePage("Settings")
+pageMain.Visible  = true
+
+local currentTab  = "Main"
+local function switchTab(name)
+    currentTab = name
+    for n, pg in pairs(Pages) do pg.Visible=(n==name) end
+    for n, b in pairs(tabBtns) do
+        local on = (n==name)
+        b.BackgroundColor3       = on and Color3.fromRGB(50,20,110) or Color3.fromRGB(20,10,45)
+        b.BackgroundTransparency = on and 0 or 0.3
+        b.TextColor3             = on and THEME.gold or THEME.dim
+        local ex = b:FindFirstChildOfClass("UIStroke"); if ex then ex:Destroy() end
+        if on then mkStroke(b, THEME.accent, 1.2, 0.3) end
+    end
+end
+for name, b in pairs(tabBtns) do
+    b.MouseButton1Click:Connect(function() switchTab(name) end)
+end
+
+-- ── Widget helpers ─────────────────────────────────────────
+local function row(parent, y)
+    local f = Instance.new("Frame", parent)
+    f.Size            = UDim2.new(1,0,0,30)
+    f.Position        = UDim2.new(0,0,0,y)
+    f.BackgroundColor3 = THEME.card
+    f.BorderSizePixel = 0; f.ZIndex=12
+    corner(f,8); mkStroke(f, THEME.stroke, 1, 0.5)
+    gradient(f, THEME.card, Color3.fromRGB(18,10,38), 0)
+    return f
+end
+
+local function lbl(parent, text, y, sz, col, bold)
+    local l = Instance.new("TextLabel", parent)
+    l.Size            = UDim2.new(1,-10,0,sz+4)
+    l.Position        = UDim2.new(0,6,0,y)
+    l.BackgroundTransparency=1
+    l.Text            = text; l.Font=bold and Enum.Font.GothamBold or Enum.Font.Gotham
+    l.TextSize        = sz; l.TextColor3=col
+    l.TextXAlignment  = Enum.TextXAlignment.Left
+    l.ZIndex          = 13; l.TextWrapped=true
+    return l
+end
+
+local function toggle(parent, text, y, default, cb)
+    local r   = row(parent, y)
+    local lab = Instance.new("TextLabel", r)
+    lab.Size            = UDim2.new(1,-64,1,0)
+    lab.Position        = UDim2.new(0,8,0,0)
+    lab.BackgroundTransparency=1
+    lab.Text            = text; lab.Font=Enum.Font.Gotham
+    lab.TextSize        = 11; lab.TextColor3=THEME.text
+    lab.TextXAlignment  = Enum.TextXAlignment.Left; lab.ZIndex=13
+    local btn = Instance.new("TextButton", r)
+    btn.Size            = UDim2.new(0,46,0,21)
+    btn.Position        = UDim2.new(1,-52,0.5,-10)
+    btn.BackgroundColor3 = default and Color3.fromRGB(45,120,65) or Color3.fromRGB(50,18,80)
+    btn.Text            = default and "ON" or "OFF"
+    btn.Font            = Enum.Font.GothamBold
+    btn.TextSize        = 11; btn.TextColor3=Color3.new(1,1,1)
+    btn.ZIndex          = 14
+    corner(btn,6)
+    mkStroke(btn, default and THEME.safe or THEME.mute, 1, 0.4)
+    local on=default
+    btn.MouseButton1Click:Connect(function()
+        on=not on
+        btn.Text=on and "ON" or "OFF"
+        btn.BackgroundColor3=on and Color3.fromRGB(45,120,65) or Color3.fromRGB(50,18,80)
+        local ex=btn:FindFirstChildOfClass("UIStroke"); if ex then ex:Destroy() end
+        mkStroke(btn, on and THEME.safe or THEME.mute, 1, 0.4)
+        cb(on)
+    end)
+    return btn
+end
+
+local function bigBtn(parent, text, y, fn, accent, h)
+    h = h or 27
+    local b = Instance.new("TextButton", parent)
+    b.Size            = UDim2.new(1,0,0,h)
+    b.Position        = UDim2.new(0,0,0,y)
+    b.BackgroundColor3 = Color3.fromRGB(30,14,65)
+    b.Text            = text
+    b.Font            = Enum.Font.GothamBold
+    b.TextSize        = 11; b.TextColor3=THEME.text
+    b.ZIndex          = 12
+    corner(b,8); mkStroke(b, accent or THEME.accent, 1.2, 0.4)
+    gradient(b, Color3.fromRGB(30,14,65), Color3.fromRGB(50,20,100), 90)
+    b.MouseButton1Click:Connect(fn)
+    return b
+end
+
+-- ══════════════════════════════════════════════════════════
+--  PAGE · MAIN
+-- ══════════════════════════════════════════════════════════
+local yM = 0
+toggle(pageMain, "⚡  Auto Flow (photo→load→answer)", yM, true, function(v)
+    State.AutoFlow=v
+    if v then runAutoFlow(); notify("Auto flow started")
+    else State.Running=false; notify("Auto flow stopped") end
+end)
+toggle(pageMain, "🚨  Anti Caught (pencil on danger)", yM+34, true, function(v) State.AntiCaught=v end)
+
+local yMb = yM + 74
+bigBtn(pageMain, "📷  Take Photo Now",              yMb,    function()
+    if not isSafeForPhoto() then notify("Not safe – CLEAR zone required"); return end
+    takePhoto(); notify("Photo taken ✓")
+end)
+bigBtn(pageMain, "📱  Load & Highlight (3s countdown)", yMb+31, function()
+    if isDanger() then notify("Too close!"); return end
+    setPhase("load"); notify("Loading...")
+    openPhoneAnswers(); doCountdownLoad()
+    local c=readPhoneAnswers(); refreshSavedUI(); applyHighlights()
+    notify("Loaded "..c.." Q · highlighted "..#State.HighlightFrames); setPhase("idle")
+end)
+bigBtn(pageMain, "✍  Auto Pencil + Submit All",     yMb+62, function()
+    equipPencil(); task.wait(0.2)
+    local n=submitSaved(); applyHighlights()
+    notify("Submitted "..n.." answers · highlights preserved")
+end)
+bigBtn(pageMain, "🖊  Equip Pencil",                yMb+93, equipPencil, THEME.dim)
+bigBtn(pageMain, "❌  Clear Highlights",             yMb+124, function()
+    clearHighlights(); notify("Highlights cleared")
+end, THEME.mute)
+
+-- show radar button
+bigBtn(pageMain, "☽  Show Radar",                  yMb+155, function()
+    RadarFrame.Visible=true; notify("Radar shown")
+end, THEME.violet)
+
+-- ══════════════════════════════════════════════════════════
+--  PAGE · ANSWERS
+-- ══════════════════════════════════════════════════════════
+local yAns = 0
+bigBtn(pageAnswers, "📱  Load + Highlight (3s)", yAns, function()
+    if isDanger() then notify("Too close"); return end
+    setPhase("load"); notify("Loading...")
+    openPhoneAnswers(); doCountdownLoad()
+    local c=readPhoneAnswers(); refreshSavedUI(); applyHighlights()
+    notify("Done – "..c.." Q"); setPhase("idle")
+end)
+bigBtn(pageAnswers, "✍  Submit All",   yAns+31, function()
+    equipPencil(); task.wait(0.2)
+    local n=submitSaved(); applyHighlights(); notify("Submitted "..n)
+end)
+bigBtn(pageAnswers, "🗑  Clear Saved", yAns+62, function()
+    State.SavedAnswers={}; clearHighlights(); refreshSavedUI(); notify("Cleared")
+end, THEME.mute)
+
+-- answer list box (shows loaded Q+A with numbers)
+local cBox = Instance.new("Frame", pageAnswers)
+cBox.Size            = UDim2.new(1,0,0,280)
+cBox.Position        = UDim2.new(0,0,0,yAns+96)
+cBox.BackgroundColor3 = Color3.fromRGB(16,9,36)
+cBox.BorderSizePixel = 0; cBox.ZIndex=12
+corner(cBox,10); mkStroke(cBox, THEME.violet, 1.5, 0.3)
+gradient(cBox, Color3.fromRGB(16,9,36), Color3.fromRGB(22,12,48), 90)
+
+local cBoxHeader = Instance.new("Frame", cBox)
+cBoxHeader.Size            = UDim2.new(1,0,0,22)
+cBoxHeader.BackgroundColor3 = Color3.fromRGB(30,12,70)
+cBoxHeader.BorderSizePixel = 0; cBoxHeader.ZIndex=13
+corner(cBoxHeader, 8)
+local cBoxHdrLbl = Instance.new("TextLabel", cBoxHeader)
+cBoxHdrLbl.Size             = UDim2.new(1,0,1,0)
+cBoxHdrLbl.BackgroundTransparency=1
+cBoxHdrLbl.Text             = "📋  Loaded Answers"
+cBoxHdrLbl.Font             = Enum.Font.GothamBold
+cBoxHdrLbl.TextSize         = 10; cBoxHdrLbl.TextColor3=THEME.gold
+cBoxHdrLbl.ZIndex           = 14
+
+SavedLabelRef = Instance.new("TextLabel", cBox)
+SavedLabelRef.Size           = UDim2.new(1,-12,1,-28)
+SavedLabelRef.Position       = UDim2.new(0,6,0,26)
+SavedLabelRef.BackgroundTransparency=1
+SavedLabelRef.Text           = formatSavedAnswers()
+SavedLabelRef.Font           = Enum.Font.Code
+SavedLabelRef.TextSize       = 11; SavedLabelRef.TextColor3=THEME.text
+SavedLabelRef.TextXAlignment = Enum.TextXAlignment.Left
+SavedLabelRef.TextYAlignment = Enum.TextYAlignment.Top
+SavedLabelRef.TextWrapped    = true; SavedLabelRef.ZIndex=13
+
+-- ══════════════════════════════════════════════════════════
+--  PAGE · ESP
+-- ══════════════════════════════════════════════════════════
+local yE=0
+lbl(pageESP, "Teacher ESP", yE, 11, THEME.gold, true)
+toggle(pageESP, "🔴  Teacher Highlight (red)", yE+16, true, function(v)
+    State.TeacherESP=v
+    if v then applyTeacherESP() else clearTeacherESP() end
+end)
+toggle(pageESP, "🟣  Desk ESP (violet outline)", yE+50, true, function(v)
+    State.DeskESP=v
+    if v then applyDeskESP() else clearDeskESP() end
+end)
+toggle(pageESP, "☽  Radar Visible",             yE+84, true, function(v)
+    RadarFrame.Visible=v
+end)
+
+bigBtn(pageESP, "🔄  Refresh All ESP",  yE+122, function()
+    applyTeacherESP(); applyDeskESP(); notify("ESP refreshed")
+end)
+bigBtn(pageESP, "🗑  Clear All ESP",    yE+153, function()
+    clearTeacherESP(); clearDeskESP(); notify("ESP cleared")
+end, THEME.mute)
+
+-- ══════════════════════════════════════════════════════════
+--  PAGE · SETTINGS
+-- ══════════════════════════════════════════════════════════
+local cCred = Instance.new("Frame", pageSet)
+cCred.Size            = UDim2.new(1,0,0,54)
+cCred.BackgroundColor3 = Color3.fromRGB(18,10,40)
+cCred.BorderSizePixel = 0; cCred.ZIndex=12
+corner(cCred,8); mkStroke(cCred, THEME.violet, 1.5, 0.3)
+gradient(cCred, Color3.fromRGB(18,10,40), Color3.fromRGB(28,14,60), 135)
+lbl(cCred, "Credits",                          6,  11, THEME.gold, true)
+lbl(cCred, "Yvaine & Kyiel · UI by Khub",      22, 12, THEME.text, true)
+lbl(cCred, "Steal an Egg • KHUB · CDT v4",     37, 9,  THEME.violet, false)
+lbl(cCred, "Toggle: RightShift / RightCtrl / K", 48, 9, THEME.dim, false)
+
+local yS=60
+bigBtn(pageSet, "💾  Save Config",  yS,    saveConfig)
+bigBtn(pageSet, "📂  Load Config",  yS+31, loadConfig)
+bigBtn(pageSet, "📋  Copy Discord", yS+62, function()
+    pcall(function() if setclipboard then setclipboard("https://discord.gg/rU9FyNEUQ7") end end)
+    notify("Discord copied")
+end)
+bigBtn(pageSet, "📺  Copy YouTube", yS+93, function()
+    pcall(function() if setclipboard then setclipboard("https://www.youtube.com/@kyielpambid") end end)
+    notify("YouTube copied")
+end)
+
+-- ══════════════════════════════════════════════════════════
+--  FLOATING ORB  (minimized icon)
+-- ══════════════════════════════════════════════════════════
+local Orb = Instance.new("ImageButton", ScreenGui)
+Orb.Name            = "Orb"
+Orb.Size            = UDim2.new(0,44,0,44)
+Orb.Position        = UDim2.new(0,20,1,-78)
+Orb.BackgroundColor3= THEME.accentDk
+Orb.Image           = "rbxassetid://140466936910510"
+Orb.ScaleType       = Enum.ScaleType.Fit
+Orb.Visible         = false; Orb.ZIndex=50
+corner(Orb,22)
+local orbStroke=mkStroke(Orb, THEME.accent, 1.8, 0.1)
+
+local ORB_COLS={THEME.accent,THEME.gold,THEME.cyan,THEME.pink}
+
+-- pulse ring
+local rng1 = Instance.new("Frame", Orb)
+rng1.Size=UDim2.new(1,0,1,0); rng1.AnchorPoint=Vector2.new(0.5,0.5)
+rng1.Position=UDim2.new(0.5,0,0.5,0)
+rng1.BackgroundTransparency=1; rng1.ZIndex=49
+corner(rng1,99)
+local rs1=Instance.new("UIStroke",rng1)
+rs1.Color=THEME.gold; rs1.Thickness=1.8; rs1.Transparency=0.1
+
+task.spawn(function()
+    local ci=1
+    while rng1.Parent do
+        rng1.Size=UDim2.new(1,0,1,0); rs1.Transparency=0.08
+        TweenService:Create(rng1,TweenInfo.new(1.1,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),
+            {Size=UDim2.new(1,18,1,18)}):Play()
+        TweenService:Create(rs1,TweenInfo.new(1.1,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),
+            {Transparency=1}):Play()
+        task.wait(1.4); ci=(ci%#ORB_COLS)+1; rs1.Color=ORB_COLS[ci]
+    end
+end)
+
+local orbBase=Orb.Position
+task.spawn(function()
+    local t=0
+    while Orb.Parent do
+        t=t+task.wait(0.033)
+        if Orb.Visible then
+            Orb.Position=UDim2.new(orbBase.X.Scale,orbBase.X.Offset,
+                orbBase.Y.Scale,orbBase.Y.Offset+math.sin(t*1.8)*3)
+        end
+    end
+end)
+
+task.spawn(function()
+    local t,ci=0,1
+    while Orb.Parent do
+        t=t+task.wait(0.033)
+        local frac=(math.sin(t*0.7)+1)/2
+        local nxt=(ci%#ORB_COLS)+1
+        orbStroke.Color=lerpColor(ORB_COLS[ci],ORB_COLS[nxt],frac)
+        if frac>0.98 then ci=nxt end
+    end
+end)
+
+-- ══════════════════════════════════════════════════════════
+--  VISIBILITY / DRAG
+-- ══════════════════════════════════════════════════════════
+local function setVisible(on)
+    Win.Visible=on; Orb.Visible=not on
+end
+
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function()   setVisible(true)  end)
+
+-- main window drag
+local dragging, dragStart, startPos
+TitleBar.InputBegan:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+        dragging=true; dragStart=i.Position; startPos=Win.Position
+    end
+end)
+TitleBar.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+        dragging=false
+    end
+end)
+
+-- orb drag
+local orbDrag,orbStart,orbPos
+Orb.InputBegan:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+        orbDrag=true; orbStart=i.Position; orbPos=Orb.Position
+    end
+end)
+Orb.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+        orbDrag=false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(i)
+    if i.UserInputType~=Enum.UserInputType.MouseMovement and
+       i.UserInputType~=Enum.UserInputType.Touch then return end
+    if dragging and dragStart then
+        local d=i.Position-dragStart
+        Win.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,
+                                 startPos.Y.Scale,startPos.Y.Offset+d.Y)
+    end
+    if orbDrag and orbStart then
+        local d=i.Position-orbStart
+        orbBase=UDim2.new(orbPos.X.Scale,orbPos.X.Offset+d.X,
+                           orbPos.Y.Scale,orbPos.Y.Offset+d.Y)
+        Orb.Position=orbBase
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input,gp)
+    if gp then return end
+    if input.KeyCode==Enum.KeyCode.RightShift or
+       input.KeyCode==Enum.KeyCode.RightControl or
+       input.KeyCode==Enum.KeyCode.K then
+        setVisible(not Win.Visible)
+    end
+    -- R = show radar
+    if input.KeyCode==Enum.KeyCode.R then
+        RadarFrame.Visible=not RadarFrame.Visible
+    end
+end)
+
+-- ══════════════════════════════════════════════════════════
+--  BOOT
+-- ══════════════════════════════════════════════════════════
+pcall(function()
+    local old = CoreGui:FindFirstChild("KHUB_Radar")
+    if old then old:Destroy() end
+    local old2 = player.PlayerGui:FindFirstChild("KHUB_Radar")
+    if old2 then old2:Destroy() end
+end)
+
+runAutoFlow()
+setPhase("idle")
+notify("KHUB v4 loaded · R = toggle radar")
+print("[KHUB v4] Loaded · Floating Radar · Box Tabs · ESP · Auto Flow · K/RShift/RCtrl toggle · R = Radar")
