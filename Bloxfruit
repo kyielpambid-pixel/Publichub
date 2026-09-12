@@ -251,15 +251,34 @@ if not player.Team then
     until player.Team
 end   
    
-hookfunction(require(game:GetService("ReplicatedStorage").Effect.Container.Death), function()end)
-hookfunction(require(game:GetService("ReplicatedStorage").Effect.Container.Respawn), function()end)
+pcall(function()
+	local effect = game:GetService("ReplicatedStorage"):FindFirstChild("Effect")
+	if not effect then return end
+	local container = effect:FindFirstChild("Container")
+	if container then
+		local death = container:FindFirstChild("Death")
+		local respawn = container:FindFirstChild("Respawn")
+		if death then pcall(function() hookfunction(require(death), function() end) end) end
+		if respawn then pcall(function() hookfunction(require(respawn), function() end) end) end
+	else
+		pcall(function()
+			local mod = require(effect)
+			if type(mod) == "table" then
+				if mod.Death then pcall(function() hookfunction(mod.Death, function() end) end) end
+				if mod.Respawn then pcall(function() hookfunction(mod.Respawn, function() end) end) end
+			end
+		end)
+	end
+end)
+
+World1, World2, World3 = false, false, false
 if game.PlaceId == 2753915549 then
-        World1 = true
-    elseif game.PlaceId == 4442272183 then
-        World2 = true
-    elseif game.PlaceId == 7449423635 then
-        World3 = true
-    end
+	World1 = true
+elseif game.PlaceId == 4442272183 then
+	World2 = true
+elseif game.PlaceId == 7449423635 then
+	World3 = true
+end
 
          function MaterialMon()
          if _G.SelectMaterial == "Radiactive Material" then
