@@ -1,7 +1,7 @@
 --[[
 	KHUB Karinderya
-	New violet UI · no FluentPro
-	Credits: Yvaine & Kyiel · UI by KHUB
+	New violet UI - no FluentPro
+	Credits: Yvaine & Kyiel - UI by KHUB
 	Discord: https://discord.gg/EKPb7BRDH8
 	Keybinds: RightShift / RightCtrl / K = toggle UI
 ]]
@@ -51,14 +51,26 @@ ScreenGui.Name = "KHUB_Karinderya"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.DisplayOrder = 999
-pcall(function() ScreenGui.Parent = CoreGui end)
-if not ScreenGui.Parent then
-	pcall(function() ScreenGui.Parent = gethui and gethui() end)
+ScreenGui.DisplayOrder = 999999
+ScreenGui.Enabled = true
+-- Prefer PlayerGui first (works better after Luarmor / key systems)
+local function parentGui(gui)
+	local ok = false
+	pcall(function()
+		local pg = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui", 5)
+		if pg then gui.Parent = pg; ok = true end
+	end)
+	if ok then return end
+	pcall(function()
+		if gethui then gui.Parent = gethui(); ok = true end
+	end)
+	if ok then return end
+	pcall(function() gui.Parent = CoreGui end)
+	if not gui.Parent then
+		pcall(function() gui.Parent = player:WaitForChild("PlayerGui") end)
+	end
 end
-if not ScreenGui.Parent then
-	ScreenGui.Parent = player:WaitForChild("PlayerGui")
-end
+parentGui(ScreenGui)
 
 local function corner(p, r)
 	local c = Instance.new("UICorner")
@@ -182,7 +194,7 @@ local Sub = Instance.new("TextLabel")
 Sub.Size = UDim2.new(0, 300, 0, 14)
 Sub.Position = UDim2.new(0, 14, 0, 38)
 Sub.BackgroundTransparency = 1
-Sub.Text = "Yvaine & Kyiel · RightShift / K = toggle"
+Sub.Text = "Yvaine & Kyiel - RightShift / K = toggle"
 Sub.Font = Enum.Font.Code
 Sub.TextSize = 10
 Sub.TextColor3 = THEME.mute
@@ -599,7 +611,7 @@ section(pages.Welcome, "PC Keybinds")
 makeLabel(pages.Welcome, "RightShift / RightCtrl / K  →  Toggle UI")
 makeLabel(pages.Welcome, "LeftCtrl  →  (legacy minimize)")
 makeLabel(pages.Welcome, "Drag header to move window")
-makeLabel(pages.Welcome, "Floating icon: click to reopen · drag to move")
+makeLabel(pages.Welcome, "Floating icon: click to reopen - drag to move")
 
 -- Floating icon (NOT auto-scaled)
 local Orb = Instance.new("ImageButton")
@@ -689,6 +701,8 @@ end)
 
 -- UI builders exposed for binding after State exists
 _G.__KHUB_KARI_UI = {
+	Win = Win,
+	ScreenGui = ScreenGui,
 	section = section,
 	makeToggle = makeToggle,
 	makeSlider = makeSlider,
@@ -698,7 +712,6 @@ _G.__KHUB_KARI_UI = {
 	statusMain = statusMain,
 	setOrbLocked = function(v) OrbLocked = v end,
 	Library = Library,
-	ScreenGui = ScreenGui,
 	selectTab = selectTab,
 	THEME = THEME,
 	DISCORD = DISCORD,
@@ -707,7 +720,19 @@ _G.__KHUB_KARI_UI = {
 }
 
 Win.Visible = true
-print("[KHUB] Karinderya UI shell ready — loading game logic...")
+Win.Parent = ScreenGui
+ScreenGui.Enabled = true
+pcall(function()
+	if not ScreenGui.Parent then
+		local pg = player:FindFirstChild("PlayerGui")
+		if pg then ScreenGui.Parent = pg end
+	end
+end)
+task.defer(function()
+	Win.Visible = true
+	ScreenGui.Enabled = true
+end)
+print("[KHUB] Karinderya UI shell ready - loading game logic...")
 
 
 -- GAME BINDINGS (deferred so UI always shows first)
@@ -727,7 +752,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local Modules = ReplicatedStorage:WaitForChild("Modules", 12)
 if not Modules then
-    error("Modules not found — join the Karinderya game first", 0)
+    error("Modules not found - join the Karinderya game first", 0)
 end
 local FoodConfig        = require(Modules:WaitForChild("FoodConfig"))
 local IngredientsConfig = require(Modules:WaitForChild("IngredientsConfig"))
@@ -1122,7 +1147,7 @@ local function stepFulfillSoftdrinkOrders()
 end
 
 --=====================================================================
--- SERVE â€” ORDER TAKING & FOOD PLATES
+-- SERVE - ORDER TAKING & FOOD PLATES
 --=====================================================================
 
 local function stepTakeOrder()
@@ -1506,14 +1531,14 @@ local function runDishCycle(plot)
 
     if os.clock() < dishWashRetryUntil then
         Stats.DishState = string.format(
-            "Back at saved position â€” next dish check in %ds",
+            "Back at saved position - next dish check in %ds",
             math.max(1, math.ceil(dishWashRetryUntil - os.clock())))
         return false
     end
 
     if State.Enabled and os.clock() < dishServeYieldUntil then
         Stats.DishState = string.format(
-            "Auto Serve priority â€” dishes resume in %ds",
+            "Auto Serve priority - dishes resume in %ds",
             math.max(1, math.ceil(dishServeYieldUntil - os.clock())))
         return false
     end
@@ -1525,7 +1550,7 @@ local function runDishCycle(plot)
 
     if carriedBefore == 0 and sinkBefore < batchAt and #dirtyPrompts == 0 then
         Stats.DishState = string.format(
-            "Watching for dirty dishes â€” sink %d/%d", sinkBefore, batchAt)
+            "Watching for dirty dishes - sink %d/%d", sinkBefore, batchAt)
         return false
     end
     if carryingFood() then return false end
@@ -1560,10 +1585,10 @@ local function runDishCycle(plot)
                 Stats.WashCycles = Stats.WashCycles + 1
                 washedCountThisCycle = math.max(1, sinkBefore)
                 Stats.DishState = string.format(
-                    "Washed %d dishes â€” back at saved position; Auto Serve priority",
+                    "Washed %d dishes - back at saved position; Auto Serve priority",
                     washedCountThisCycle)
             else
-                Stats.DishState = "Wash input finished â€” returning to serve"
+                Stats.DishState = "Wash input finished - returning to serve"
             end
             return
         end
@@ -1639,14 +1664,14 @@ local function runDishCycle(plot)
                 Stats.WashCycles = Stats.WashCycles + 1
                 washedCountThisCycle = math.max(1, sinkAfterPut)
                 Stats.DishState = string.format(
-                    "Washed %d dishes â€” back at saved position; Auto Serve priority",
+                    "Washed %d dishes - back at saved position; Auto Serve priority",
                     washedCountThisCycle)
             else
-                Stats.DishState = "Wash finished â€” back at saved position"
+                Stats.DishState = "Wash finished - back at saved position"
             end
         else
             Stats.DishState = string.format(
-                "Loaded sink %d/%d â€” waiting for full batch",
+                "Loaded sink %d/%d - waiting for full batch",
                 sinkAfterPut, batchAt)
         end
     end)
@@ -1654,7 +1679,7 @@ local function runDishCycle(plot)
     local returned = returnedImmediately or restoreAfterDish(origin)
     if washedCountThisCycle > 0 and returned then
         Stats.DishState = string.format(
-            "Washed %d dishes â€” back at saved position; Auto Serve priority",
+            "Washed %d dishes - back at saved position; Auto Serve priority",
             washedCountThisCycle)
     end
     releaseMove()
@@ -1737,7 +1762,7 @@ local function sweepTrash(plot)
     for index, entry in ipairs(list) do
         if (Library and Library.Unloaded) or not State.TrashEnabled then break end
         if State.TrashYield and restaurantBusy(plot) then
-            Stats.TrashState = "Paused â€” restaurant needs you"
+            Stats.TrashState = "Paused - restaurant needs you"
             break
         end
         if entry.model.Parent then
@@ -1907,7 +1932,7 @@ local function restockIngredients()
             packsBought, packsBought == 1 and "" or "s",
             ingredientTypes, ingredientTypes == 1 and "" or "s", spent)
     elseif broke > 0 then
-        Stats.StockState = string.format("Low cash \u{20B1}%d â€” holding reserve \u{20B1}%d",
+        Stats.StockState = string.format("Low cash \u{20B1}%d - holding reserve \u{20B1}%d",
             cash, State.CashReserve)
     elseif sharedFull > 0 then
         Stats.StockState = string.format(
@@ -2024,7 +2049,7 @@ local function buyNextTablePass()
     local cash = getCash()
     if cash < exactPrice then
         Stats.TableState = string.format(
-            "%s costs \u{20B1}%d â€” cash \u{20B1}%d (need \u{20B1}%d more)",
+            "%s costs \u{20B1}%d - cash \u{20B1}%d (need \u{20B1}%d more)",
             target, exactPrice, cash, exactPrice - cash)
         return
     end
@@ -2199,8 +2224,8 @@ local function placeFurniture()
 
         if sent == 0 then
             Stats.TableState = remembered > 0
-                and "Watching â€” current best furniture was already handled"
-                or "Watching â€” placed furniture matches best items owned"
+                and "Watching - current best furniture was already handled"
+                or "Watching - placed furniture matches best items owned"
             return
         end
 
@@ -2416,7 +2441,7 @@ local function shopPass()
         elseif blockedByCash then
             Stats.ShopState = "Selected stock found, but cash reserve blocked purchase"
         elseif not selectedInStock then
-            Stats.ShopState = "Selected items out of stock â€” watching restocks"
+            Stats.ShopState = "Selected items out of stock - watching restocks"
         end
     end)
 
@@ -2648,7 +2673,7 @@ local function redeemAll(force)
     for index, code in ipairs(list) do
         if (Library and Library.Unloaded) then break end
         if force or not firedCodes[code] then
-            Stats.CodeState = string.format("Redeeming %d/%d â€” %s", index, #list, code)
+            Stats.CodeState = string.format("Redeeming %d/%d - %s", index, #list, code)
             local ok = pcall(function()
                 RedeemCode:FireServer(code)
             end)
@@ -2761,7 +2786,7 @@ task.spawn(function()
         if State.Enabled or State.DishEnabled then
             local plot = getPlot()
             if not plot then
-                Stats.Status = "No plot owned â€” claim one first"
+                Stats.Status = "No plot owned - claim one first"
             elseif not getRoot() then
                 Stats.Status = "Waiting for character"
             else
@@ -2817,7 +2842,7 @@ task.spawn(function()
             if not getRoot() then
                 Stats.TrashState = "Waiting for character"
             elseif State.TrashYield and restaurantBusy(plot) then
-                Stats.TrashState = "Waiting â€” restaurant busy"
+                Stats.TrashState = "Waiting - restaurant busy"
             else
                 local ok, err = pcall(function() sweepTrash(plot) end)
                 if not ok then
@@ -3062,8 +3087,8 @@ end)
 
 -- CREDITS
 section(pages.Credits, "Credits")
-makeLabel(pages.Credits, "Kyiel & Arin · KHUB")
-makeLabel(pages.Credits, "UI by KHUB · No FluentPro")
+makeLabel(pages.Credits, "Kyiel & Arin - KHUB")
+makeLabel(pages.Credits, "UI by KHUB - No FluentPro")
 makeButton(pages.Credits, "Copy Discord", function()
 	if setclipboard then setclipboard(UI.DISCORD) end
 end)
@@ -3089,9 +3114,27 @@ print("RightShift / K / RightCtrl = Toggle UI")
         warn("[KHUB Karinderya] Game logic error: " .. tostring(errLoad))
         local UI = _G.__KHUB_KARI_UI
         if UI and UI.statusMain then
-            UI.statusMain.Text = "Status: Error loading modules — join Karinderya game"
+            UI.statusMain.Text = "Status: Error loading modules - join Karinderya game"
             UI.statusMain.TextColor3 = Color3.fromRGB(230, 80, 100)
         end
     end
 end)
 
+
+
+-- FORCE_UI_SHOW_KHUB (after Luarmor key unlock)
+task.defer(function()
+	pcall(function()
+		local UI = _G.__KHUB_KARI_UI
+		if UI and UI.ScreenGui then
+			UI.ScreenGui.Enabled = true
+			if not UI.ScreenGui.Parent then
+				local pg = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+				if pg then UI.ScreenGui.Parent = pg end
+			end
+		end
+		if UI and UI.Win then
+			UI.Win.Visible = true
+		end
+	end)
+end)
