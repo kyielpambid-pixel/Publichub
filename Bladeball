@@ -1,11 +1,6 @@
---[[
-	Blade Ball by Khub
-	UI: Lua Land + Floating Icon
-	Credits: Yvaine & Kyiel · UI by Khub
-	Discord: https://discord.gg/rU9FyNEUQ7
-]]
-
-repeat task.wait() until game:IsLoaded()
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -51,11 +46,6 @@ local function getEarlyOffset()
 	return (100 - currentAccuracy) * 0.0015
 end
 
-local function Notify(t, c)
-	print("[KHUB Blade Ball]", t, c or "")
-end
-
--- Floor circle
 local circlePart = Instance.new("Part")
 circlePart.Name = "KHUB_ParryCircle"
 circlePart.Anchored = true
@@ -319,43 +309,541 @@ RunService.PreSimulation:Connect(function()
 	updateFloorCircle(dist)
 end)
 
--- UI
-local ok, lib = pcall(function()
-	return loadstring(game:HttpGet("https://raw.githubusercontent.com/Angelo-Gitland/Lua-Land-Ui-Library/refs/heads/main/Lua%20Land%20Ui"))()
-end)
-if not ok or not lib then
-	warn("[KHUB] Lua Land failed:", lib)
-	return
+local colors = {
+	bg = Color3.fromRGB(18, 12, 28),
+	rail = Color3.fromRGB(24, 16, 38),
+	card = Color3.fromRGB(30, 20, 48),
+	accent = Color3.fromRGB(160, 100, 255),
+	accent2 = Color3.fromRGB(200, 140, 255),
+	gold = Color3.fromRGB(230, 190, 255),
+	text = Color3.fromRGB(235, 225, 250),
+	dim = Color3.fromRGB(160, 140, 190),
+	mute = Color3.fromRGB(110, 90, 140),
+	stroke = Color3.fromRGB(100, 60, 160),
+	green = Color3.fromRGB(90, 220, 140),
+}
+
+local function getPg()
+	return Player:FindFirstChild("PlayerGui") or Player:WaitForChild("PlayerGui", 8)
 end
 
-local Window = lib:CreateWindow({
-	Title = "Blade Ball by Khub",
-	Subtitle = "Script Suite",
-	TitleIcon = "swords",
-	Theme = "Default",
-	Intro = { Title = "Blade Ball by Khub", Subtitle = "KHUB · Auto Parry", Icon = "swords" },
-})
-
-local Welcome = Window:CreateTab({ Name = "Welcome", Icon = "house", SearchBar = false })
-Welcome:CreateSection("Profile")
-Welcome:CreateLabel("Player: " .. Player.Name)
-Welcome:CreateLabel("Display: " .. Player.DisplayName)
-Welcome:CreateSection("Credits")
-Welcome:CreateLabel("Credits: Yvaine & Kyiel")
-Welcome:CreateLabel("UI by Khub")
-Welcome:CreateLabel("Discord: " .. DISCORD)
-Welcome:CreateButton("Copy Discord", function()
-	pcall(function()
-		if setclipboard then setclipboard(DISCORD)
-		elseif toclipboard then toclipboard(DISCORD) end
-	end)
-	Notify("Discord", "Copied")
+pcall(function()
+	local g = getPg()
+	if g and g:FindFirstChild("KHUB_BladeBall") then
+		g.KHUB_BladeBall:Destroy()
+	end
 end)
 
-local Main = Window:CreateTab({ Name = "Main", Icon = "shield", SearchBar = true })
-Main:CreateSection("Auto Parry")
-Main:CreateToggle("Auto Parry", function(value)
-	enabled = value
+local gui = Instance.new("ScreenGui")
+gui.Name = "KHUB_BladeBall"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.DisplayOrder = 999999
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = getPg() or CoreGui
+
+local function round(obj, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 10)
+	c.Parent = obj
+end
+
+local function stroke(obj, col, th, tr)
+	local s = Instance.new("UIStroke")
+	s.Color = col or colors.stroke
+	s.Thickness = th or 1.4
+	s.Transparency = tr or 0.35
+	s.Parent = obj
+	return s
+end
+
+local HH = 58
+local W, H = 520, 380
+
+local win = Instance.new("Frame")
+win.Name = "Window"
+win.Size = UDim2.new(0, W, 0, H)
+win.Position = UDim2.new(0.5, -W/2, 0.5, -H/2)
+win.BackgroundColor3 = colors.bg
+win.BackgroundTransparency = 0.06
+win.BorderSizePixel = 0
+win.ClipsDescendants = true
+win.Active = true
+win.Parent = gui
+round(win, 14)
+
+local border = stroke(win, colors.accent, 2, 0.3)
+task.spawn(function()
+	local t = 0
+	while border.Parent do
+		t = t + task.wait(0.04)
+		local a = math.abs(math.sin(t * 1.4))
+		border.Color = Color3.fromRGB(120 + a*60, 70 + a*40, 200 + a*40)
+		border.Transparency = 0.25 + a * 0.2
+	end
+end)
+
+local sc = Instance.new("UIScale")
+sc.Parent = win
+local function fixScale()
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	local vs = cam.ViewportSize
+	sc.Scale = math.clamp(math.min(vs.X / 960, vs.Y / 720), 0.75, 1.05)
+end
+fixScale()
+pcall(function()
+	Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fixScale)
+end)
+
+local top = Instance.new("Frame")
+top.Size = UDim2.new(1, 0, 0, 3)
+top.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+top.BorderSizePixel = 0
+top.ZIndex = 25
+top.Parent = win
+local tg = Instance.new("UIGradient")
+tg.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 60, 220)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(220, 160, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(120, 60, 220)),
+})
+tg.Parent = top
+task.spawn(function()
+	local t = 0
+	while top.Parent do
+		t = t + task.wait(0.03)
+		tg.Offset = Vector2.new(math.sin(t * 1.2) * 0.85, 0)
+	end
+end)
+
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, HH)
+header.Position = UDim2.new(0, 0, 0, 3)
+header.BackgroundTransparency = 1
+header.ZIndex = 12
+header.Active = true
+header.Parent = win
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(0, 300, 0, 32)
+title.Position = UDim2.new(0, 14, 0, 8)
+title.BackgroundTransparency = 1
+title.Text = "Blade Ball by KHUB"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 17
+title.TextColor3 = colors.gold
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.ZIndex = 14
+title.Parent = header
+stroke(title, colors.accent, 1.2, 0.2)
+
+local shine = Instance.new("UIGradient")
+shine.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(180, 120, 255)),
+	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(255, 240, 255)),
+	ColorSequenceKeypoint.new(0.55, Color3.fromRGB(220, 180, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(160, 100, 255)),
+})
+shine.Parent = title
+task.spawn(function()
+	local t = 0
+	while title.Parent do
+		t = t + task.wait(0.035)
+		shine.Offset = Vector2.new(math.sin(t * 0.85) * 0.7, 0)
+	end
+end)
+
+local sub = Instance.new("TextLabel")
+sub.Size = UDim2.new(0, 300, 0, 14)
+sub.Position = UDim2.new(0, 14, 0, 38)
+sub.BackgroundTransparency = 1
+sub.Text = "Yvaine & Kyiel - RightShift / K = toggle"
+sub.Font = Enum.Font.Code
+sub.TextSize = 10
+sub.TextColor3 = colors.mute
+sub.TextXAlignment = Enum.TextXAlignment.Left
+sub.ZIndex = 14
+sub.Parent = header
+
+for i = 1, 12 do
+	local d = Instance.new("Frame")
+	d.Size = UDim2.fromOffset(3, 3)
+	d.BackgroundColor3 = Color3.fromHSV(0.72 + (i % 5) * 0.04, 0.7, 1)
+	d.BorderSizePixel = 0
+	d.ZIndex = 8
+	d.Parent = win
+	round(d, 99)
+	task.spawn(function()
+		local x = 20 + (i * 40) % (W - 40)
+		local y = H + math.random(0, 80)
+		local spd = 18 + (i % 5) * 6
+		while d.Parent do
+			y = y - spd * task.wait(0.03)
+			if y < -10 then
+				y = H + math.random(10, 60)
+				x = 20 + math.random(0, W - 40)
+			end
+			d.Position = UDim2.fromOffset(x, y)
+			d.BackgroundTransparency = math.clamp(y / H, 0.15, 0.75)
+		end
+	end)
+end
+
+local mid = Instance.new("TextLabel")
+mid.Size = UDim2.new(0, 220, 0, 48)
+mid.Position = UDim2.new(0.5, -110, 0.5, -24)
+mid.BackgroundTransparency = 1
+mid.Text = "KHUB"
+mid.Font = Enum.Font.GothamBlack
+mid.TextSize = 42
+mid.TextColor3 = Color3.fromRGB(200, 160, 255)
+mid.TextTransparency = 0.58
+mid.ZIndex = 7
+mid.Parent = win
+local mg = Instance.new("UIGradient")
+mg.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(140, 80, 255)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 220, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(160, 100, 255)),
+})
+mg.Parent = mid
+task.spawn(function()
+	local t = 0
+	while mid.Parent do
+		t = t + task.wait(0.04)
+		mid.TextTransparency = 0.52 + math.sin(t * 1.8) * 0.08
+		mg.Offset = Vector2.new(math.sin(t * 0.7) * 0.6, 0)
+	end
+end)
+
+local rail = Instance.new("Frame")
+rail.Size = UDim2.new(0, 118, 1, -HH - 3)
+rail.Position = UDim2.new(0, 0, 0, HH + 3)
+rail.BackgroundColor3 = colors.rail
+rail.BackgroundTransparency = 0.1
+rail.BorderSizePixel = 0
+rail.ZIndex = 40
+rail.Active = true
+rail.Parent = win
+
+local b1 = Instance.new("TextLabel")
+b1.Size = UDim2.new(1, -8, 0, 14)
+b1.Position = UDim2.fromOffset(8, 8)
+b1.BackgroundTransparency = 1
+b1.Text = "Blade Ball"
+b1.Font = Enum.Font.GothamBold
+b1.TextSize = 11
+b1.TextColor3 = colors.text
+b1.TextXAlignment = Enum.TextXAlignment.Left
+b1.ZIndex = 41
+b1.Parent = rail
+
+local b2 = Instance.new("TextLabel")
+b2.Size = UDim2.new(1, -8, 0, 12)
+b2.Position = UDim2.fromOffset(8, 22)
+b2.BackgroundTransparency = 1
+b2.Text = "by KHUB"
+b2.Font = Enum.Font.Code
+b2.TextSize = 9
+b2.TextColor3 = colors.mute
+b2.TextXAlignment = Enum.TextXAlignment.Left
+b2.ZIndex = 41
+b2.Parent = rail
+
+local tabs = {}
+local pages = {}
+local active = "Welcome"
+local tabOrder = {"Welcome", "Main", "Curves", "Move", "Credits"}
+
+local function tabBtn(name, y)
+	local b = Instance.new("TextButton")
+	b.Name = "Tab_" .. name
+	b.Size = UDim2.new(1, -10, 0, 28)
+	b.Position = UDim2.fromOffset(5, y)
+	b.BackgroundColor3 = Color3.fromRGB(36, 24, 55)
+	b.Text = "  " .. name
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 11
+	b.TextColor3 = colors.dim
+	b.TextXAlignment = Enum.TextXAlignment.Left
+	b.ZIndex = 50
+	b.AutoButtonColor = true
+	b.Parent = rail
+	round(b, 7)
+	local st = stroke(b, colors.accent, 1.2, 0.55)
+	task.spawn(function()
+		local t = 0
+		while b.Parent do
+			t = t + task.wait(0.05)
+			if active == name then
+				st.Transparency = 0.15 + math.abs(math.sin(t * 2)) * 0.2
+				st.Color = colors.accent2
+			else
+				st.Transparency = 0.55
+				st.Color = colors.stroke
+			end
+		end
+	end)
+	tabs[name] = b
+	return b
+end
+
+for i, name in ipairs(tabOrder) do
+	tabBtn(name, 42 + (i - 1) * 32)
+end
+
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, -122, 1, -HH - 3)
+content.Position = UDim2.new(0, 120, 0, HH + 3)
+content.BackgroundTransparency = 1
+content.ZIndex = 15
+content.Parent = win
+
+local head = Instance.new("Frame")
+head.Size = UDim2.new(1, 0, 0, 28)
+head.BackgroundColor3 = colors.rail
+head.BackgroundTransparency = 0.15
+head.BorderSizePixel = 0
+head.ZIndex = 16
+head.Parent = content
+
+local headTitle = Instance.new("TextLabel")
+headTitle.Size = UDim2.new(1, -40, 1, 0)
+headTitle.Position = UDim2.fromOffset(10, 0)
+headTitle.BackgroundTransparency = 1
+headTitle.Text = "Welcome"
+headTitle.Font = Enum.Font.GothamBold
+headTitle.TextSize = 12
+headTitle.TextColor3 = colors.accent2
+headTitle.TextXAlignment = Enum.TextXAlignment.Left
+headTitle.ZIndex = 17
+headTitle.Parent = head
+
+local minBtn = Instance.new("TextButton")
+minBtn.Size = UDim2.fromOffset(24, 18)
+minBtn.Position = UDim2.new(1, -28, 0.5, -9)
+minBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 70)
+minBtn.Text = "-"
+minBtn.Font = Enum.Font.GothamBold
+minBtn.TextSize = 14
+minBtn.TextColor3 = colors.text
+minBtn.ZIndex = 18
+minBtn.Parent = head
+round(minBtn, 5)
+
+local function page()
+	local sf = Instance.new("ScrollingFrame")
+	sf.Size = UDim2.new(1, -6, 1, -32)
+	sf.Position = UDim2.new(0, 3, 0, 30)
+	sf.BackgroundTransparency = 1
+	sf.BorderSizePixel = 0
+	sf.ScrollBarThickness = 3
+	sf.ScrollBarImageColor3 = colors.accent
+	sf.CanvasSize = UDim2.new(0, 0, 0, 0)
+	sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	sf.Visible = false
+	sf.ZIndex = 16
+	sf.Parent = content
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0, 5)
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Parent = sf
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingBottom = UDim.new(0, 8)
+	pad.PaddingLeft = UDim.new(0, 2)
+	pad.PaddingRight = UDim.new(0, 2)
+	pad.Parent = sf
+	return sf
+end
+
+for _, name in ipairs(tabOrder) do
+	pages[name] = page()
+end
+pages.Welcome.Visible = true
+
+local function go(name)
+	active = name
+	for n, p in pairs(pages) do
+		p.Visible = (n == name)
+	end
+	headTitle.Text = name
+	for n, b in pairs(tabs) do
+		if n == name then
+			b.BackgroundColor3 = Color3.fromRGB(55, 35, 90)
+			b.TextColor3 = colors.gold
+		else
+			b.BackgroundColor3 = Color3.fromRGB(36, 24, 55)
+			b.TextColor3 = colors.dim
+		end
+	end
+end
+
+for name, btn in pairs(tabs) do
+	btn.MouseButton1Click:Connect(function() go(name) end)
+	btn.Activated:Connect(function() go(name) end)
+end
+
+local function section(parent, text)
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1, 0, 0, 20)
+	f.BackgroundTransparency = 1
+	f.ZIndex = 17
+	f.Parent = parent
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, 0, 1, 0)
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.Font = Enum.Font.GothamBold
+	l.TextSize = 12
+	l.TextColor3 = colors.gold
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.ZIndex = 18
+	l.Parent = f
+end
+
+local function label(parent, text)
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, 0, 0, 18)
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.Font = Enum.Font.Gotham
+	l.TextSize = 11
+	l.TextColor3 = colors.dim
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.TextWrapped = true
+	l.AutomaticSize = Enum.AutomaticSize.Y
+	l.ZIndex = 17
+	l.Parent = parent
+	return l
+end
+
+local function makeToggle(parent, text, default, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 30)
+	row.BackgroundColor3 = colors.card
+	row.ZIndex = 17
+	row.Parent = parent
+	round(row, 7)
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -54, 1, 0)
+	lbl.Position = UDim2.new(0, 10, 0, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 11
+	lbl.TextColor3 = colors.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 18
+	lbl.Parent = row
+	local state = default
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.fromOffset(42, 22)
+	btn.Position = UDim2.new(1, -48, 0.5, -11)
+	btn.BackgroundColor3 = state and colors.green or Color3.fromRGB(55, 45, 70)
+	btn.Text = state and "ON" or "OFF"
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 10
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.ZIndex = 19
+	btn.Parent = row
+	round(btn, 6)
+	btn.MouseButton1Click:Connect(function()
+		state = not state
+		btn.BackgroundColor3 = state and colors.green or Color3.fromRGB(55, 45, 70)
+		btn.Text = state and "ON" or "OFF"
+		if callback then callback(state) end
+	end)
+end
+
+local function makeSlider(parent, text, min, max, default, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 46)
+	row.BackgroundColor3 = colors.card
+	row.ZIndex = 17
+	row.Parent = parent
+	round(row, 7)
+	local value = default
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -12, 0, 16)
+	lbl.Position = UDim2.new(0, 10, 0, 4)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text .. ": " .. tostring(value)
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 11
+	lbl.TextColor3 = colors.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 18
+	lbl.Parent = row
+	local track = Instance.new("Frame")
+	track.Size = UDim2.new(1, -20, 0, 8)
+	track.Position = UDim2.new(0, 10, 0, 28)
+	track.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
+	track.ZIndex = 18
+	track.Parent = row
+	round(track, 4)
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new((value - min) / math.max(max - min, 1), 0, 1, 0)
+	fill.BackgroundColor3 = colors.accent
+	fill.ZIndex = 19
+	fill.Parent = track
+	round(fill, 4)
+	local dragging = false
+	local function setVal(v)
+		value = math.clamp(math.floor(v + 0.5), min, max)
+		fill.Size = UDim2.new((value - min) / math.max(max - min, 1), 0, 1, 0)
+		lbl.Text = text .. ": " .. tostring(value)
+		if callback then callback(value) end
+	end
+	track.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			local rel = math.clamp((inp.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+			setVal(min + rel * (max - min))
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(inp)
+		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+			local rel = math.clamp((inp.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+			setVal(min + rel * (max - min))
+		end
+	end)
+end
+
+local function btn(parent, text, fn)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, 0, 0, 30)
+	b.BackgroundColor3 = Color3.fromRGB(70, 45, 120)
+	b.Text = text
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 11
+	b.TextColor3 = colors.text
+	b.ZIndex = 17
+	b.Parent = parent
+	round(b, 7)
+	stroke(b, colors.accent, 1.1, 0.45)
+	b.MouseButton1Click:Connect(function()
+		if fn then fn() end
+	end)
+end
+
+section(pages.Welcome, "Profile")
+label(pages.Welcome, "Player: " .. Player.Name)
+label(pages.Welcome, "Display: " .. Player.DisplayName)
+label(pages.Welcome, "UserId: " .. tostring(Player.UserId))
+section(pages.Welcome, "Info")
+label(pages.Welcome, "Auto Parry + Curves + Orbit")
+label(pages.Welcome, "Higher accuracy = later parry")
+
+section(pages.Main, "Auto Parry")
+makeToggle(pages.Main, "Auto Parry", false, function(v)
+	enabled = v
 	if not enabled then
 		spamMode = false
 		circlePart.Transparency = 1
@@ -364,139 +852,135 @@ Main:CreateToggle("Auto Parry", function(value)
 		updateOrbitState()
 	end
 end)
-Main:CreateSlider("Accuracy", 0, 100, function(value)
-	currentAccuracy = value
+makeSlider(pages.Main, "Accuracy", 0, 100, ACCURACY_DEFAULT, function(v)
+	currentAccuracy = v
 end)
-Main:CreateLabel("Higher = later parry · Sweet spot ~95%")
+label(pages.Main, "Sweet spot around 95")
 
-local Curves = Window:CreateTab({ Name = "Curves", Icon = "refresh-cw", SearchBar = false })
-Curves:CreateSection("Camera Curves")
-Curves:CreateDropdown({
-	Label = "Curve",
-	Options = { "Default", "Up", "Backwards", "Down", "Up-Left", "Up-Right", "Random" },
-	Default = "Default",
-}, function(option)
-	currentCurve = option
-end)
-Curves:CreateLabel("Snaps camera on parry for curve balls")
+section(pages.Curves, "Camera Curves")
+local curveList = {"Default", "Up", "Backwards", "Down", "Up-Left", "Up-Right", "Random"}
+local curveLabel = label(pages.Curves, "Selected: " .. currentCurve)
+for _, c in ipairs(curveList) do
+	btn(pages.Curves, c, function()
+		currentCurve = c
+		curveLabel.Text = "Selected: " .. currentCurve
+	end)
+end
+label(pages.Curves, "Snaps camera on parry for curve balls")
 
-local Move = Window:CreateTab({ Name = "Movement", Icon = "activity", SearchBar = false })
-Move:CreateSection("Orbit")
-Move:CreateToggle("Orbit + Noclip", function(value)
-	orbitEnabled = value
+section(pages.Move, "Orbit")
+makeToggle(pages.Move, "Orbit + Noclip", false, function(v)
+	orbitEnabled = v
 	updateOrbitState()
 end)
-Move:CreateLabel("Circles the ball with noclip")
-Move:CreateSection("Unload")
-Move:CreateButton("Unload Script", function()
+label(pages.Move, "Circles the ball with noclip")
+section(pages.Move, "Unload")
+btn(pages.Move, "Unload Script", function()
 	ScriptAlive = false
 	enabled = false
 	orbitEnabled = false
 	setNoclip(false)
-	circlePart:Destroy()
-	Notify("KHUB", "Unloaded")
+	pcall(function() circlePart:Destroy() end)
+	pcall(function() gui:Destroy() end)
 end)
 
--- Float
-do
-	local host = (type(gethui) == "function" and gethui()) or CoreGui
-	pcall(function()
-		local old = host:FindFirstChild("KHUB_BB_Float")
-		if old then old:Destroy() end
-	end)
-	task.spawn(function()
-		for _ = 1, 20 do
-			task.wait(0.1)
-			for _, parent in ipairs({ host, CoreGui, Player:FindFirstChild("PlayerGui") }) do
-				if not parent then continue end
-				for _, g in ipairs(parent:GetChildren()) do
-					if g:IsA("ScreenGui") and g.Name ~= "KHUB_BB_Float" then
-						for _, d in ipairs(g:GetDescendants()) do
-							if (d:IsA("TextLabel") or d:IsA("TextButton")) then
-								local t = string.lower(tostring(d.Text or ""))
-								if t:find("lua land") then pcall(function() d.Text = "KHUB" end) end
-							end
-						end
-					end
-				end
-			end
-		end
-	end)
-	local floatGui = Instance.new("ScreenGui")
-	floatGui.Name = "KHUB_BB_Float"
-	floatGui.ResetOnSpawn = false
-	floatGui.IgnoreGuiInset = true
-	floatGui.DisplayOrder = 99999
-	pcall(function() floatGui.Parent = host end)
-	if not floatGui.Parent then floatGui.Parent = Player:WaitForChild("PlayerGui") end
-	local OpenBtn = Instance.new("ImageButton")
-	OpenBtn.Size = UDim2.fromOffset(58, 58)
-	OpenBtn.Position = UDim2.new(0, 16, 0.45, 0)
-	OpenBtn.BackgroundColor3 = Color3.fromRGB(18, 14, 10)
-	OpenBtn.BorderSizePixel = 0
-	OpenBtn.Image = LOGO_ID
-	OpenBtn.ScaleType = Enum.ScaleType.Fit
-	OpenBtn.Parent = floatGui
-	Instance.new("UICorner", OpenBtn).CornerRadius = UDim.new(1, 0)
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(255, 160, 40)
-	stroke.Thickness = 2
-	stroke.Parent = OpenBtn
-	local tag = Instance.new("TextLabel")
-	tag.Size = UDim2.new(0, 64, 0, 16)
-	tag.Position = UDim2.new(0.5, -32, 1, 2)
-	tag.BackgroundTransparency = 1
-	tag.Text = "KHUB"
-	tag.Font = Enum.Font.GothamBold
-	tag.TextSize = 11
-	tag.TextColor3 = Color3.fromRGB(255, 180, 60)
-	tag.Parent = OpenBtn
-	local function findMain()
-		for _, parent in ipairs({ host, CoreGui, Player:FindFirstChild("PlayerGui") }) do
-			if parent then
-				for _, g in ipairs(parent:GetChildren()) do
-					if g:IsA("ScreenGui") and g.Name ~= "KHUB_BB_Float" then
-						local mf = g:FindFirstChild("MainFrame")
-						if mf and mf.Size.X.Offset > 200 then return mf end
-					end
-				end
-			end
-		end
-	end
-	local dragMoved, dragging, start, pos
-	OpenBtn.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			dragMoved = false
-			start = input.Position
-			pos = OpenBtn.Position
-		end
-	end)
-	OpenBtn.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-			if not dragMoved then
-				local m = findMain()
-				if m then m.Visible = not m.Visible end
-			end
-		end
-	end)
-	UserInputService.InputChanged:Connect(function(input)
-		if not dragging then return end
-		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-			local d = input.Position - start
-			if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then dragMoved = true end
-			OpenBtn.Position = UDim2.new(pos.X.Scale, pos.X.Offset + d.X, pos.Y.Scale, pos.Y.Offset + d.Y)
-		end
-	end)
-	UserInputService.InputBegan:Connect(function(input, gp)
-		if gp then return end
-		if input.KeyCode == Enum.KeyCode.RightControl then
-			local m = findMain()
-			if m then m.Visible = not m.Visible end
-		end
-	end)
+section(pages.Credits, "Credits")
+label(pages.Credits, "Yvaine & Kyiel - KHUB")
+btn(pages.Credits, "Copy Discord", function()
+	if setclipboard then setclipboard(DISCORD) end
+end)
+
+local orb = Instance.new("ImageButton")
+orb.Size = UDim2.fromOffset(54, 54)
+orb.Position = UDim2.new(0, 16, 0.5, -40)
+orb.BackgroundColor3 = Color3.fromRGB(24, 14, 40)
+orb.Image = LOGO_ID
+orb.ScaleType = Enum.ScaleType.Fit
+orb.Visible = false
+orb.ZIndex = 100
+orb.Parent = gui
+round(orb, 27)
+stroke(orb, colors.accent, 2, 0.25)
+
+local tag = Instance.new("TextLabel")
+tag.Size = UDim2.new(1, 0, 0, 12)
+tag.Position = UDim2.new(0, 0, 1, 2)
+tag.BackgroundTransparency = 1
+tag.Text = "KHUB"
+tag.Font = Enum.Font.GothamBold
+tag.TextSize = 9
+tag.TextColor3 = colors.gold
+tag.ZIndex = 101
+tag.Parent = orb
+
+local function show(on)
+	win.Visible = on
+	orb.Visible = not on
 end
 
-Notify("Blade Ball by Khub", "Loaded")
-print("[KHUB] Blade Ball by Khub")
+minBtn.MouseButton1Click:Connect(function() show(false) end)
+orb.MouseButton1Click:Connect(function() show(true) end)
+
+local dragging, dStart, sPos
+header.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dStart = i.Position
+		sPos = win.Position
+	end
+end)
+header.InputEnded:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		dragging = false
+	end
+end)
+
+local oDrag, oStart, oPos
+orb.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		oDrag = true
+		oStart = i.Position
+		oPos = orb.Position
+	end
+end)
+orb.InputEnded:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		oDrag = false
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(i)
+	if i.UserInputType ~= Enum.UserInputType.MouseMovement and i.UserInputType ~= Enum.UserInputType.Touch then
+		return
+	end
+	if dragging and dStart then
+		local d = i.Position - dStart
+		win.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y)
+	end
+	if oDrag and oStart then
+		local d = i.Position - oStart
+		orb.Position = UDim2.new(oPos.X.Scale, oPos.X.Offset + d.X, oPos.Y.Scale, oPos.Y.Offset + d.Y)
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.RightShift or i.KeyCode == Enum.KeyCode.RightControl or i.KeyCode == Enum.KeyCode.K then
+		show(not win.Visible)
+	end
+end)
+
+task.spawn(function()
+	for _ = 1, 6 do
+		task.wait(0.4)
+		pcall(function()
+			if not gui.Parent then
+				gui.Parent = getPg() or CoreGui
+			end
+			gui.Enabled = true
+			win.Visible = true
+		end)
+	end
+end)
+
+print("[KHUB] Blade Ball loaded")
