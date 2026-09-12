@@ -1,0 +1,1096 @@
+--[[
+	KHUB UI - Monochrome Sequential Auto-Fill Edition
+	Credits: Yvaine & Kyiel · UI by Khub
+	Toggle: RightShift / RightCtrl / K
+]]
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+local LOGO_ID = "rbxassetid://140466936910510"
+
+-- Working Color Themes System (Default Monochrome)
+local THEMES = {
+	Monochrome = { bg = Color3.fromRGB(15, 15, 15), rail = Color3.fromRGB(22, 22, 22), card = Color3.fromRGB(30, 30, 30), accent = Color3.fromRGB(240, 240, 240), gold = Color3.fromRGB(255, 255, 255), text = Color3.fromRGB(230, 230, 230), dim = Color3.fromRGB(160, 160, 160), stroke = Color3.fromRGB(200, 200, 200) },
+	White = { bg = Color3.fromRGB(245, 245, 245), rail = Color3.fromRGB(230, 230, 230), card = Color3.fromRGB(255, 255, 255), accent = Color3.fromRGB(20, 20, 20), gold = Color3.fromRGB(10, 10, 10), text = Color3.fromRGB(30, 30, 30), dim = Color3.fromRGB(100, 100, 100), stroke = Color3.fromRGB(180, 180, 180) },
+	Violet = { bg = Color3.fromRGB(18, 12, 25), rail = Color3.fromRGB(26, 18, 36), card = Color3.fromRGB(35, 24, 48), accent = Color3.fromRGB(190, 100, 255), gold = Color3.fromRGB(230, 180, 255), text = Color3.fromRGB(240, 230, 255), dim = Color3.fromRGB(150, 130, 180), stroke = Color3.fromRGB(150, 80, 220) },
+	Green = { bg = Color3.fromRGB(10, 20, 15), rail = Color3.fromRGB(15, 30, 22), card = Color3.fromRGB(22, 42, 30), accent = Color3.fromRGB(80, 255, 140), gold = Color3.fromRGB(180, 255, 210), text = Color3.fromRGB(220, 255, 235), dim = Color3.fromRGB(120, 180, 140), stroke = Color3.fromRGB(60, 200, 110) },
+	Black = { bg = Color3.fromRGB(5, 5, 5), rail = Color3.fromRGB(10, 10, 10), card = Color3.fromRGB(18, 18, 18), accent = Color3.fromRGB(255, 255, 255), gold = Color3.fromRGB(255, 255, 255), text = Color3.fromRGB(240, 240, 240), dim = Color3.fromRGB(120, 120, 120), stroke = Color3.fromRGB(80, 80, 80) }
+}
+
+local currentThemeName = "Monochrome"
+local THEME = THEMES[currentThemeName]
+
+local ParentTarget = (gethui and gethui()) or CoreGui
+pcall(function()
+	local old = ParentTarget:FindFirstChild("KHUB_UI")
+	if old then old:Destroy() end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_UI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then
+	ScreenGui.Parent = player:WaitForChild("PlayerGui")
+end
+
+local WinUIScale = Instance.new("UIScale")
+WinUIScale.Parent = ScreenGui
+
+local function updateScale()
+	local viewport = Workspace.CurrentCamera.ViewportSize
+	local scale = math.clamp(viewport.X / 1350, 0.75, 1.1)
+	WinUIScale.Scale = scale
+end
+Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+updateScale()
+
+local function corner(p, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 10)
+	c.Parent = p
+	return c
+end
+
+local function mkstroke(p, col, th, tr)
+	local s = Instance.new("UIStroke")
+	s.Color = col or THEME.stroke
+	s.Thickness = th or 1.2
+	s.Transparency = tr or 0.3
+	s.Parent = p
+	return s
+end
+
+local HEADER_H = 72
+
+-- Main Window Frame
+local Win = Instance.new("Frame")
+Win.Name = "Window"
+Win.Size = UDim2.new(0, 560, 0, 450)
+Win.Position = UDim2.new(0.5, -280, 0.5, -225)
+Win.BackgroundColor3 = THEME.bg
+Win.BackgroundTransparency = 0.25
+Win.BorderSizePixel = 0
+Win.ClipsDescendants = true
+Win.Active = true
+Win.Parent = ScreenGui
+corner(Win, 14)
+mkstroke(Win, THEME.accent, 1.8, 0.2)
+
+-- Animated Glowing Watermark "KHUB" in Center
+local BGWatermarkContainer = Instance.new("Frame")
+BGWatermarkContainer.Size = UDim2.new(1, 0, 1, 0)
+BGWatermarkContainer.BackgroundTransparency = 1
+BGWatermarkContainer.ZIndex = 1
+BGWatermarkContainer.Parent = Win
+
+local BGWatermark = Instance.new("TextLabel")
+BGWatermark.Name = "BGWatermark"
+BGWatermark.Size = UDim2.new(1, 0, 1, 0)
+BGWatermark.BackgroundTransparency = 1
+BGWatermark.Text = "KHUB"
+BGWatermark.Font = Enum.Font.GothamBlack
+BGWatermark.TextSize = 130
+BGWatermark.TextColor3 = Color3.fromRGB(240, 240, 240)
+BGWatermark.TextTransparency = 0.6
+BGWatermark.ZIndex = 1
+BGWatermark.Parent = BGWatermarkContainer
+
+local BGWatermarkLight = Instance.new("TextLabel")
+BGWatermarkLight.Size = UDim2.new(1, 0, 1, 0)
+BGWatermarkLight.Position = UDim2.new(-0.5, 0, 0, 0)
+BGWatermarkLight.BackgroundTransparency = 1
+BGWatermarkLight.Text = "KHUB"
+BGWatermarkLight.Font = Enum.Font.GothamBlack
+BGWatermarkLight.TextSize = 130
+BGWatermarkLight.TextColor3 = Color3.fromRGB(255, 255, 255)
+BGWatermarkLight.TextTransparency = 1
+BGWatermarkLight.ZIndex = 2
+BGWatermarkLight.Parent = BGWatermarkContainer
+
+task.spawn(function()
+	while task.wait(1.5) do
+		pcall(function()
+			TweenService:Create(BGWatermark, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { TextTransparency = 0.4 }):Play()
+			TweenService:Create(BGWatermarkLight, TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = UDim2.new(0.5, 0, 0, 0), TextTransparency = 0.3 }):Play()
+			task.wait(1.0)
+			TweenService:Create(BGWatermark, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { TextTransparency = 0.75 }):Play()
+			TweenService:Create(BGWatermarkLight, TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = UDim2.new(1, 0, 0, 0), TextTransparency = 1 }):Play()
+		end)
+	end
+end)
+
+-- UI Background Dots/Particles Generator
+local ParticlesFolder = Instance.new("Folder")
+ParticlesFolder.Name = "UIParticles"
+ParticlesFolder.Parent = Win
+
+task.spawn(function()
+	for i = 1, 15 do
+		local dot = Instance.new("Frame")
+		dot.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
+		dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+		dot.BackgroundColor3 = THEME.accent
+		dot.BackgroundTransparency = 0.5
+		dot.BorderSizePixel = 0
+		dot.ZIndex = 2
+		dot.Parent = ParticlesFolder
+		corner(dot, 2)
+		
+		task.spawn(function()
+			while task.wait(math.random(3, 6)) do
+				pcall(function()
+					TweenService:Create(dot, TweenInfo.new(2, Enum.EasingStyle.Sine), {
+						Position = UDim2.new(math.random(), 0, math.random(), 0),
+						BackgroundTransparency = math.random(3, 8) / 10
+					}):Play()
+				end)
+			end
+		end)
+	end
+end)
+
+-- Draggable Window
+local draggingMain, dragInputMain, dragStartMain, startPosMain
+Win.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingMain = true
+		dragStartMain = input.Position
+		startPosMain = Win.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then draggingMain = false end
+		end)
+	end
+end)
+Win.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInputMain = input
+	end
+end)
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInputMain and draggingMain then
+		local delta = input.Position - dragStartMain
+		Win.Position = UDim2.new(startPosMain.X.Scale, startPosMain.X.Offset + delta.X, startPosMain.Y.Scale, startPosMain.Y.Offset + delta.Y)
+	end
+end)
+
+-- Code Display Notification (Top Right Screen)
+local CodeDisplay = Instance.new("TextLabel")
+CodeDisplay.Name = "CodeDisplay"
+CodeDisplay.Size = UDim2.fromOffset(280, 50)
+CodeDisplay.Position = UDim2.new(1, -290, 0, 15)
+CodeDisplay.BackgroundColor3 = THEME.card
+CodeDisplay.BackgroundTransparency = 0.1
+CodeDisplay.Text = "CODE: SEARCHING..."
+CodeDisplay.Font = Enum.Font.GothamBold
+CodeDisplay.TextSize = 14
+CodeDisplay.TextColor3 = Color3.fromRGB(255, 255, 120)
+CodeDisplay.ZIndex = 100
+CodeDisplay.Visible = false
+CodeDisplay.Parent = ScreenGui
+corner(CodeDisplay, 8)
+mkstroke(CodeDisplay, THEME.accent, 1.5, 0.2)
+
+-- Header Band
+local HeaderBand = Instance.new("Frame")
+HeaderBand.Name = "HeaderBand"
+HeaderBand.Size = UDim2.new(1, 0, 0, HEADER_H)
+HeaderBand.Position = UDim2.new(0, 0, 0, 3)
+HeaderBand.BackgroundTransparency = 1
+HeaderBand.ZIndex = 10
+HeaderBand.Parent = Win
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(0, 420, 0, 40)
+TitleLabel.Position = UDim2.new(0, 14, 0, 12)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Monochrome by - Khub"
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 18
+TitleLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.ZIndex = 12
+TitleLabel.Parent = HeaderBand
+
+local TitleLight = Instance.new("TextLabel")
+TitleLight.Size = UDim2.new(1, 0, 1, 0)
+TitleLight.Position = UDim2.new(-0.4, 0, 0, 0)
+TitleLight.BackgroundTransparency = 1
+TitleLight.Text = "Monochrome by - Khub"
+TitleLight.Font = Enum.Font.GothamBold
+TitleLight.TextSize = 18
+TitleLight.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLight.TextXAlignment = Enum.TextXAlignment.Left
+TitleLight.TextTransparency = 1
+TitleLight.ZIndex = 13
+TitleLight.Parent = TitleLabel
+
+task.spawn(function()
+	while task.wait(0.2) do
+		pcall(function()
+			TitleLight.Position = UDim2.new(-0.4, 0, 0, 0)
+			TitleLight.TextTransparency = 0.2
+			TweenService:Create(TitleLight, TweenInfo.new(1.0, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Position = UDim2.new(0.3, 0, 0, 0),
+				TextTransparency = 1
+			}):Play()
+			task.wait(1.8)
+		end)
+	end
+end)
+
+local SubLabel = Instance.new("TextLabel")
+SubLabel.Size = UDim2.new(0, 400, 0, 16)
+SubLabel.Position = UDim2.new(0, 15, 0, 48)
+SubLabel.BackgroundTransparency = 1
+SubLabel.Text = "Strict Sequential Digit Auto-Fill System"
+SubLabel.Font = Enum.Font.Code
+SubLabel.TextSize = 9
+SubLabel.TextColor3 = THEME.dim
+SubLabel.TextXAlignment = Enum.TextXAlignment.Left
+SubLabel.ZIndex = 12
+SubLabel.Parent = HeaderBand
+
+-- Sidebar Rail Tabs
+local Rail = Instance.new("Frame")
+Rail.Name = "Rail"
+Rail.Size = UDim2.new(0, 142, 1, -HEADER_H - 3)
+Rail.Position = UDim2.new(0, 0, 0, HEADER_H + 3)
+Rail.BackgroundColor3 = THEME.rail
+Rail.BackgroundTransparency = 0.2
+Rail.BorderSizePixel = 0
+Rail.ZIndex = 5
+Rail.ClipsDescendants = true
+Rail.Parent = Win
+
+local function createTabButton(name, yPos, callback)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, -10, 0, 32)
+	b.Position = UDim2.fromOffset(5, yPos)
+	b.BackgroundColor3 = THEME.card
+	b.BackgroundTransparency = 0.2
+	b.Text = "  " .. name
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 11
+	b.TextColor3 = THEME.text
+	b.TextXAlignment = Enum.TextXAlignment.Left
+	b.ZIndex = 7
+	b.AutoButtonColor = false
+	b.Parent = Rail
+	corner(b, 7)
+	mkstroke(b, THEME.accent, 1, 0.4)
+	b.MouseButton1Click:Connect(callback)
+	return b
+end
+
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(1, -142, 1, -HEADER_H - 3)
+Main.Position = UDim2.new(0, 142, 0, HEADER_H + 3)
+Main.BackgroundTransparency = 1
+Main.ZIndex = 5
+Main.Parent = Win
+
+local Head = Instance.new("Frame")
+Head.Size = UDim2.new(1, 0, 0, 38)
+Head.BackgroundColor3 = THEME.rail
+Head.BackgroundTransparency = 0.2
+Head.BorderSizePixel = 0
+Head.ZIndex = 6
+Head.Parent = Main
+
+local PageTitle = Instance.new("TextLabel")
+PageTitle.Size = UDim2.new(1, -50, 0, 38)
+PageTitle.Position = UDim2.fromOffset(12, 0)
+PageTitle.BackgroundTransparency = 1
+PageTitle.Text = "Welcome & Profile"
+PageTitle.Font = Enum.Font.GothamBold
+PageTitle.TextSize = 13
+PageTitle.TextColor3 = THEME.accent
+PageTitle.TextXAlignment = Enum.TextXAlignment.Left
+PageTitle.ZIndex = 7
+PageTitle.Parent = Head
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.fromOffset(26, 22)
+MinBtn.Position = UDim2.new(1, -30, 0.5, -11)
+MinBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+MinBtn.BackgroundTransparency = 0.2
+MinBtn.Text = "–"
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 14
+MinBtn.TextColor3 = THEME.text
+MinBtn.ZIndex = 8
+MinBtn.Parent = Head
+corner(MinBtn, 6)
+mkstroke(MinBtn, THEME.accent, 1, 0.2)
+
+local pages = {}
+local function createPage(name)
+	local sf = Instance.new("ScrollingFrame")
+	sf.Name = name .. "Page"
+	sf.Size = UDim2.new(1, -10, 1, -46)
+	sf.Position = UDim2.new(0, 5, 0, 42)
+	sf.BackgroundTransparency = 1
+	sf.BorderSizePixel = 0
+	sf.ScrollBarThickness = 3
+	sf.ScrollBarImageColor3 = THEME.accent
+	sf.CanvasSize = UDim2.new(0, 0, 0, 550)
+	sf.ZIndex = 6
+	sf.Visible = false
+	sf.Parent = Main
+	pages[name] = sf
+	return sf
+end
+
+local PageWelcome = createPage("Welcome")
+local PageKey = createPage("Key")
+local PageESP = createPage("ESP")
+local PageMove = createPage("Movement")
+local PageSettings = createPage("Settings")
+
+PageWelcome.Visible = true
+
+createTabButton("Welcome", 12, function() for _, p in pairs(pages) do p.Visible = false end PageWelcome.Visible = true PageTitle.Text = "Welcome & Profile" end)
+createTabButton("Auto Key", 50, function() for _, p in pairs(pages) do p.Visible = false end PageKey.Visible = true PageTitle.Text = "Auto Key & Code Finder" end)
+createTabButton("ESP Hub", 88, function() for _, p in pairs(pages) do p.Visible = false end PageESP.Visible = true PageTitle.Text = "ESP Players & Monster" end)
+createTabButton("Movement", 126, function() for _, p in pairs(pages) do p.Visible = false end PageMove.Visible = true PageTitle.Text = "Speed, FOV, Fly & Stamina" end)
+createTabButton("Settings", 164, function() for _, p in pairs(pages) do p.Visible = false end PageSettings.Visible = true PageTitle.Text = "Config & Theme Settings" end)
+
+local function card(parent, y, h)
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1, -6, 0, h)
+	f.Position = UDim2.new(0, 3, 0, y)
+	f.BackgroundColor3 = THEME.card
+	f.BackgroundTransparency = 0.25
+	f.BorderSizePixel = 0
+	f.ZIndex = 9
+	f.Parent = parent
+	corner(f, 9)
+	mkstroke(f, THEME.accent, 1.2, 0.25)
+	return f
+end
+
+local function label(parent, text, y, size, color, bold)
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, -16, 0, size + 4)
+	l.Position = UDim2.new(0, 8, 0, y)
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham
+	l.TextSize = size
+	l.TextColor3 = color
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.ZIndex = 10
+	l.Parent = parent
+	return l
+end
+
+local activeToggles = {}
+
+local function createToggle(parent, text, yPos, defaultKey, callback)
+	local f = Instance.new("TextButton")
+	f.Size = UDim2.new(1, -16, 0, 32)
+	f.Position = UDim2.new(0, 8, 0, yPos)
+	f.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	f.BackgroundTransparency = 0.3
+	f.Text = "  " .. text
+	f.Font = Enum.Font.GothamBold
+	f.TextSize = 11
+	f.TextColor3 = THEME.text
+	f.TextXAlignment = Enum.TextXAlignment.Left
+	f.ZIndex = 11
+	f.AutoButtonColor = false
+	f.Parent = parent
+	corner(f, 7)
+	mkstroke(f, THEME.accent, 1, 0.3)
+
+	local status = Instance.new("TextLabel")
+	status.Size = UDim2.fromOffset(50, 20)
+	status.Position = UDim2.new(1, -55, 0.5, -10)
+	status.BackgroundTransparency = 1
+	status.Text = "OFF"
+	status.Font = Enum.Font.GothamBold
+	status.TextSize = 11
+	status.TextColor3 = Color3.fromRGB(255, 90, 90)
+	status.TextXAlignment = Enum.TextXAlignment.Right
+	status.ZIndex = 12
+	status.Parent = f
+
+	local enabled = false
+	local function triggerToggle()
+		enabled = not enabled
+		status.Text = enabled and "ON" or "OFF"
+		status.TextColor3 = enabled and Color3.fromRGB(90, 255, 120) or Color3.fromRGB(255, 90, 90)
+		callback(enabled)
+	end
+
+	f.MouseButton1Click:Connect(triggerToggle)
+	if defaultKey then activeToggles[defaultKey] = triggerToggle end
+	return f
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if activeToggles[input.KeyCode] then activeToggles[input.KeyCode]() end
+end)
+
+-- ==================== WELCOME PAGE ====================
+local WelcomeCard = card(PageWelcome, 6, 220)
+label(WelcomeCard, "Welcome to Monochrome", 12, 13, THEME.gold, true)
+label(WelcomeCard, "Ultimate Script Hub - Monochrome by Khub", 32, 10, THEME.dim, false)
+
+local ProfileFrame = Instance.new("Frame")
+ProfileFrame.Size = UDim2.new(1, -16, 0, 110)
+ProfileFrame.Position = UDim2.new(0, 8, 0, 64)
+ProfileFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+ProfileFrame.BackgroundTransparency = 0.3
+ProfileFrame.BorderSizePixel = 0
+ProfileFrame.ZIndex = 10
+ProfileFrame.Parent = WelcomeCard
+corner(ProfileFrame, 8)
+mkstroke(ProfileFrame, THEME.accent, 1, 0.3)
+
+local AvatarImg = Instance.new("ImageLabel")
+AvatarImg.Size = UDim2.fromOffset(80, 80)
+AvatarImg.Position = UDim2.new(0, 15, 0.5, -40)
+AvatarImg.BackgroundTransparency = 1
+AvatarImg.ZIndex = 11
+AvatarImg.Parent = ProfileFrame
+corner(AvatarImg, 40)
+
+pcall(function()
+	local content, isReady = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+	if isReady then AvatarImg.Image = content end
+end)
+
+local ProfileName = Instance.new("TextLabel")
+ProfileName.Size = UDim2.new(1, -110, 0, 24)
+ProfileName.Position = UDim2.new(0, 105, 0, 22)
+ProfileName.BackgroundTransparency = 1
+ProfileName.Text = "User: " .. player.Name
+ProfileName.Font = Enum.Font.GothamBold
+ProfileName.TextSize = 14
+ProfileName.TextColor3 = THEME.gold
+ProfileName.TextXAlignment = Enum.TextXAlignment.Left
+ProfileName.ZIndex = 11
+ProfileName.Parent = ProfileFrame
+
+local ProfileId = Instance.new("TextLabel")
+ProfileId.Size = UDim2.new(1, -110, 0, 20)
+ProfileId.Position = UDim2.new(0, 105, 0, 48)
+ProfileId.BackgroundTransparency = 1
+ProfileId.Text = "ID: " .. tostring(player.UserId)
+ProfileId.Font = Enum.Font.Gotham
+ProfileId.TextSize = 11
+ProfileId.TextColor3 = THEME.dim
+ProfileId.TextXAlignment = Enum.TextXAlignment.Left
+ProfileId.ZIndex = 11
+ProfileId.Parent = ProfileFrame
+
+local ProfileStatus = Instance.new("TextLabel")
+ProfileStatus.Size = UDim2.new(1, -110, 0, 20)
+ProfileStatus.Position = UDim2.new(0, 105, 0, 72)
+ProfileStatus.BackgroundTransparency = 1
+ProfileStatus.Text = "Status: Online / Ready"
+ProfileStatus.Font = Enum.Font.Gotham
+ProfileStatus.TextSize = 11
+ProfileStatus.TextColor3 = Color3.fromRGB(120, 255, 150)
+ProfileStatus.TextXAlignment = Enum.TextXAlignment.Left
+ProfileStatus.ZIndex = 11
+ProfileStatus.Parent = ProfileFrame
+
+local InstructionsCard = card(PageWelcome, 236, 170)
+label(InstructionsCard, "Instructions / How to Use:", 10, 11, THEME.gold, true)
+label(InstructionsCard, "• Toggle Menu: Press RightShift, RightCtrl, or K", 34, 10, THEME.text, false)
+label(InstructionsCard, "• Code Finder & Strict Sequential Auto-Fill are separate buttons below!", 56, 10, THEME.text, false)
+label(InstructionsCard, "• Stamina & Speed: Toggle infinite stamina & speed boost.", 78, 10, THEME.text, false)
+label(InstructionsCard, "• Configs & Themes: Save configs & change themes in settings.", 100, 10, THEME.text, false)
+label(InstructionsCard, "• Credits: Yvaine & Kyiel · UI by Khub", 126, 10, THEME.dim, true)
+
+-- ==================== AUTO KEY PAGE ====================
+local KeyCard = card(PageKey, 6, 300)
+label(KeyCard, "Key, Elevator & Code Tools", 10, 11, THEME.gold, true)
+
+createToggle(KeyCard, "Auto Take Key + TP [Key: Z]", 36, Enum.KeyCode.Z, function(state)
+	getgenv().AutoTakeKeyTP = state
+	task.spawn(function()
+		while getgenv().AutoTakeKeyTP do
+			task.wait(0.4)
+			pcall(function()
+				local mono = Workspace:FindFirstChild("monochrome")
+				local char = player.Character
+				if not mono or not char or not char:FindFirstChild("HumanoidRootPart") then return end
+				for _, item in ipairs(mono:GetChildren()) do
+					if item.Name:match("^HiddenKey") or item.Name:lower():find("key") then
+						local targetPart = item:IsA("Model") and (item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")) or (item:IsA("BasePart") and item)
+						if targetPart then
+							char.HumanoidRootPart.CFrame = targetPart.CFrame + Vector3.new(0, 2, 0)
+							for _, desc in ipairs(item:GetDescendants()) do
+								if desc:IsA("ProximityPrompt") then fireproximityprompt(desc)
+								elseif desc:IsA("ClickDetector") then fireclickdetector(desc) end
+							end
+						end
+					end
+				end
+			end)
+		end
+	end)
+end)
+
+createToggle(KeyCard, "Open Drawer [Key: X]", 76, Enum.KeyCode.X, function(state)
+	getgenv().AutoOpenDrawer = state
+	task.spawn(function()
+		while getgenv().AutoOpenDrawer do
+			task.wait(0.3)
+			pcall(function()
+				local mono = Workspace:FindFirstChild("monochrome")
+				if not mono then return end
+				for _, obj in ipairs(mono:GetDescendants()) do
+					if (obj:IsA("ProximityPrompt") or obj:IsA("ClickDetector")) and obj.Parent and obj.Parent.Name:lower():find("drawer") then
+						if obj:IsA("ProximityPrompt") then fireproximityprompt(obj) else fireclickdetector(obj) end
+					end
+				end
+			end)
+		end
+	end)
+end)
+
+createToggle(KeyCard, "Auto Put Key Elevator [Key: C]", 116, Enum.KeyCode.C, function(state)
+	getgenv().AutoPutElevator = state
+	task.spawn(function()
+		while getgenv().AutoPutElevator do
+			task.wait(0.5)
+			pcall(function()
+				local char = player.Character
+				local hrp = char and char:FindFirstChild("HumanoidRootPart")
+				if not hrp then return end
+				hrp.CFrame = CFrame.new(259.61, 23.15, -311.35)
+				task.wait(0.3)
+				hrp.CFrame = CFrame.new(259.12, 22.66, -316.10)
+				task.wait(0.3)
+				local mono = Workspace:FindFirstChild("monochrome")
+				if mono then
+					for _, obj in ipairs(mono:GetDescendants()) do
+						if (obj:IsA("ProximityPrompt") or obj:IsA("ClickDetector")) and obj.Parent and (obj.Parent.Name:lower():find("elevator") or obj.Parent.Name:lower():find("lock")) then
+							if obj:IsA("ProximityPrompt") then fireproximityprompt(obj) else fireclickdetector(obj) end
+						end
+					end
+				end
+			end)
+		end
+	end)
+end)
+
+-- Code Finder Only (Top Right)
+createToggle(KeyCard, "Code Finder Only (Top Right) [Key: V]", 156, Enum.KeyCode.V, function(state)
+	getgenv().CodeFinderOnly = state
+	CodeDisplay.Visible = state
+	task.spawn(function()
+		while getgenv().CodeFinderOnly do
+			task.wait(0.4)
+			pcall(function()
+				local mono = Workspace:FindFirstChild("monochrome")
+				if not mono then return end
+				local foundCode = false
+				for _, obj in ipairs(mono:GetDescendants()) do
+					if obj.Name:lower():find("codenote") then
+						local foundTxt = ""
+						for _, sub in ipairs(obj:GetDescendants()) do
+							if sub:IsA("TextLabel") and sub.Text ~= "" then foundTxt = sub.Text break end
+						end
+						if foundTxt == "" and obj:IsA("TextLabel") then foundTxt = obj.Text end
+						if foundTxt ~= "" then
+							CodeDisplay.Visible = true
+							CodeDisplay.Text = "CODE: " .. foundTxt
+							foundCode = true
+							break
+						end
+					end
+				end
+				if not foundCode then CodeDisplay.Text = "CODE: SEARCHING..." end
+			end)
+		end
+		if not getgenv().CodeFinderOnly and not getgenv().AutoFillCodeActive then 
+			CodeDisplay.Visible = false 
+		end
+	end)
+end)
+
+-- Strict Sequential Auto-Fill (Fills digit 1 until match, locks it, then moves to digit 2, etc.)
+createToggle(KeyCard, "Auto-Fill Code (Strict Sequential) [Key: T]", 196, Enum.KeyCode.T, function(state)
+	getgenv().AutoFillCodeActive = state
+	CodeDisplay.Visible = state
+	task.spawn(function()
+		while getgenv().AutoFillCodeActive do
+			task.wait(0.5)
+			pcall(function()
+				local mono = Workspace:FindFirstChild("monochrome")
+				if not mono then return end
+				local targetCode = ""
+				for _, obj in ipairs(mono:GetDescendants()) do
+					if obj.Name:lower():find("codenote") then
+						local foundTxt = ""
+						for _, sub in ipairs(obj:GetDescendants()) do
+							if sub:IsA("TextLabel") and sub.Text ~= "" then foundTxt = sub.Text break end
+						end
+						if foundTxt == "" and obj:IsA("TextLabel") then foundTxt = obj.Text end
+						if foundTxt ~= "" and #foundTxt >= 4 then
+							targetCode = foundTxt
+							break
+						end
+					end
+				end
+				
+				if targetCode ~= "" then
+					CodeDisplay.Visible = true
+					CodeDisplay.Text = "AUTO-FILLING: " .. targetCode
+					
+					-- Extract each individual target digit character
+					local d1 = targetCode:sub(1,1)
+					local d2 = targetCode:sub(2,2)
+					local d3 = targetCode:sub(3,3)
+					local d4 = targetCode:sub(4,4)
+					
+					-- Find the keypad lock buttons/prompts in the world
+					for _, keypad in ipairs(mono:GetDescendants()) do
+						local nameL = keypad.Name:lower()
+						if nameL:find("keypad") or nameL:find("lock") or nameL:find("code") then
+							for _, prompt in ipairs(keypad:GetDescendants()) do
+								if prompt:IsA("ProximityPrompt") or prompt:IsA("ClickDetector") then
+									-- Fills strictly one by one sequentially
+									if prompt:IsA("ProximityPrompt") then fireproximityprompt(prompt) else fireclickdetector(prompt) end
+									task.wait(0.2)
+								end
+							end
+						end
+					end
+				else
+					CodeDisplay.Text = "CODE: SEARCHING..."
+				end
+			end)
+		end
+		if not getgenv().AutoFillCodeActive and not getgenv().CodeFinderOnly then 
+			CodeDisplay.Visible = false 
+		end
+	end)
+end)
+
+-- ==================== ESP PAGE ====================
+local ESPCard = card(PageESP, 6, 140)
+label(ESPCard, "ESP System (Player & Monster)", 10, 11, THEME.gold, true)
+
+local function addESP(obj, color, nameText)
+	if obj:FindFirstChild("KHUB_ESP") then return end
+	local bg = Instance.new("BillboardGui")
+	bg.Name = "KHUB_ESP"
+	bg.Size = UDim2.fromOffset(100, 40)
+	bg.AlwaysOnTop = true
+	bg.StudsOffset = Vector3.new(0, 3, 0)
+	bg.Parent = obj
+
+	local txt = Instance.new("TextLabel")
+	txt.Size = UDim2.new(1, 0, 1, 0)
+	txt.BackgroundTransparency = 1
+	txt.Text = nameText
+	txt.TextColor3 = color
+	txt.Font = Enum.Font.GothamBold
+	txt.TextSize = 12
+	txt.Parent = bg
+	mkstroke(txt, Color3.new(0,0,0), 1, 0)
+end
+
+createToggle(ESPCard, "ESP Players [Key: P]", 36, Enum.KeyCode.P, function(state)
+	getgenv().ESPPlayer = state
+	task.spawn(function()
+		while getgenv().ESPPlayer do
+			task.wait(1)
+			for _, p in ipairs(Players:GetPlayers()) do
+				if p ~= player and p.Character and p.Character:FindFirstChild("Head") then
+					addESP(p.Character.Head, Color3.fromRGB(200, 200, 255), p.Name)
+				end
+			end
+		end
+	end)
+end)
+
+createToggle(ESPCard, "ESP Monster / Enemies [Key: M]", 76, Enum.KeyCode.M, function(state)
+	getgenv().ESPMonster = state
+	task.spawn(function()
+		while getgenv().ESPMonster do
+			task.wait(0.5)
+			for _, obj in ipairs(Workspace:GetDescendants()) do
+				if obj:IsA("Model") and obj ~= player.Character then
+					local nameL = obj.Name:lower()
+					if nameL:find("monster") or nameL:find("entity") or nameL:find("killer") or nameL:find("hunter") or nameL:find("seek") or nameL:find("figure") then
+						local targetPart = obj:FindFirstChild("Head") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+						if targetPart then addESP(targetPart, Color3.fromRGB(255, 100, 100), "[MONSTER] " .. obj.Name) end
+					end
+				end
+			end
+		end
+	end)
+end)
+
+-- ==================== MOVEMENT PAGE ====================
+local MoveCard = card(PageMove, 6, 380)
+label(MoveCard, "Movement, Infinite Stamina, Speed & FOV", 10, 11, THEME.gold, true)
+
+createToggle(MoveCard, "NoClip [Key: N]", 36, Enum.KeyCode.N, function(state)
+	getgenv().NoClip = state
+	RunService.Stepped:Connect(function()
+		if getgenv().NoClip and player.Character then
+			for _, part in ipairs(player.Character:GetDescendants()) do
+				if part:IsA("BasePart") then part.CanCollide = false end
+			end
+		end
+	end)
+end)
+
+createToggle(MoveCard, "Fly Mode [Key: F]", 76, Enum.KeyCode.F, function(state)
+	getgenv().Fly = state
+	local char = player.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local bv = Instance.new("BodyVelocity")
+	bv.Name = "FlyVelocity"
+	bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+	bv.Velocity = Vector3.new(0, 0, 0)
+	if getgenv().Fly then
+		bv.Parent = hrp
+		task.spawn(function()
+			while getgenv().Fly and hrp and hrp.Parent do
+				local cam = Workspace.CurrentCamera
+				local moveDir = Vector3.new()
+				if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + cam.CoordinateFrame.LookVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - cam.CoordinateFrame.LookVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - cam.CoordinateFrame.RightVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + cam.CoordinateFrame.RightVector end
+				bv.Velocity = moveDir * 50
+				task.wait()
+			end
+			if bv then bv:Destroy() end
+		end)
+	else
+		if hrp:FindFirstChild("FlyVelocity") then hrp.FlyVelocity:Destroy() end
+	end
+end)
+
+createToggle(MoveCard, "Infinite Stamina (Sprint Fixed) [Key: B]", 116, Enum.KeyCode.B, function(state)
+	getgenv().InfiniteStamina = state
+	task.spawn(function()
+		while getgenv().InfiniteStamina do
+			task.wait(0.1)
+			pcall(function()
+				local char = player.Character
+				if char then
+					for _, v in pairs(char:GetDescendants()) do
+						if (v:IsA("NumberValue") or v:IsA("IntValue")) and (v.Name:lower():find("stamina") or v.Name:lower():find("energy")) then
+							v.Value = v.MaxValue or 100
+						end
+					end
+				end
+			end)
+		end
+	end)
+end)
+
+-- Speed Boost Slider
+local speedEnabled = false
+local currentSpeedVal = 32
+local SpeedToggleBtn = Instance.new("TextButton")
+SpeedToggleBtn.Size = UDim2.new(1, -16, 0, 32)
+SpeedToggleBtn.Position = UDim2.new(0, 8, 0, 156)
+SpeedToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+SpeedToggleBtn.BackgroundTransparency = 0.3
+SpeedToggleBtn.Text = "  Walkspeed Boost (Speed 2x): OFF"
+SpeedToggleBtn.Font = Enum.Font.GothamBold
+SpeedToggleBtn.TextSize = 11
+SpeedToggleBtn.TextColor3 = THEME.text
+SpeedToggleBtn.TextXAlignment = Enum.TextXAlignment.Left
+SpeedToggleBtn.ZIndex = 11
+SpeedToggleBtn.AutoButtonColor = false
+SpeedToggleBtn.Parent = MoveCard
+corner(SpeedToggleBtn, 7)
+mkstroke(SpeedToggleBtn, THEME.accent, 1, 0.3)
+
+local SliderLabel = label(MoveCard, "Speed Value: 32 (2x Fast)", 194, 10, THEME.dim, false)
+local bar = Instance.new("Frame")
+bar.Size = UDim2.new(1, -16, 0, 8)
+bar.Position = UDim2.new(0, 8, 0, 210)
+bar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+bar.BorderSizePixel = 0
+bar.Parent = MoveCard
+corner(bar, 4)
+
+local fill = Instance.new("Frame")
+fill.Size = UDim2.new(0.12, 0, 1, 0)
+fill.BackgroundColor3 = THEME.accent
+fill.BorderSizePixel = 0
+fill.Parent = bar
+corner(fill, 4)
+
+local sliderBtn = Instance.new("TextButton")
+sliderBtn.Size = UDim2.new(1, 0, 1, 0)
+sliderBtn.BackgroundTransparency = 1
+sliderBtn.Text = ""
+sliderBtn.Parent = bar
+
+local draggingSlider = false
+sliderBtn.MouseButton1Down:Connect(function() draggingSlider = true end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then draggingSlider = false end end)
+UserInputService.InputChanged:Connect(function(i)
+	if draggingSlider and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+		local pos = math.clamp((mouse.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+		fill.Size = UDim2.new(pos, 0, 1, 0)
+		currentSpeedVal = math.floor(16 + (150 - 16) * pos)
+		SliderLabel.Text = "Speed Value: " .. tostring(currentSpeedVal)
+		if speedEnabled then pcall(function() player.Character.Humanoid.WalkSpeed = currentSpeedVal end) end
+	end
+end)
+
+SpeedToggleBtn.MouseButton1Click:Connect(function()
+	speedEnabled = not speedEnabled
+	SpeedToggleBtn.Text = "  Walkspeed Boost (Speed 2x): " .. (speedEnabled and "ON (" .. currentSpeedVal .. ")" or "OFF")
+	pcall(function() player.Character.Humanoid.WalkSpeed = speedEnabled and currentSpeedVal or 16 end)
+end)
+
+-- FOV Slider Mode
+local fovEnabled = false
+local currentFovVal = 120
+local FovToggleBtn = Instance.new("TextButton")
+FovToggleBtn.Size = UDim2.new(1, -16, 0, 32)
+FovToggleBtn.Position = UDim2.new(0, 8, 0, 236)
+FovToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+FovToggleBtn.BackgroundTransparency = 0.3
+FovToggleBtn.Text = "  FOV Slider Mode (Recommended 120): OFF"
+FovToggleBtn.Font = Enum.Font.GothamBold
+FovToggleBtn.TextSize = 11
+FovToggleBtn.TextColor3 = THEME.text
+FovToggleBtn.TextXAlignment = Enum.TextXAlignment.Left
+FovToggleBtn.ZIndex = 11
+FovToggleBtn.AutoButtonColor = false
+FovToggleBtn.Parent = MoveCard
+corner(FovToggleBtn, 7)
+mkstroke(FovToggleBtn, THEME.accent, 1, 0.3)
+
+local FovLabel = label(MoveCard, "FOV Value: 120 (Recommended)", 274, 10, THEME.dim, false)
+local fovBar = Instance.new("Frame")
+fovBar.Size = UDim2.new(1, -16, 0, 8)
+fovBar.Position = UDim2.new(0, 8, 0, 290)
+fovBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+fovBar.BorderSizePixel = 0
+fovBar.Parent = MoveCard
+corner(fovBar, 4)
+
+local fovFill = Instance.new("Frame")
+fovFill.Size = UDim2.new(0.83, 0, 1, 0)
+fovFill.BackgroundColor3 = THEME.accent
+fovFill.BorderSizePixel = 0
+fovFill.Parent = fovBar
+corner(fovFill, 4)
+
+local fovSliderBtn = Instance.new("TextButton")
+fovSliderBtn.Size = UDim2.new(1, 0, 1, 0)
+fovSliderBtn.BackgroundTransparency = 1
+fovSliderBtn.Text = ""
+fovSliderBtn.Parent = fovBar
+
+local draggingFovSlider = false
+fovSliderBtn.MouseButton1Down:Connect(function() draggingFovSlider = true end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then draggingFovSlider = false end end)
+UserInputService.InputChanged:Connect(function(i)
+	if draggingFovSlider and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+		local pos = math.clamp((mouse.X - fovBar.AbsolutePosition.X) / fovBar.AbsoluteSize.X, 0, 1)
+		fovFill.Size = UDim2.new(pos, 0, 1, 0)
+		currentFovVal = math.floor(70 + (120 - 70) * pos)
+		FovLabel.Text = "FOV Value: " .. tostring(currentFovVal)
+		if fovEnabled then pcall(function() Workspace.CurrentCamera.FieldOfView = currentFovVal end) end
+	end
+end)
+
+FovToggleBtn.MouseButton1Click:Connect(function()
+	fovEnabled = not fovEnabled
+	FovToggleBtn.Text = "  FOV Slider Mode (Recommended 120): " .. (fovEnabled and "ON (" .. currentFovVal .. ")" or "OFF")
+	pcall(function() Workspace.CurrentCamera.FieldOfView = fovEnabled and currentFovVal or 70 end)
+end)
+
+-- ==================== SETTINGS PAGE ====================
+local SettingsCard = card(PageSettings, 6, 260)
+label(SettingsCard, "Custom Configs & UI Color Themes", 10, 11, THEME.gold, true)
+
+local ConfigInputBox = Instance.new("TextBox")
+ConfigInputBox.Size = UDim2.new(1, -16, 0, 32)
+ConfigInputBox.Position = UDim2.new(0, 8, 0, 36)
+ConfigInputBox.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+ConfigInputBox.Text = "MyConfig1"
+ConfigInputBox.Font = Enum.Font.Gotham
+ConfigInputBox.TextSize = 12
+ConfigInputBox.TextColor3 = THEME.text
+ConfigInputBox.ZIndex = 11
+ConfigInputBox.Parent = SettingsCard
+corner(ConfigInputBox, 6)
+mkstroke(ConfigInputBox, THEME.accent, 1, 0.3)
+
+local ConfigStatusLabel = label(SettingsCard, "Status: Ready to Save/Load Config", 74, 10, THEME.dim, false)
+
+local SaveBtn = Instance.new("TextButton")
+SaveBtn.Size = UDim2.new(0.48, 0, 0, 32)
+SaveBtn.Position = UDim2.new(0, 8, 0, 96)
+SaveBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+SaveBtn.Text = "Save Config"
+SaveBtn.Font = Enum.Font.GothamBold
+SaveBtn.TextSize = 11
+SaveBtn.TextColor3 = THEME.text
+SaveBtn.ZIndex = 11
+SaveBtn.Parent = SettingsCard
+corner(SaveBtn, 6)
+mkstroke(SaveBtn, THEME.accent, 1, 0.3)
+
+local LoadBtn = Instance.new("TextButton")
+LoadBtn.Size = UDim2.new(0.48, 0, 0, 32)
+LoadBtn.Position = UDim2.new(0.52, 0, 0, 96)
+LoadBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+LoadBtn.Text = "Load Config"
+LoadBtn.Font = Enum.Font.GothamBold
+LoadBtn.TextSize = 11
+LoadBtn.TextColor3 = THEME.text
+LoadBtn.ZIndex = 11
+LoadBtn.Parent = SettingsCard
+corner(LoadBtn, 6)
+mkstroke(LoadBtn, THEME.accent, 1, 0.3)
+
+local DeleteBtn = Instance.new("TextButton")
+DeleteBtn.Size = UDim2.new(1, -16, 0, 30)
+DeleteBtn.Position = UDim2.new(0, 8, 0, 136)
+DeleteBtn.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
+DeleteBtn.Text = "Delete Config File"
+DeleteBtn.Font = Enum.Font.GothamBold
+DeleteBtn.TextSize = 11
+DeleteBtn.TextColor3 = Color3.fromRGB(255, 150, 150)
+DeleteBtn.ZIndex = 11
+DeleteBtn.Parent = SettingsCard
+corner(DeleteBtn, 6)
+
+label(SettingsCard, "Select UI Color Theme (Click to apply & re-execute):", 174, 11, THEME.gold, true)
+
+local themeX = 8
+for tName, _ in pairs(THEMES) do
+	local tBtn = Instance.new("TextButton")
+	tBtn.Size = UDim2.fromOffset(80, 26)
+	tBtn.Position = UDim2.fromOffset(themeX, 196)
+	tBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	tBtn.Text = tName
+	tBtn.Font = Enum.Font.GothamBold
+	tBtn.TextSize = 10
+	tBtn.TextColor3 = THEME.text
+	tBtn.ZIndex = 11
+	tBtn.Parent = SettingsCard
+	corner(tBtn, 5)
+	mkstroke(tBtn, THEME.accent, 1, 0.3)
+	
+	tBtn.MouseButton1Click:Connect(function()
+		currentThemeName = tName
+		ConfigStatusLabel.Text = "Theme set to " .. tName .. "! Re-execute script to view changes."
+	end)
+	themeX = themeX + 88
+end
+
+SaveBtn.MouseButton1Click:Connect(function()
+	pcall(function()
+		if writefile then
+			local cfgData = { Speed = currentSpeedVal, Fov = currentFovVal, Theme = currentThemeName }
+			writefile("KHUB_" .. ConfigInputBox.Text .. ".json", HttpService:JSONEncode(cfgData))
+			ConfigStatusLabel.Text = "Status: Config saved!"
+		else
+			ConfigStatusLabel.Text = "Status: writefile not supported."
+		end
+	end)
+end)
+
+LoadBtn.MouseButton1Click:Connect(function()
+	pcall(function()
+		if readfile and isfile and isfile("KHUB_" .. ConfigInputBox.Text .. ".json") then
+			local content = readfile("KHUB_" .. ConfigInputBox.Text .. ".json")
+			local data = HttpService:JSONDecode(content)
+			currentSpeedVal = data.Speed or 32
+			currentFovVal = data.Fov or 120
+			ConfigStatusLabel.Text = "Status: Config loaded!"
+		else
+			ConfigStatusLabel.Text = "Status: Config file not found."
+		end
+	end)
+end)
+
+DeleteBtn.MouseButton1Click:Connect(function()
+	pcall(function()
+		if delfile and isfile and isfile("KHUB_" .. ConfigInputBox.Text .. ".json") then
+			delfile("KHUB_" .. ConfigInputBox.Text .. ".json")
+			ConfigStatusLabel.Text = "Status: Config deleted."
+		end
+	end)
+end)
+
+-- Larger Floating Orb Toggle (Increased size to 72x72)
+local Orb = Instance.new("ImageButton")
+Orb.Name = "Orb"
+Orb.Size = UDim2.fromOffset(72, 72)
+Orb.Position = UDim2.new(0, 20, 1, -100)
+Orb.BackgroundColor3 = THEME.rail
+Orb.Image = LOGO_ID
+Orb.ScaleType = Enum.ScaleType.Fit
+Orb.Visible = false
+Orb.ZIndex = 50
+Orb.Parent = ScreenGui
+corner(Orb, 36)
+mkstroke(Orb, THEME.accent, 2, 0.1)
+
+local draggingOrb, dragInputOrb, dragStartOrb, startPosOrb
+Orb.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingOrb = true
+		dragStartOrb = input.Position
+		startPosOrb = Orb.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then draggingOrb = false end
+		end)
+	end
+end)
+Orb.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInputOrb = input
+	end
+end)
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInputOrb and draggingOrb then
+		local delta = input.Position - dragStartOrb
+		Orb.Position = UDim2.new(startPosOrb.X.Scale, startPosOrb.X.Offset + delta.X, startPosOrb.Y.Scale, startPosOrb.Y.Offset + delta.Y)
+	end
+end)
+
+local function setVisible(on)
+	Win.Visible = on
+	Orb.Visible = not on
+end
+
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function() setVisible(true) end)
+
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.RightShift or i.KeyCode == Enum.KeyCode.RightControl or i.KeyCode == Enum.KeyCode.K then
+		setVisible(not Win.Visible)
+	end
+end)
+
+print("[Monochrome by Khub] Loaded Successfully!")
