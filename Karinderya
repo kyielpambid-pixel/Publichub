@@ -38,10 +38,29 @@ local THEME = {
 -- Stub so old game loops still work
 local Library = { Unloaded = false }
 
-local ParentTarget = (gethui and gethui()) or CoreGui
+-- Valax / key-system safe: PlayerGui only (no gethui required)
+local function getPlayerGui()
+	local pg = player:FindFirstChild("PlayerGui")
+	if pg then return pg end
+	local ok, res = pcall(function()
+		return player:WaitForChild("PlayerGui", 10)
+	end)
+	if ok then return res end
+	return nil
+end
+
+pcall(function()
+	local pg = getPlayerGui()
+	if pg then
+		for _, n in ipairs({"KHUB_Karinderya", "KHUB_KeySystem", "KHUB_FloatIcon"}) do
+			local o = pg:FindFirstChild(n)
+			if o then o:Destroy() end
+		end
+	end
+end)
 pcall(function()
 	for _, n in ipairs({"KHUB_Karinderya", "KHUB_KeySystem", "KHUB_FloatIcon"}) do
-		local o = ParentTarget:FindFirstChild(n)
+		local o = CoreGui:FindFirstChild(n)
 		if o then o:Destroy() end
 	end
 end)
@@ -53,24 +72,32 @@ ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 999999
 ScreenGui.Enabled = true
--- Prefer PlayerGui first (works better after Luarmor / key systems)
+
 local function parentGui(gui)
-	local ok = false
-	pcall(function()
-		local pg = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui", 5)
-		if pg then gui.Parent = pg; ok = true end
-	end)
-	if ok then return end
-	pcall(function()
-		if gethui then gui.Parent = gethui(); ok = true end
-	end)
-	if ok then return end
-	pcall(function() gui.Parent = CoreGui end)
-	if not gui.Parent then
-		pcall(function() gui.Parent = player:WaitForChild("PlayerGui") end)
+	local pg = getPlayerGui()
+	if pg then
+		gui.Parent = pg
+		return true
 	end
+	pcall(function() gui.Parent = CoreGui end)
+	return gui.Parent ~= nil
 end
 parentGui(ScreenGui)
+
+-- Keep UI alive after Valax key unlock (re-parent if stripped)
+task.spawn(function()
+	for _ = 1, 8 do
+		task.wait(0.4)
+		pcall(function()
+			if not ScreenGui.Parent then
+				parentGui(ScreenGui)
+			end
+			ScreenGui.Enabled = true
+			local w = ScreenGui:FindFirstChild("Window")
+			if w then w.Visible = true end
+		end)
+	end
+end)
 
 local function corner(p, r)
 	local c = Instance.new("UICorner")
@@ -3122,19 +3149,31 @@ end)
 
 
 
--- FORCE_UI_SHOW_KHUB (after Luarmor key unlock)
-task.defer(function()
-	pcall(function()
-		local UI = _G.__KHUB_KARI_UI
-		if UI and UI.ScreenGui then
-			UI.ScreenGui.Enabled = true
-			if not UI.ScreenGui.Parent then
-				local pg = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
-				if pg then UI.ScreenGui.Parent = pg end
+-- FORCE_UI_SHOW_KHUB (Valax / Luarmor key unlock safe)
+task.spawn(function()
+	for i = 1, 10 do
+		task.wait(0.35)
+		pcall(function()
+			local UI = rawget(_G, "__KHUB_KARI_UI")
+			local sg = UI and UI.ScreenGui
+			local win = UI and UI.Win
+			if not sg then
+				local pg = player:FindFirstChild("PlayerGui")
+				if pg then sg = pg:FindFirstChild("KHUB_Karinderya") end
 			end
-		end
-		if UI and UI.Win then
-			UI.Win.Visible = true
-		end
-	end)
+			if sg then
+				if not sg.Parent then
+					local pg = player:FindFirstChild("PlayerGui")
+					if pg then sg.Parent = pg end
+				end
+				sg.Enabled = true
+			end
+			if win then
+				win.Visible = true
+			elseif sg then
+				local w = sg:FindFirstChild("Window")
+				if w then w.Visible = true end
+			end
+		end)
+	end
 end)
