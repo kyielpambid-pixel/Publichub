@@ -1,0 +1,1060 @@
+--[[
+	Car Flipper by KHUB
+	Violet KHUB UI · toggles · scrollable · pro layout
+	Credits: Yvaine & Kyiel · UI by KHUB
+	Discord: https://discord.gg/EKPb7BRDH8
+	Keybinds: RightShift / RightCtrl / K = toggle UI
+]]
+
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
+
+local player = Players.LocalPlayer
+local LOGO_ID = "rbxassetid://140466936910510"
+local DISCORD = "https://discord.gg/EKPb7BRDH8"
+local YOUTUBE = "https://www.youtube.com/@kyielpambid"
+
+local THEME = {
+	bg = Color3.fromRGB(18, 12, 28),
+	rail = Color3.fromRGB(24, 16, 38),
+	card = Color3.fromRGB(30, 20, 48),
+	accent = Color3.fromRGB(160, 100, 255),
+	accent2 = Color3.fromRGB(200, 140, 255),
+	gold = Color3.fromRGB(230, 190, 255),
+	text = Color3.fromRGB(235, 225, 250),
+	dim = Color3.fromRGB(160, 140, 190),
+	mute = Color3.fromRGB(110, 90, 140),
+	stroke = Color3.fromRGB(100, 60, 160),
+	green = Color3.fromRGB(90, 220, 140),
+	red = Color3.fromRGB(230, 80, 100),
+}
+
+local function getPlayerGui()
+	local pg = player:FindFirstChild("PlayerGui")
+	if pg then return pg end
+	local ok, res = pcall(function()
+		return player:WaitForChild("PlayerGui", 10)
+	end)
+	if ok then return res end
+	return nil
+end
+
+pcall(function()
+	local pg = getPlayerGui()
+	if pg then
+		for _, n in ipairs({"KHUB_CarFlipper", "CarFlipperUltimateFixedHub"}) do
+			local o = pg:FindFirstChild(n)
+			if o then o:Destroy() end
+		end
+	end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_CarFlipper"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999999
+ScreenGui.Enabled = true
+do
+	local pg = getPlayerGui()
+	if pg then
+		ScreenGui.Parent = pg
+	else
+		pcall(function() ScreenGui.Parent = CoreGui end)
+		if not ScreenGui.Parent then
+			ScreenGui.Parent = player:WaitForChild("PlayerGui")
+		end
+	end
+end
+
+local function corner(p, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 10)
+	c.Parent = p
+	return c
+end
+
+local function mkstroke(p, col, th, tr)
+	local s = Instance.new("UIStroke")
+	s.Color = col or THEME.stroke
+	s.Thickness = th or 1.4
+	s.Transparency = tr or 0.35
+	s.Parent = p
+	return s
+end
+
+--=====================================================================
+-- GAME DATA / LOGIC (from your script)
+--=====================================================================
+
+local CarRarity = {
+	["Acad iRVS Sedan"] = 0, ["Acadi RVS Sedan"] = 0, ["Artho G1000"] = 0,
+	["Bantt Rental"] = 0, ["Bogdan 2099"] = 0, ["Chiverleta Golde"] = 0,
+	["Chiverleta Outskirts BT"] = 0, ["Chiverleta Taohra BT"] = 0,
+	["DAW 0909"] = 0, ["Deutschotoren C3 B63"] = 0, ["Deutschotoren C5 B21"] = 0,
+	["Deutschotoren C543"] = 0, ["Fedsel Coronet"] = 0, ["Fedsel E-Line Cargo"] = 0,
+	["Hakusho Ciri"] = 0, ["Ivar Manguster"] = 0, ["Nikken Altimata"] = 0,
+	["Susuri Vitality"] = 0, ["Volfsen Passo"] = 0, ["Volfsen Rolf"] = 0,
+	["Artho G451"] = 1, ["Artho G672"] = 1, ["Artho X723"] = 1,
+	["Chiverleta Cerano"] = 1, ["Dawson Hammer JHT8"] = 1, ["Deutschotoren C3E5"] = 1,
+	["Deutschotoren C560"] = 1, ["Deutschotoren C783"] = 1, ["Fedsel Expedition"] = 1,
+	["Fedsel Stallion G3"] = 1, ["Hakusho Concord"] = 1, ["Luxius OJ100"] = 1,
+	["Marcalen-Denz B660"] = 1, ["Marcalen-Denz T600"] = 1, ["Mazuta 29"] = 1,
+	["Mazuta Mint"] = 1, ["Preischel Crayele"] = 1, ["Quantum H26"] = 1,
+	["Tokina Karma"] = 1, ["Tokina RP60"] = 1,
+	["Artho G623"] = 2, ["Chiverleta Ceretta X05"] = 2, ["Chiverleta Taohra SVV"] = 2,
+	["Cryele 222B"] = 2, ["Dawson Hammer SCV"] = 2, ["Deutschotoren C297x"] = 2,
+	["Deutschotoren C393"] = 2, ["Fedsel Expedition Hybrid"] = 2, ["Fedsel Stallion G5"] = 2,
+	["Land Ranger V500"] = 2, ["Luxius VQ"] = 2, ["Marcalen-Denz K413"] = 2,
+	["Mazuta JO4"] = 2, ["Mitta Aydens REO"] = 2, ["Nikken 290S"] = 2,
+	["Nikken Sinata B21"] = 2, ["Quantum N500"] = 2, ["Suiba Presse RST"] = 2,
+	["Tokina Absoluta SR 3.0"] = 2,
+	["Artho F9 ST"] = 3, ["Artho G770"] = 3, ["Artho VS600"] = 3,
+	["Chiverleta Cerano XZ2"] = 3, ["Chiverleta Ceretta X07"] = 3, ["Chiverleta Imalo 67"] = 3,
+	["Dawson Competition"] = 3, ["Dawson Hammer"] = 3, ["Dawson Hammer 70"] = 3,
+	["Dawson Rhino SCT"] = 3, ["Deserter Grand Prince"] = 3, ["Deutschotoren C2"] = 3,
+	["Deutschotoren C3"] = 3, ["Deutschotoren C4 DSG"] = 3, ["Deutschotoren C483"] = 3,
+	["Deutschotoren C5 600"] = 3, ["Deutschotoren C873"] = 3, ["Deutschotoren S5"] = 3,
+	["Deutschotoren U8"] = 3, ["Hakusho MRB Sport"] = 3, ["Lilia Exima"] = 3,
+	["Luxius BG600"] = 3, ["Marcalen-Denz VT"] = 3, ["Marcalen-Denz LPS"] = 3,
+	["Marcalen-Denz LPS94"] = 3, ["Nikken Starline S340"] = 3, ["Nikken Starline S350"] = 3,
+	["Preischel 313n"] = 3, ["Tokina Absoluta SR 2.0"] = 3,
+}
+
+local function GetCarRarity(carName)
+	if carName and CarRarity[carName] ~= nil then
+		return CarRarity[carName]
+	end
+	return nil
+end
+
+local function GetCarName(slotIndex)
+	local playerData = player:FindFirstChild("PlayerData") or ReplicatedStorage:FindFirstChild("PlayerData")
+	if playerData then
+		local carsFolder = playerData:FindFirstChild("Cars")
+			or playerData:FindFirstChild("Inventory")
+			or playerData:FindFirstChild("Garage")
+		if carsFolder and carsFolder:FindFirstChild(tostring(slotIndex)) then
+			local carEntry = carsFolder[tostring(slotIndex)]
+			local nameValue = carEntry:FindFirstChild("CarName") or carEntry:FindFirstChild("Name")
+			if nameValue and nameValue:IsA("StringValue") then
+				return nameValue.Value
+			elseif carEntry:IsA("StringValue") then
+				return carEntry.Value
+			end
+		end
+	end
+
+	local runtimeGui = player.PlayerGui:FindFirstChild("RuntimeGui")
+	local carList = runtimeGui
+		and runtimeGui:FindFirstChild("Guis")
+		and runtimeGui.Guis:FindFirstChild("Garage")
+		and runtimeGui.Guis.Garage:FindFirstChild("MainFrame")
+		and runtimeGui.Guis.Garage.MainFrame:FindFirstChild("GridFrame")
+		and runtimeGui.Guis.Garage.MainFrame.GridFrame:FindFirstChild("GridFrame")
+		and runtimeGui.Guis.Garage.MainFrame.GridFrame.GridFrame:FindFirstChild("CarList")
+
+	if carList and carList:FindFirstChild(tostring(slotIndex)) then
+		local label = carList[tostring(slotIndex)]:FindFirstChildWhichIsA("TextLabel", true)
+		if label and label.Text ~= "" then
+			return label.Text
+		end
+	end
+	return nil
+end
+
+local BuyToggles = {[0] = false, [1] = false, [2] = false, [3] = false, [4] = false, [5] = false}
+local SellToggles = {[0] = false, [1] = false, [2] = false, [3] = false}
+local autoFarmEnabled = false
+local farmDelay = 0.5
+local statusText = "Ready"
+
+local zones = {"Junkyard", "LowTiers", "Auction", "Suburbs1", "Suburbs2", "Suburbs3", "Port"}
+local teleportLocations = {
+	{name = "Suburbs 1", x = -2403, y = 5, z = 223},
+	{name = "Suburbs 2", x = -142, y = -25, z = 952},
+	{name = "Suburbs 3", x = 1863, y = 5, z = -534},
+}
+
+local RepairRemote, BuyCarRemote, RollRemote, SellCarRemote
+pcall(function()
+	local remotes = ReplicatedStorage:WaitForChild("Remotes", 8)
+	if remotes then
+		RepairRemote = remotes:FindFirstChild("Repair") and remotes.Repair:FindFirstChild("FixCar")
+		BuyCarRemote = remotes:FindFirstChild("Merchant") and remotes.Merchant:FindFirstChild("BuyCar")
+		RollRemote = remotes:FindFirstChild("Junkyard") and remotes.Junkyard:FindFirstChild("Roll")
+		SellCarRemote = remotes:FindFirstChild("Garage") and remotes.Garage:FindFirstChild("SellCar")
+	end
+end)
+
+local function setStatus(t)
+	statusText = t
+end
+
+local function SellSelectedCars()
+	if not SellCarRemote then
+		setStatus("Sell remote missing")
+		return
+	end
+	local sold = 0
+	for slot = 1, 40 do
+		local carName = GetCarName(slot)
+		if carName then
+			local rarity = GetCarRarity(carName)
+			if rarity ~= nil and SellToggles[rarity] then
+				pcall(function() SellCarRemote:FireServer(tostring(slot)) end)
+				sold = sold + 1
+				task.wait(0.02)
+			end
+		end
+	end
+	setStatus("Sold " .. sold .. " cars (selected rarities)")
+end
+
+local function SellLowTierCars()
+	if not SellCarRemote then return end
+	for slot = 1, 40 do
+		local carName = GetCarName(slot)
+		if carName then
+			local rarity = GetCarRarity(carName)
+			if rarity == 0 or rarity == 1 or rarity == 2 then
+				pcall(function() SellCarRemote:FireServer(tostring(slot)) end)
+				task.wait(0.02)
+			end
+		end
+	end
+end
+
+local function BuyCarsInZone(zone)
+	if not BuyCarRemote then
+		setStatus("Buy remote missing")
+		return
+	end
+	local merchants = Workspace:FindFirstChild("ActiveMerchants")
+	if not merchants then
+		setStatus("No ActiveMerchants")
+		return
+	end
+	local bought = 0
+	for slot = 1, 40 do
+		local merchantName = nil
+		for _, zoneFolder in ipairs(merchants:GetChildren()) do
+			for _, merchant in ipairs(zoneFolder:GetChildren()) do
+				local prompt = merchant:FindFirstChild("MerchantPrompt", true)
+				if prompt
+					and prompt:GetAttribute("MerchantZone") == zone
+					and tostring(prompt:GetAttribute("MerchantId")) == tostring(slot) then
+					merchantName = merchant.Name
+					break
+				end
+			end
+			if merchantName then break end
+		end
+		if merchantName then
+			local rarity = GetCarRarity(merchantName)
+			if rarity and BuyToggles[rarity] then
+				pcall(function() BuyCarRemote:FireServer(zone, tostring(slot)) end)
+				bought = bought + 1
+				task.wait(0.01)
+			end
+		end
+	end
+	setStatus("Bought " .. bought .. " in " .. zone)
+end
+
+local function BuyAllCarsInZone(zone)
+	if not BuyCarRemote then return end
+	for slot = 1, 40 do
+		pcall(function() BuyCarRemote:FireServer(zone, tostring(slot)) end)
+		task.wait(0.01)
+	end
+end
+
+local function RepairAllCars()
+	if not RepairRemote then
+		setStatus("Repair remote missing")
+		return
+	end
+	for slot = 1, 40 do
+		for _ = 1, 15 do
+			pcall(function() RepairRemote:FireServer(tostring(slot)) end)
+		end
+		task.wait(0.01)
+	end
+	setStatus("Repair all sent")
+end
+
+local function RollCards()
+	if not RollRemote then
+		setStatus("Roll remote missing")
+		return
+	end
+	for slot = 1, 20 do
+		pcall(function() RollRemote:FireServer(tostring(slot)) end)
+		task.wait(0.02)
+	end
+	setStatus("Rolled cards")
+end
+
+local function TeleportTo(x, y, z)
+	local char = player.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+		hrp.CFrame = CFrame.new(x, y + 3, z)
+		setStatus("Teleported")
+	end
+end
+
+local function AutoFarmLoop()
+	while autoFarmEnabled do
+		for _, zone in ipairs(zones) do
+			if not autoFarmEnabled then break end
+			BuyAllCarsInZone(zone)
+			task.wait(0.1)
+		end
+		if autoFarmEnabled then
+			RepairAllCars()
+			task.wait(0.2)
+		end
+		if autoFarmEnabled then
+			SellLowTierCars()
+			task.wait(0.2)
+		end
+		task.wait(math.max(0.3, farmDelay))
+	end
+end
+
+local function OpenGarage()
+	local runtimeGui = player.PlayerGui:FindFirstChild("RuntimeGui")
+	local garageBtn = runtimeGui and runtimeGui:FindFirstChild("SideBar") and runtimeGui.SideBar:FindFirstChild("Garage")
+	if garageBtn and getconnections then
+		pcall(function()
+			for _, conn in ipairs(getconnections(garageBtn.Activated)) do
+				conn:Fire()
+			end
+			for _, conn in ipairs(getconnections(garageBtn.MouseButton1Click)) do
+				conn:Fire()
+			end
+		end)
+		setStatus("Garage open attempted")
+	else
+		setStatus("Open garage manually first")
+	end
+end
+
+--=====================================================================
+-- UI SHELL
+--=====================================================================
+
+local HEADER_H = 58
+local BASE_W, BASE_H = 500, 380
+
+local Win = Instance.new("Frame")
+Win.Name = "Window"
+Win.Size = UDim2.new(0, BASE_W, 0, BASE_H)
+Win.Position = UDim2.new(0.5, -BASE_W / 2, 0.5, -BASE_H / 2)
+Win.BackgroundColor3 = THEME.bg
+Win.BackgroundTransparency = 0.05
+Win.BorderSizePixel = 0
+Win.ClipsDescendants = true
+Win.Active = true
+Win.Visible = true
+Win.Parent = ScreenGui
+corner(Win, 14)
+local winStroke = mkstroke(Win, THEME.accent, 2, 0.3)
+task.spawn(function()
+	local t = 0
+	while winStroke.Parent do
+		t = t + task.wait(0.05)
+		local s = math.abs(math.sin(t * 1.1))
+		winStroke.Color = Color3.fromRGB(120 + s * 60, 70 + s * 40, 200 + s * 40)
+		winStroke.Transparency = 0.22 + s * 0.18
+	end
+end)
+
+local uiScale = Instance.new("UIScale")
+uiScale.Scale = 1
+uiScale.Parent = Win
+local function applyAutoScale()
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	local vs = cam.ViewportSize
+	uiScale.Scale = math.clamp(math.min(vs.X / 960, vs.Y / 720), 0.75, 1.05)
+end
+applyAutoScale()
+pcall(function()
+	if Workspace.CurrentCamera then
+		Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyAutoScale)
+	end
+end)
+
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 3)
+TopBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TopBar.BorderSizePixel = 0
+TopBar.ZIndex = 25
+TopBar.Parent = Win
+local topG = Instance.new("UIGradient")
+topG.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 40, 255)),
+	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 80, 200)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 200, 120)),
+	ColorSequenceKeypoint.new(0.75, Color3.fromRGB(80, 200, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(140, 60, 255)),
+})
+topG.Parent = TopBar
+task.spawn(function()
+	local t = 0
+	while TopBar.Parent do
+		t = t + task.wait(0.045)
+		topG.Offset = Vector2.new(math.sin(t * 0.5) * 0.9, 0)
+	end
+end)
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, HEADER_H)
+Header.Position = UDim2.new(0, 0, 0, 3)
+Header.BackgroundTransparency = 1
+Header.ZIndex = 12
+Header.Active = true
+Header.Parent = Win
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0, 320, 0, 32)
+Title.Position = UDim2.new(0, 14, 0, 8)
+Title.BackgroundTransparency = 1
+Title.Text = "Car Flipper by KHUB"
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 18
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 14
+Title.Parent = Header
+local titleShine = Instance.new("UIGradient")
+titleShine.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(140, 60, 255)),
+	ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 90, 200)),
+	ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 210, 100)),
+	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(80, 220, 255)),
+	ColorSequenceKeypoint.new(0.8, Color3.fromRGB(180, 100, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 140, 220)),
+})
+titleShine.Parent = Title
+task.spawn(function()
+	local t = 0
+	while Title.Parent do
+		t = t + task.wait(0.05)
+		titleShine.Offset = Vector2.new(math.sin(t * 0.42) * 0.88, 0)
+		titleShine.Rotation = math.sin(t * 0.18) * 10
+	end
+end)
+
+local Sub = Instance.new("TextLabel")
+Sub.Size = UDim2.new(0, 300, 0, 14)
+Sub.Position = UDim2.new(0, 14, 0, 38)
+Sub.BackgroundTransparency = 1
+Sub.Text = "Yvaine & Kyiel  |  RightShift / K = toggle"
+Sub.Font = Enum.Font.Code
+Sub.TextSize = 10
+Sub.TextColor3 = THEME.mute
+Sub.TextXAlignment = Enum.TextXAlignment.Left
+Sub.ZIndex = 14
+Sub.Parent = Header
+
+for i = 1, 12 do
+	local dot = Instance.new("Frame")
+	dot.Size = UDim2.fromOffset(3, 3)
+	dot.BackgroundColor3 = Color3.fromHSV((i * 0.08) % 1, 0.7, 1)
+	dot.BorderSizePixel = 0
+	dot.ZIndex = 8
+	dot.Active = false
+	dot.Parent = Win
+	corner(dot, 99)
+	task.spawn(function()
+		local x = 20 + (i * 38) % (BASE_W - 40)
+		local y = BASE_H + math.random(0, 60)
+		local speed = 14 + (i % 5) * 4
+		while dot.Parent do
+			y = y - speed * task.wait(0.04)
+			if y < -10 then
+				y = BASE_H + math.random(10, 50)
+				x = 20 + math.random(0, BASE_W - 40)
+				dot.BackgroundColor3 = Color3.fromHSV(math.random(), 0.7, 1)
+			end
+			dot.Position = UDim2.fromOffset(x, y)
+			dot.BackgroundTransparency = math.clamp(y / BASE_H, 0.12, 0.78)
+		end
+	end)
+end
+
+local centerKHUB = Instance.new("TextLabel")
+centerKHUB.Size = UDim2.new(0, 240, 0, 54)
+centerKHUB.Position = UDim2.new(0.5, -120, 0.5, -27)
+centerKHUB.BackgroundTransparency = 1
+centerKHUB.Text = "KHUB"
+centerKHUB.Font = Enum.Font.GothamBlack
+centerKHUB.TextSize = 46
+centerKHUB.TextColor3 = Color3.fromRGB(255, 255, 255)
+centerKHUB.TextTransparency = 0.5
+centerKHUB.ZIndex = 7
+centerKHUB.Active = false
+centerKHUB.Parent = Win
+local cGrad = Instance.new("UIGradient")
+cGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 40, 255)),
+	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 80, 180)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 200, 90)),
+	ColorSequenceKeypoint.new(0.75, Color3.fromRGB(60, 200, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 100, 255)),
+})
+cGrad.Parent = centerKHUB
+task.spawn(function()
+	local t = 0
+	while centerKHUB.Parent do
+		t = t + task.wait(0.05)
+		centerKHUB.TextTransparency = 0.45 + math.sin(t * 0.85) * 0.12
+		cGrad.Offset = Vector2.new(math.sin(t * 0.32) * 0.78, 0)
+		cGrad.Rotation = math.sin(t * 0.22) * 14
+	end
+end)
+
+local Rail = Instance.new("Frame")
+Rail.Size = UDim2.new(0, 112, 1, -HEADER_H - 3)
+Rail.Position = UDim2.new(0, 0, 0, HEADER_H + 3)
+Rail.BackgroundColor3 = THEME.rail
+Rail.BackgroundTransparency = 0.1
+Rail.BorderSizePixel = 0
+Rail.ZIndex = 40
+Rail.Active = true
+Rail.Parent = Win
+
+local brand = Instance.new("TextLabel")
+brand.Size = UDim2.new(1, -8, 0, 14)
+brand.Position = UDim2.fromOffset(8, 8)
+brand.BackgroundTransparency = 1
+brand.Text = "Car Flipper"
+brand.Font = Enum.Font.GothamBold
+brand.TextSize = 11
+brand.TextColor3 = THEME.text
+brand.TextXAlignment = Enum.TextXAlignment.Left
+brand.ZIndex = 41
+brand.Active = false
+brand.Parent = Rail
+local brandSub = Instance.new("TextLabel")
+brandSub.Size = UDim2.new(1, -8, 0, 12)
+brandSub.Position = UDim2.fromOffset(8, 22)
+brandSub.BackgroundTransparency = 1
+brandSub.Text = "by KHUB"
+brandSub.Font = Enum.Font.Code
+brandSub.TextSize = 9
+brandSub.TextColor3 = THEME.mute
+brandSub.TextXAlignment = Enum.TextXAlignment.Left
+brandSub.ZIndex = 41
+brandSub.Active = false
+brandSub.Parent = Rail
+
+local tabs, pages = {}, {}
+local tabOrder = {"Welcome", "Buy", "Sell", "Teleport", "Farm", "Credits"}
+
+local function makeTabBtn(name, y)
+	local b = Instance.new("TextButton")
+	b.Name = "Tab_" .. name
+	b.Size = UDim2.new(1, -10, 0, 28)
+	b.Position = UDim2.fromOffset(5, y)
+	b.BackgroundColor3 = Color3.fromRGB(36, 24, 55)
+	b.Text = "  " .. name
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 11
+	b.TextColor3 = THEME.dim
+	b.TextXAlignment = Enum.TextXAlignment.Left
+	b.ZIndex = 50
+	b.Active = true
+	b.AutoButtonColor = true
+	b.Parent = Rail
+	corner(b, 7)
+	local st = mkstroke(b, THEME.accent, 1.2, 0.55)
+	task.spawn(function()
+		local t = 0
+		while b.Parent do
+			t = t + task.wait(0.05)
+			if tabs._active == name then
+				st.Transparency = 0.12 + math.abs(math.sin(t * 1.8)) * 0.2
+				st.Color = THEME.accent2
+			else
+				st.Transparency = 0.55
+				st.Color = THEME.stroke
+			end
+		end
+	end)
+	tabs[name] = b
+	return b
+end
+
+for i, name in ipairs(tabOrder) do
+	makeTabBtn(name, 42 + (i - 1) * 32)
+end
+tabs._active = "Welcome"
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -116, 1, -HEADER_H - 3)
+Content.Position = UDim2.new(0, 114, 0, HEADER_H + 3)
+Content.BackgroundTransparency = 1
+Content.ZIndex = 15
+Content.Active = false
+Content.Parent = Win
+
+local Head = Instance.new("Frame")
+Head.Size = UDim2.new(1, 0, 0, 28)
+Head.BackgroundColor3 = THEME.rail
+Head.BackgroundTransparency = 0.15
+Head.BorderSizePixel = 0
+Head.ZIndex = 16
+Head.Parent = Content
+
+local HeadTitle = Instance.new("TextLabel")
+HeadTitle.Size = UDim2.new(1, -40, 1, 0)
+HeadTitle.Position = UDim2.fromOffset(10, 0)
+HeadTitle.BackgroundTransparency = 1
+HeadTitle.Text = "Welcome"
+HeadTitle.Font = Enum.Font.GothamBold
+HeadTitle.TextSize = 12
+HeadTitle.TextColor3 = THEME.accent2
+HeadTitle.TextXAlignment = Enum.TextXAlignment.Left
+HeadTitle.ZIndex = 17
+HeadTitle.Parent = Head
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.fromOffset(24, 18)
+MinBtn.Position = UDim2.new(1, -28, 0.5, -9)
+MinBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 70)
+MinBtn.Text = "-"
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 14
+MinBtn.TextColor3 = THEME.text
+MinBtn.ZIndex = 18
+MinBtn.Parent = Head
+corner(MinBtn, 5)
+
+local function makePage(name)
+	local sf = Instance.new("ScrollingFrame")
+	sf.Size = UDim2.new(1, -6, 1, -32)
+	sf.Position = UDim2.new(0, 3, 0, 30)
+	sf.BackgroundTransparency = 1
+	sf.BorderSizePixel = 0
+	sf.ScrollBarThickness = 3
+	sf.ScrollBarImageColor3 = THEME.accent
+	sf.CanvasSize = UDim2.new(0, 0, 0, 0)
+	sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	sf.Visible = false
+	sf.ZIndex = 16
+	sf.Parent = Content
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0, 6)
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Parent = sf
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingBottom = UDim.new(0, 10)
+	pad.PaddingLeft = UDim.new(0, 2)
+	pad.PaddingRight = UDim.new(0, 2)
+	pad.Parent = sf
+	pages[name] = sf
+	return sf
+end
+
+for _, name in ipairs(tabOrder) do
+	makePage(name)
+end
+pages.Welcome.Visible = true
+
+local function selectTab(name)
+	tabs._active = name
+	for n, p in pairs(pages) do
+		p.Visible = (n == name)
+	end
+	HeadTitle.Text = name
+	for n, b in pairs(tabs) do
+		if typeof(b) == "Instance" then
+			if n == name then
+				b.BackgroundColor3 = Color3.fromRGB(55, 35, 90)
+				b.TextColor3 = THEME.gold
+			else
+				b.BackgroundColor3 = Color3.fromRGB(36, 24, 55)
+				b.TextColor3 = THEME.dim
+			end
+		end
+	end
+end
+
+for name, btn in pairs(tabs) do
+	if typeof(btn) == "Instance" and btn:IsA("GuiButton") then
+		local function onTab()
+			selectTab(name)
+		end
+		btn.MouseButton1Click:Connect(onTab)
+		btn.Activated:Connect(onTab)
+	end
+end
+
+local function section(parent, title)
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1, 0, 0, 20)
+	f.BackgroundTransparency = 1
+	f.ZIndex = 17
+	f.Parent = parent
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, 0, 1, 0)
+	l.BackgroundTransparency = 1
+	l.Text = title
+	l.Font = Enum.Font.GothamBold
+	l.TextSize = 12
+	l.TextColor3 = THEME.gold
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.ZIndex = 18
+	l.Parent = f
+	return f
+end
+
+local function makeToggle(parent, text, default, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 30)
+	row.BackgroundColor3 = THEME.card
+	row.ZIndex = 17
+	row.Parent = parent
+	corner(row, 7)
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -54, 1, 0)
+	lbl.Position = UDim2.new(0, 10, 0, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 11
+	lbl.TextColor3 = THEME.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 18
+	lbl.Parent = row
+	local state = default
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.fromOffset(42, 22)
+	btn.Position = UDim2.new(1, -48, 0.5, -11)
+	btn.BackgroundColor3 = state and THEME.green or Color3.fromRGB(55, 45, 70)
+	btn.Text = state and "ON" or "OFF"
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 10
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.ZIndex = 19
+	btn.Parent = row
+	corner(btn, 6)
+	btn.MouseButton1Click:Connect(function()
+		state = not state
+		btn.BackgroundColor3 = state and THEME.green or Color3.fromRGB(55, 45, 70)
+		btn.Text = state and "ON" or "OFF"
+		if callback then callback(state) end
+	end)
+	return function() return state end
+end
+
+local function makeSlider(parent, text, min, max, default, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 46)
+	row.BackgroundColor3 = THEME.card
+	row.ZIndex = 17
+	row.Parent = parent
+	corner(row, 7)
+	local value = default
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -12, 0, 16)
+	lbl.Position = UDim2.new(0, 10, 0, 4)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text .. ": " .. tostring(value)
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 11
+	lbl.TextColor3 = THEME.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 18
+	lbl.Parent = row
+	local track = Instance.new("Frame")
+	track.Size = UDim2.new(1, -20, 0, 8)
+	track.Position = UDim2.new(0, 10, 0, 28)
+	track.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
+	track.ZIndex = 18
+	track.Parent = row
+	corner(track, 4)
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new((value - min) / math.max(max - min, 1), 0, 1, 0)
+	fill.BackgroundColor3 = THEME.accent
+	fill.ZIndex = 19
+	fill.Parent = track
+	corner(fill, 4)
+	local dragging = false
+	local function setVal(v)
+		value = math.clamp(math.floor(v * 10 + 0.5) / 10, min, max)
+		fill.Size = UDim2.new((value - min) / math.max(max - min, 1), 0, 1, 0)
+		lbl.Text = text .. ": " .. tostring(value)
+		if callback then callback(value) end
+	end
+	track.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			local rel = math.clamp((inp.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+			setVal(min + rel * (max - min))
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(inp)
+		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+			local rel = math.clamp((inp.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+			setVal(min + rel * (max - min))
+		end
+	end)
+end
+
+local function makeButton(parent, text, callback)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, 0, 0, 30)
+	b.BackgroundColor3 = Color3.fromRGB(70, 45, 120)
+	b.Text = text
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 11
+	b.TextColor3 = THEME.text
+	b.ZIndex = 17
+	b.Parent = parent
+	corner(b, 7)
+	mkstroke(b, THEME.accent, 1.1, 0.45)
+	b.MouseButton1Click:Connect(function()
+		if callback then callback() end
+	end)
+	return b
+end
+
+local function makeLabel(parent, text)
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, 0, 0, 18)
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.Font = Enum.Font.Gotham
+	l.TextSize = 11
+	l.TextColor3 = THEME.dim
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.TextWrapped = true
+	l.AutomaticSize = Enum.AutomaticSize.Y
+	l.ZIndex = 17
+	l.Parent = parent
+	return l
+end
+
+-- Welcome
+section(pages.Welcome, "Profile")
+makeLabel(pages.Welcome, "Player: " .. player.Name)
+makeLabel(pages.Welcome, "Display: " .. player.DisplayName)
+makeLabel(pages.Welcome, "UserId: " .. tostring(player.UserId))
+
+section(pages.Welcome, "Status")
+local statusLbl = makeLabel(pages.Welcome, "Status: Ready")
+statusLbl.TextColor3 = THEME.gold
+task.spawn(function()
+	while statusLbl.Parent do
+		task.wait(0.4)
+		statusLbl.Text = "Status: " .. tostring(statusText)
+	end
+end)
+
+section(pages.Welcome, "How to use")
+makeLabel(pages.Welcome, "1. Buy tab - enable rarities then buy per zone")
+makeLabel(pages.Welcome, "2. Sell tab - select rarities then sell")
+makeLabel(pages.Welcome, "3. Farm tab - Safe Auto Farm + repair/roll")
+makeLabel(pages.Welcome, "4. Open garage before selling mythical safely")
+
+-- Buy
+section(pages.Buy, "Buy rarity filters")
+makeToggle(pages.Buy, "Common", false, function(v) BuyToggles[0] = v end)
+makeToggle(pages.Buy, "Uncommon", false, function(v) BuyToggles[1] = v end)
+makeToggle(pages.Buy, "Rare", false, function(v) BuyToggles[2] = v end)
+makeToggle(pages.Buy, "Epic", false, function(v) BuyToggles[3] = v end)
+makeToggle(pages.Buy, "Legend", false, function(v) BuyToggles[4] = v end)
+makeToggle(pages.Buy, "Mythical", false, function(v) BuyToggles[5] = v end)
+
+section(pages.Buy, "Buy by zone (uses filters)")
+for _, zone in ipairs(zones) do
+	makeButton(pages.Buy, "Buy filtered - " .. zone, function()
+		task.spawn(function() BuyCarsInZone(zone) end)
+	end)
+end
+
+-- Sell
+section(pages.Sell, "Sell rarity filters")
+makeToggle(pages.Sell, "Sell Common", false, function(v) SellToggles[0] = v end)
+makeToggle(pages.Sell, "Sell Uncommon", false, function(v) SellToggles[1] = v end)
+makeToggle(pages.Sell, "Sell Rare", false, function(v) SellToggles[2] = v end)
+makeToggle(pages.Sell, "Sell Epic", false, function(v) SellToggles[3] = v end)
+
+section(pages.Sell, "Actions")
+makeLabel(pages.Sell, "Tip: open garage first so names resolve correctly")
+makeButton(pages.Sell, "Open Garage", function() OpenGarage() end)
+makeButton(pages.Sell, "Sell Selected Rarities", function()
+	task.spawn(SellSelectedCars)
+end)
+makeButton(pages.Sell, "Sell Low Tiers (C/U/R)", function()
+	task.spawn(function()
+		SellLowTierCars()
+		setStatus("Sold low tiers")
+	end)
+end)
+
+-- Teleport
+section(pages.Teleport, "Locations")
+for _, loc in ipairs(teleportLocations) do
+	makeButton(pages.Teleport, "TP - " .. loc.name, function()
+		TeleportTo(loc.x, loc.y, loc.z)
+	end)
+end
+
+-- Farm
+section(pages.Farm, "Safe Auto Farm")
+makeToggle(pages.Farm, "Safe Auto Farm", false, function(v)
+	autoFarmEnabled = v
+	if v then
+		setStatus("Auto Farm ON")
+		task.spawn(AutoFarmLoop)
+	else
+		setStatus("Auto Farm OFF")
+	end
+end)
+makeSlider(pages.Farm, "Farm loop delay", 0.3, 3, 0.5, function(v)
+	farmDelay = v
+end)
+makeLabel(pages.Farm, "Loop: buy all zones -> repair -> sell low tiers")
+
+section(pages.Farm, "Quick actions")
+makeButton(pages.Farm, "Repair All Cars", function()
+	task.spawn(RepairAllCars)
+end)
+makeButton(pages.Farm, "Roll Cards", function()
+	task.spawn(RollCards)
+end)
+
+-- Credits
+section(pages.Credits, "Credits")
+makeLabel(pages.Credits, "Kyiel & Arin - KHUB")
+makeLabel(pages.Credits, "UI by KHUB")
+makeButton(pages.Credits, "Copy Discord", function()
+	if setclipboard then setclipboard(DISCORD) end
+end)
+makeButton(pages.Credits, "Copy YouTube", function()
+	if setclipboard then setclipboard(YOUTUBE) end
+end)
+makeButton(pages.Credits, "Unload", function()
+	autoFarmEnabled = false
+	pcall(function() ScreenGui:Destroy() end)
+end)
+
+-- Floating icon
+local Orb = Instance.new("ImageButton")
+Orb.Name = "FloatingIcon"
+Orb.Size = UDim2.fromOffset(54, 54)
+Orb.Position = UDim2.new(0, 16, 0.5, -40)
+Orb.BackgroundColor3 = Color3.fromRGB(24, 14, 40)
+Orb.Image = LOGO_ID
+Orb.ScaleType = Enum.ScaleType.Fit
+Orb.Visible = false
+Orb.ZIndex = 100
+Orb.Parent = ScreenGui
+corner(Orb, 27)
+mkstroke(Orb, THEME.accent, 2, 0.25)
+local orbTag = Instance.new("TextLabel")
+orbTag.Size = UDim2.new(1, 0, 0, 12)
+orbTag.Position = UDim2.new(0, 0, 1, 2)
+orbTag.BackgroundTransparency = 1
+orbTag.Text = "KHUB"
+orbTag.Font = Enum.Font.GothamBold
+orbTag.TextSize = 9
+orbTag.TextColor3 = THEME.gold
+orbTag.ZIndex = 101
+orbTag.Parent = Orb
+
+local function setVisible(on)
+	Win.Visible = on
+	Orb.Visible = not on
+end
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function() setVisible(true) end)
+
+local dragging, dragStart, startPos
+Header.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = i.Position
+		startPos = Win.Position
+	end
+end)
+Header.InputEnded:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		dragging = false
+	end
+end)
+local orbDrag, orbStart, orbPos
+Orb.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		orbDrag = true
+		orbStart = i.Position
+		orbPos = Orb.Position
+	end
+end)
+Orb.InputEnded:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		orbDrag = false
+	end
+end)
+UserInputService.InputChanged:Connect(function(i)
+	if i.UserInputType ~= Enum.UserInputType.MouseMovement and i.UserInputType ~= Enum.UserInputType.Touch then
+		return
+	end
+	if dragging and dragStart then
+		local d = i.Position - dragStart
+		Win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+	end
+	if orbDrag and orbStart then
+		local d = i.Position - orbStart
+		Orb.Position = UDim2.new(orbPos.X.Scale, orbPos.X.Offset + d.X, orbPos.Y.Scale, orbPos.Y.Offset + d.Y)
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.RightShift
+		or i.KeyCode == Enum.KeyCode.RightControl
+		or i.KeyCode == Enum.KeyCode.K
+		or i.KeyCode == Enum.KeyCode.LeftControl then
+		setVisible(not Win.Visible)
+	end
+end)
+
+task.spawn(function()
+	for _ = 1, 8 do
+		task.wait(0.35)
+		pcall(function()
+			if not ScreenGui.Parent then
+				local pg = getPlayerGui()
+				if pg then ScreenGui.Parent = pg end
+			end
+			ScreenGui.Enabled = true
+			Win.Visible = true
+		end)
+	end
+end)
+
+print("[KHUB] Car Flipper by KHUB loaded")
