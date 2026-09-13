@@ -1,0 +1,1342 @@
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+while not LocalPlayer do
+	task.wait(0.1)
+	LocalPlayer = Players.LocalPlayer
+end
+
+local LOGO_ID = "rbxassetid://140466936910510"
+local DISCORD = "https://discord.gg/rU9FyNEUQ7"
+local YOUTUBE = "https://www.youtube.com/@kyielpambid"
+
+local THEME = {
+	bg = Color3.fromRGB(18, 12, 28),
+	rail = Color3.fromRGB(24, 16, 38),
+	card = Color3.fromRGB(30, 20, 48),
+	accent = Color3.fromRGB(160, 100, 255),
+	accent2 = Color3.fromRGB(200, 140, 255),
+	gold = Color3.fromRGB(230, 190, 255),
+	text = Color3.fromRGB(235, 225, 250),
+	dim = Color3.fromRGB(160, 140, 190),
+	mute = Color3.fromRGB(110, 90, 140),
+	stroke = Color3.fromRGB(100, 60, 160),
+	green = Color3.fromRGB(90, 220, 140),
+}
+
+local Toggles = {
+	AutoThrow = false,
+	AutoSell = false,
+	AutoUpgradeLuck = false,
+	WalkSpeedBoost = false,
+	JumpPowerBoost = false,
+	InfiniteJump = false,
+	FlyMode = false,
+	AntiAFK = true,
+}
+
+local CustomSpeedValue = 35
+local CustomJumpValue = 100
+local FlySpeedValue = 60
+
+local VirtualInputManager
+pcall(function()
+	VirtualInputManager = game:GetService("VirtualInputManager")
+end)
+
+local function getPlayerChar()
+	local char = LocalPlayer.Character
+	if not char then return nil, nil, nil end
+	local root = char:FindFirstChild("HumanoidRootPart")
+		or char:FindFirstChild("Torso")
+		or char:FindFirstChild("UpperTorso")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	return char, root, hum
+end
+
+local function getFountainTarget()
+	for _, obj in ipairs(Workspace:GetDescendants()) do
+		if obj:IsA("BasePart") or obj:IsA("Model") then
+			local n = obj.Name:lower()
+			if n:find("fountain") or n:find("well") or n:find("wishing")
+				or n:find("pit") or n:find("pool") or n:find("target") or n:find("pot") then
+				local p = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or obj
+				if p and p:IsA("BasePart") and not p:IsA("Terrain") then
+					return p
+				end
+			end
+		end
+	end
+	return nil
+end
+
+RunService.RenderStepped:Connect(function()
+	pcall(function()
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum and hum.CameraOffset ~= Vector3.zero then
+			hum.CameraOffset = Vector3.zero
+		end
+	end)
+end)
+
+LocalPlayer.Idled:Connect(function()
+	if not Toggles.AntiAFK then return end
+	pcall(function()
+		VirtualUser:Button2Down(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+		task.wait(1)
+		VirtualUser:Button2Up(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+	end)
+end)
+
+local function fireSignalDirect(sig, ...)
+	if not sig then return end
+	local args = { ... }
+	pcall(function()
+		if firesignal then
+			firesignal(sig, table.unpack(args))
+		end
+	end)
+	pcall(function()
+		if getconnections then
+			for _, conn in ipairs(getconnections(sig)) do
+				if conn.Function then
+					task.spawn(pcall, conn.Function, table.unpack(args))
+				elseif conn.Fire then
+					task.spawn(pcall, function()
+						conn:Fire(table.unpack(args))
+					end)
+				end
+			end
+		end
+	end)
+end
+
+local function triggerGuiObject(obj)
+	if not obj then return end
+	pcall(function()
+		if obj:IsA("GuiButton") then
+			fireSignalDirect(obj.MouseButton1Down)
+			fireSignalDirect(obj.MouseButton1Click)
+			fireSignalDirect(obj.Activated)
+		end
+		fireSignalDirect(obj.InputBegan, {
+			UserInputType = Enum.UserInputType.MouseButton1,
+			UserInputState = Enum.UserInputState.Begin,
+			Position = Vector3.new(0, 0, 0),
+		})
+		local cx, cy = 0, 0
+		if obj.AbsolutePosition and obj.AbsoluteSize then
+			local ax = obj.AbsolutePosition.X
+			local ay = obj.AbsolutePosition.Y
+			local sx = obj.AbsoluteSize.X
+			local sy = obj.AbsoluteSize.Y
+			if sx > 0 and sy > 0 then
+				cx = ax + sx / 2
+				cy = ay + sy / 2
+			end
+		end
+		if VirtualInputManager and cx > 0 and cy > 0 then
+			VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 0)
+			pcall(function()
+				VirtualInputManager:SendTouchEvent(0, 0, cx, cy)
+			end)
+		end
+		task.delay(0.06, function()
+			pcall(function()
+				if obj:IsA("GuiButton") then
+					fireSignalDirect(obj.MouseButton1Up)
+				end
+				fireSignalDirect(obj.InputEnded, {
+					UserInputType = Enum.UserInputType.MouseButton1,
+					UserInputState = Enum.UserInputState.End,
+					Position = Vector3.new(0, 0, 0),
+				})
+				if VirtualInputManager and cx > 0 and cy > 0 then
+					VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 0)
+					pcall(function()
+						VirtualInputManager:SendTouchEvent(0, 2, cx, cy)
+					end)
+				end
+			end)
+		end)
+	end)
+end
+
+local isThrowing = false
+local function executeThrowCoin()
+	if isThrowing then return end
+	isThrowing = true
+	pcall(function()
+		local char, root, hum = getPlayerChar()
+		local fountainPart = getFountainTarget()
+		local targetPos = fountainPart and fountainPart.Position or Vector3.new(0, 0, 0)
+
+		if root and fountainPart then
+			pcall(function()
+				local lookPos = Vector3.new(fountainPart.Position.X, root.Position.Y, fountainPart.Position.Z)
+				root.CFrame = CFrame.lookAt(root.Position, lookPos)
+			end)
+		end
+
+		local tool = nil
+		if char then
+			tool = char:FindFirstChildOfClass("Tool")
+			if not tool and LocalPlayer:FindFirstChild("Backpack") then
+				for _, item in ipairs(LocalPlayer.Backpack:GetChildren()) do
+					if item:IsA("Tool") then
+						local iName = item.Name:lower()
+						if iName:find("coin") or iName:find("throw") or iName:find("gold")
+							or iName:find("silver") or iName:find("bronze") or iName:find("default") or not tool then
+							tool = item
+						end
+					end
+				end
+				if tool and hum then
+					hum:EquipTool(tool)
+					task.wait(0.04)
+				end
+			end
+		end
+
+		if tool then
+			pcall(function()
+				tool:Activate()
+			end)
+			fireSignalDirect(tool.Activated)
+		end
+
+		local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+		if playerGui then
+			for _, gui in ipairs(playerGui:GetChildren()) do
+				if gui:IsA("ScreenGui") and gui.Name ~= "KHUB_ThrowACoin" and gui.Enabled then
+					local gName = gui.Name:lower()
+					if gName:find("throw") or gName:find("meter") or gName:find("power") or gName:find("timing") then
+						for _, btn in ipairs(gui:GetDescendants()) do
+							if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible then
+								local bName = btn.Name:lower()
+								if not bName:find("close") and not bName:find("shop") and not bName:find("buy")
+									and not bName:find("sell") and not bName:find("menu") and not bName:find("quest")
+									and not bName:find("daily") and not bName:find("gift") and not bName:find("pass")
+									and not bName:find("spin") and not bName:find("setting") and not bName:find("trade")
+									and not bName:find("code") and not bName:find("invite") then
+									pcall(function()
+										fireSignalDirect(btn.MouseButton1Down)
+										fireSignalDirect(btn.MouseButton1Click)
+										fireSignalDirect(btn.Activated)
+										task.wait(0.04)
+										fireSignalDirect(btn.MouseButton1Up)
+									end)
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+
+		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
+			if rem:IsA("RemoteEvent") then
+				local rName = rem.Name:lower()
+				if rName == "throw" or rName == "throwcoin" or rName == "throw_coin"
+					or rName == "tosscoin" or rName == "toss" or rName == "flipcoin"
+					or rName == "releasethrow" or rName == "fountainthrow" then
+					pcall(function() rem:FireServer(100) end)
+					pcall(function() rem:FireServer(targetPos) end)
+					pcall(function() rem:FireServer(fountainPart) end)
+					pcall(function() rem:FireServer(100, targetPos) end)
+					pcall(function() rem:FireServer("Throw", 100) end)
+					pcall(function() rem:FireServer() end)
+				end
+			elseif rem:IsA("RemoteFunction") then
+				local rName = rem.Name:lower()
+				if rName == "throw" or rName == "throwcoin" or rName == "tosscoin" or rName == "toss" then
+					task.spawn(function()
+						pcall(function() rem:InvokeServer(100) end)
+						pcall(function() rem:InvokeServer(targetPos) end)
+						pcall(function() rem:InvokeServer() end)
+					end)
+				end
+			end
+		end
+
+		if fountainPart then
+			local prompt = fountainPart:FindFirstChildWhichIsA("ProximityPrompt", true)
+			if prompt and prompt.Enabled then
+				pcall(function()
+					prompt.HoldDuration = 0
+					prompt.MaxActivationDistance = 99999
+				end)
+				if fireproximityprompt then
+					fireproximityprompt(prompt)
+				end
+			end
+		end
+
+		task.wait(0.05)
+		if tool then
+			pcall(function()
+				tool:Deactivate()
+			end)
+			fireSignalDirect(tool.Deactivated)
+		end
+	end)
+	isThrowing = false
+end
+
+task.spawn(function()
+	while true do
+		task.wait(0.5)
+		if Toggles.AutoThrow and not isThrowing then
+			executeThrowCoin()
+		end
+	end
+end)
+
+local function executeSellCycle()
+	pcall(function()
+		local _, root = getPlayerChar()
+		if not root then return end
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if obj:IsA("BasePart") and not obj:IsA("Terrain") then
+				local nameL = string.lower(obj.Name)
+				if string.find(nameL, "sell") or string.find(nameL, "shop")
+					or string.find(nameL, "merchant") or string.find(nameL, "cashier")
+					or string.find(nameL, "exchange") then
+					if firetouchinterest then
+						firetouchinterest(root, obj, 0)
+						task.wait(0.005)
+						firetouchinterest(root, obj, 1)
+					end
+				end
+			elseif obj:IsA("ProximityPrompt") then
+				local pName = string.lower(obj.Parent.Name)
+				if string.find(pName, "sell") or string.find(pName, "merchant") or string.find(pName, "shop") then
+					pcall(function()
+						obj.HoldDuration = 0
+						obj.MaxActivationDistance = 99999
+					end)
+					if fireproximityprompt then
+						fireproximityprompt(obj)
+					end
+				end
+			elseif obj:IsA("ClickDetector") then
+				local pName = string.lower(obj.Parent.Name)
+				if string.find(pName, "sell") or string.find(pName, "merchant") then
+					if fireclickdetector then
+						fireclickdetector(obj)
+					end
+				end
+			end
+		end
+		local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+		if playerGui then
+			for _, btn in ipairs(playerGui:GetDescendants()) do
+				if btn:IsA("TextButton") or btn:IsA("ImageButton") then
+					local nameL = string.lower(btn.Name)
+					local textL = btn:IsA("TextButton") and string.lower(btn.Text) or ""
+					if string.find(nameL, "sell") or string.find(textL, "sell") or string.find(nameL, "cashout") then
+						triggerGuiObject(btn)
+					end
+				end
+			end
+		end
+		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
+			local rName = string.lower(rem.Name)
+			if string.find(rName, "sell") or string.find(rName, "cashout")
+				or string.find(rName, "deposit") or string.find(rName, "exchange")
+				or string.find(rName, "convert") then
+				if rem:IsA("RemoteEvent") then
+					pcall(function() rem:FireServer() end)
+					pcall(function() rem:FireServer(true) end)
+					pcall(function() rem:FireServer("All") end)
+					pcall(function() rem:FireServer(1) end)
+				elseif rem:IsA("RemoteFunction") then
+					pcall(function() rem:InvokeServer() end)
+					pcall(function() rem:InvokeServer(true) end)
+					pcall(function() rem:InvokeServer("All") end)
+				end
+			end
+		end
+	end)
+end
+
+task.spawn(function()
+	while true do
+		task.wait(0.4)
+		if Toggles.AutoSell then
+			executeSellCycle()
+		end
+	end
+end)
+
+local function executeUpgradeCycle()
+	pcall(function()
+		local _, root = getPlayerChar()
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if obj:IsA("BasePart") and not obj:IsA("Terrain") then
+				local nameL = string.lower(obj.Name)
+				if string.find(nameL, "upgrade") or string.find(nameL, "luck") or string.find(nameL, "boost") then
+					if root and firetouchinterest then
+						firetouchinterest(root, obj, 0)
+						task.wait(0.005)
+						firetouchinterest(root, obj, 1)
+					end
+				end
+			elseif obj:IsA("ProximityPrompt") then
+				local pName = string.lower(obj.Parent.Name)
+				if string.find(pName, "upgrade") or string.find(pName, "luck") or string.find(pName, "buy") then
+					pcall(function()
+						obj.HoldDuration = 0
+						obj.MaxActivationDistance = 99999
+					end)
+					if fireproximityprompt then
+						fireproximityprompt(obj)
+					end
+				end
+			end
+		end
+		local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+		if playerGui then
+			for _, btn in ipairs(playerGui:GetDescendants()) do
+				if btn:IsA("TextButton") or btn:IsA("ImageButton") then
+					local nameL = string.lower(btn.Name)
+					local textL = btn:IsA("TextButton") and string.lower(btn.Text) or ""
+					if string.find(nameL, "luck") or string.find(textL, "luck")
+						or string.find(nameL, "upgrade") or string.find(textL, "upgrade")
+						or string.find(nameL, "buy") then
+						triggerGuiObject(btn)
+					end
+				end
+			end
+		end
+		for _, rem in ipairs(ReplicatedStorage:GetDescendants()) do
+			local rName = string.lower(rem.Name)
+			if string.find(rName, "luck") or string.find(rName, "upgrade")
+				or string.find(rName, "buyupgrade") or string.find(rName, "stat")
+				or string.find(rName, "multiplier") then
+				if rem:IsA("RemoteEvent") then
+					pcall(function() rem:FireServer("Luck") end)
+					pcall(function() rem:FireServer("LuckUpgrade") end)
+					pcall(function() rem:FireServer("LuckMultiplier") end)
+					pcall(function() rem:FireServer("All") end)
+					pcall(function() rem:FireServer(1) end)
+					pcall(function() rem:FireServer() end)
+				elseif rem:IsA("RemoteFunction") then
+					pcall(function() rem:InvokeServer("Luck") end)
+					pcall(function() rem:InvokeServer("LuckUpgrade") end)
+					pcall(function() rem:InvokeServer(1) end)
+					pcall(function() rem:InvokeServer() end)
+				end
+			end
+		end
+	end)
+end
+
+task.spawn(function()
+	while true do
+		task.wait(0.8)
+		if Toggles.AutoUpgradeLuck then
+			executeUpgradeCycle()
+		end
+	end
+end)
+
+RunService.RenderStepped:Connect(function(deltaTime)
+	pcall(function()
+		if Toggles.WalkSpeedBoost and CustomSpeedValue and CustomSpeedValue > 16 then
+			local char, hrp, hum = getPlayerChar()
+			if char and hum and hrp and hum.MoveDirection.Magnitude > 0 then
+				local speedBoost = CustomSpeedValue - 16
+				hrp.CFrame = hrp.CFrame + (hum.MoveDirection * (speedBoost * deltaTime))
+			end
+		end
+	end)
+end)
+
+RunService.RenderStepped:Connect(function()
+	pcall(function()
+		local _, _, hum = getPlayerChar()
+		if hum and Toggles.JumpPowerBoost then
+			hum.UseJumpPower = true
+			hum.JumpPower = CustomJumpValue
+		end
+	end)
+end)
+
+UserInputService.JumpRequest:Connect(function()
+	if not Toggles.InfiniteJump then return end
+	local _, root, hum = getPlayerChar()
+	if hum then
+		hum:ChangeState(Enum.HumanoidStateType.Jumping)
+		if root then
+			root.Velocity = Vector3.new(root.Velocity.X, 52, root.Velocity.Z)
+		end
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(0.03)
+		if Toggles.FlyMode then
+			pcall(function()
+				local _, hrp, hum = getPlayerChar()
+				local camera = Workspace.CurrentCamera
+				if hrp and hum and camera then
+					local bv = hrp:FindFirstChild("KHUBFlyBV") or Instance.new("BodyVelocity")
+					bv.Name = "KHUBFlyBV"
+					bv.MaxForce = Vector3.new(1e8, 1e8, 1e8)
+					bv.Parent = hrp
+					local bg = hrp:FindFirstChild("KHUBFlyBG") or Instance.new("BodyGyro")
+					bg.Name = "KHUBFlyBG"
+					bg.MaxTorque = Vector3.new(1e8, 1e8, 1e8)
+					bg.P = 10000
+					bg.Parent = hrp
+					hum.PlatformStand = true
+					bg.CFrame = camera.CFrame
+					local speed = FlySpeedValue or 60
+					local moveDir = hum.MoveDirection
+					if moveDir.Magnitude > 0 then
+						local flyVel = camera.CFrame.LookVector * speed
+						if math.abs(moveDir.Z) < 0.2 and math.abs(moveDir.X) > 0.5 then
+							flyVel = camera.CFrame.RightVector * speed * (moveDir.X > 0 and 1 or -1)
+						end
+						bv.Velocity = flyVel
+					else
+						bv.Velocity = Vector3.new(0, 0, 0)
+					end
+				end
+			end)
+		else
+			pcall(function()
+				local _, hrp, hum = getPlayerChar()
+				if hum and hum.PlatformStand then
+					hum.PlatformStand = false
+				end
+				if hrp then
+					if hrp:FindFirstChild("KHUBFlyBV") then hrp.KHUBFlyBV:Destroy() end
+					if hrp:FindFirstChild("KHUBFlyBG") then hrp.KHUBFlyBG:Destroy() end
+				end
+			end)
+		end
+	end
+end)
+
+local function teleportToKeyword(keywords, yOffset)
+	pcall(function()
+		local _, root = getPlayerChar()
+		if not root then return end
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if obj:IsA("BasePart") or obj:IsA("Model") then
+				local nameL = string.lower(obj.Name)
+				local matches = false
+				for _, kw in ipairs(keywords) do
+					if string.find(nameL, kw) then
+						matches = true
+						break
+					end
+				end
+				if matches then
+					local part = obj:IsA("Model")
+						and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart"))
+						or obj
+					if part and part:IsA("BasePart") and not part:IsA("Terrain") then
+						root.CFrame = part.CFrame + Vector3.new(0, yOffset or 5, 0)
+						return
+					end
+				end
+			end
+		end
+	end)
+end
+
+-- ===================== KHUB UI =====================
+local function getPlayerGui()
+	return LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 8)
+end
+
+pcall(function()
+	local pg = getPlayerGui()
+	if pg and pg:FindFirstChild("KHUB_ThrowACoin") then
+		pg.KHUB_ThrowACoin:Destroy()
+	end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_ThrowACoin"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999999
+ScreenGui.Enabled = true
+do
+	local pg = getPlayerGui()
+	if pg then
+		ScreenGui.Parent = pg
+	else
+		pcall(function()
+			ScreenGui.Parent = CoreGui
+		end)
+		if not ScreenGui.Parent then
+			ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+		end
+	end
+end
+
+local function corner(p, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 10)
+	c.Parent = p
+end
+
+local function mkstroke(p, col, th, tr)
+	local s = Instance.new("UIStroke")
+	s.Color = col or THEME.stroke
+	s.Thickness = th or 1.4
+	s.Transparency = tr or 0.35
+	s.Parent = p
+	return s
+end
+
+local HEADER_H = 62
+local BASE_W, BASE_H = 560, 420
+
+local Win = Instance.new("Frame")
+Win.Name = "Main"
+Win.Size = UDim2.new(0, BASE_W, 0, BASE_H)
+Win.Position = UDim2.new(0.5, 0, 0.5, 0)
+Win.AnchorPoint = Vector2.new(0.5, 0.5)
+Win.BackgroundColor3 = THEME.bg
+Win.BackgroundTransparency = 0.05
+Win.BorderSizePixel = 0
+Win.ClipsDescendants = true
+Win.Active = true
+Win.Visible = true
+Win.Parent = ScreenGui
+corner(Win, 14)
+local winStroke = mkstroke(Win, THEME.accent, 2, 0.3)
+task.spawn(function()
+	local t = 0
+	while winStroke.Parent do
+		t = t + task.wait(0.05)
+		local s = math.abs(math.sin(t * 1.1))
+		winStroke.Color = Color3.fromRGB(120 + s * 60, 70 + s * 40, 200 + s * 40)
+		winStroke.Transparency = 0.22 + s * 0.18
+	end
+end)
+
+local uiScale = Instance.new("UIScale")
+uiScale.Parent = Win
+local function applyAutoScale()
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	local vs = cam.ViewportSize
+	local touch = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+	local base = math.min(vs.X / 960, vs.Y / 720)
+	if touch or vs.X < 700 then
+		uiScale.Scale = math.clamp(base * 0.92, 0.55, 0.95)
+	else
+		uiScale.Scale = math.clamp(base, 0.75, 1.08)
+	end
+end
+applyAutoScale()
+pcall(function()
+	if Workspace.CurrentCamera then
+		Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyAutoScale)
+	end
+end)
+
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 3)
+TopBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TopBar.BorderSizePixel = 0
+TopBar.ZIndex = 25
+TopBar.Parent = Win
+local topG = Instance.new("UIGradient")
+topG.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 40, 255)),
+	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 80, 200)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 200, 120)),
+	ColorSequenceKeypoint.new(0.75, Color3.fromRGB(80, 200, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(140, 60, 255)),
+})
+topG.Parent = TopBar
+task.spawn(function()
+	local t = 0
+	while TopBar.Parent do
+		t = t + task.wait(0.045)
+		topG.Offset = Vector2.new(math.sin(t * 0.5) * 0.9, 0)
+	end
+end)
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, HEADER_H)
+Header.Position = UDim2.new(0, 0, 0, 3)
+Header.BackgroundTransparency = 1
+Header.ZIndex = 12
+Header.Active = true
+Header.Parent = Win
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0, 380, 0, 34)
+Title.Position = UDim2.new(0, 14, 0, 8)
+Title.BackgroundTransparency = 1
+Title.Text = "Throw a Coin by KHUB"
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 17
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 14
+Title.Parent = Header
+local titleShine = Instance.new("UIGradient")
+titleShine.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(140, 60, 255)),
+	ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 90, 200)),
+	ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 210, 100)),
+	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(80, 220, 255)),
+	ColorSequenceKeypoint.new(0.8, Color3.fromRGB(180, 100, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 140, 220)),
+})
+titleShine.Parent = Title
+task.spawn(function()
+	local t = 0
+	while Title.Parent do
+		t = t + task.wait(0.05)
+		titleShine.Offset = Vector2.new(math.sin(t * 0.42) * 0.88, 0)
+		titleShine.Rotation = math.sin(t * 0.18) * 10
+	end
+end)
+
+local Sub = Instance.new("TextLabel")
+Sub.Size = UDim2.new(0, 360, 0, 16)
+Sub.Position = UDim2.new(0, 14, 0, 40)
+Sub.BackgroundTransparency = 1
+Sub.Text = "Kyiel & Arin  |  RightShift / K = toggle"
+Sub.Font = Enum.Font.Code
+Sub.TextSize = 12
+Sub.TextColor3 = THEME.mute
+Sub.TextXAlignment = Enum.TextXAlignment.Left
+Sub.ZIndex = 14
+Sub.Parent = Header
+
+for i = 1, 12 do
+	local dot = Instance.new("Frame")
+	dot.Size = UDim2.fromOffset(4, 4)
+	dot.BackgroundColor3 = Color3.fromHSV((i * 0.09) % 1, 0.7, 1)
+	dot.BorderSizePixel = 0
+	dot.ZIndex = 8
+	dot.Parent = Win
+	corner(dot, 99)
+	task.spawn(function()
+		local x = 20 + (i * 40) % (BASE_W - 40)
+		local y = BASE_H + 20
+		local speed = 14 + (i % 5) * 4
+		while dot.Parent do
+			y = y - speed * task.wait(0.04)
+			if y < -10 then
+				y = BASE_H + 20
+				x = 20 + ((i * 37) % (BASE_W - 40))
+			end
+			dot.Position = UDim2.fromOffset(x, y)
+			dot.BackgroundTransparency = math.clamp(y / BASE_H, 0.12, 0.78)
+		end
+	end)
+end
+
+local centerKHUB = Instance.new("TextLabel")
+centerKHUB.Size = UDim2.new(0, 480, 0, 140)
+centerKHUB.Position = UDim2.new(0.5, -240, 0.5, -70)
+centerKHUB.BackgroundTransparency = 1
+centerKHUB.Text = "KHUB"
+centerKHUB.Font = Enum.Font.GothamBlack
+centerKHUB.TextSize = 110
+centerKHUB.TextColor3 = Color3.fromRGB(255, 255, 255)
+centerKHUB.TextTransparency = 0.35
+centerKHUB.ZIndex = 7
+centerKHUB.Parent = Win
+local cGrad = Instance.new("UIGradient")
+cGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 40, 255)),
+	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 80, 180)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 200, 90)),
+	ColorSequenceKeypoint.new(0.75, Color3.fromRGB(60, 200, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 100, 255)),
+})
+cGrad.Parent = centerKHUB
+task.spawn(function()
+	local t = 0
+	while centerKHUB.Parent do
+		t = t + task.wait(0.05)
+		centerKHUB.TextTransparency = 0.3 + math.sin(t * 0.85) * 0.15
+		cGrad.Offset = Vector2.new(math.sin(t * 0.32) * 0.78, 0)
+		cGrad.Rotation = math.sin(t * 0.22) * 14
+	end
+end)
+
+local Rail = Instance.new("Frame")
+Rail.Size = UDim2.new(0, 130, 1, -HEADER_H - 3)
+Rail.Position = UDim2.new(0, 0, 0, HEADER_H + 3)
+Rail.BackgroundColor3 = THEME.rail
+Rail.BackgroundTransparency = 0.1
+Rail.BorderSizePixel = 0
+Rail.ZIndex = 40
+Rail.Active = true
+Rail.Parent = Win
+local railLay = Instance.new("UIListLayout")
+railLay.Padding = UDim.new(0, 4)
+railLay.SortOrder = Enum.SortOrder.LayoutOrder
+railLay.Parent = Rail
+local railPad = Instance.new("UIPadding")
+railPad.PaddingTop = UDim.new(0, 8)
+railPad.PaddingLeft = UDim.new(0, 6)
+railPad.PaddingRight = UDim.new(0, 6)
+railPad.Parent = Rail
+
+local brand1 = Instance.new("TextLabel")
+brand1.Size = UDim2.new(1, 0, 0, 14)
+brand1.BackgroundTransparency = 1
+brand1.Text = "KHUB"
+brand1.Font = Enum.Font.GothamBold
+brand1.TextSize = 12
+brand1.TextColor3 = THEME.text
+brand1.TextXAlignment = Enum.TextXAlignment.Left
+brand1.ZIndex = 41
+brand1.LayoutOrder = 0
+brand1.Parent = Rail
+
+local brand2 = Instance.new("TextLabel")
+brand2.Size = UDim2.new(1, 0, 0, 12)
+brand2.BackgroundTransparency = 1
+brand2.Text = "Throw Coin"
+brand2.Font = Enum.Font.Code
+brand2.TextSize = 9
+brand2.TextColor3 = THEME.mute
+brand2.TextXAlignment = Enum.TextXAlignment.Left
+brand2.ZIndex = 41
+brand2.LayoutOrder = 1
+brand2.Parent = Rail
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -134, 1, -HEADER_H - 3)
+Content.Position = UDim2.new(0, 132, 0, HEADER_H + 3)
+Content.BackgroundTransparency = 1
+Content.ZIndex = 15
+Content.Parent = Win
+
+local Head = Instance.new("Frame")
+Head.Size = UDim2.new(1, 0, 0, 32)
+Head.BackgroundColor3 = THEME.rail
+Head.BackgroundTransparency = 0.15
+Head.BorderSizePixel = 0
+Head.ZIndex = 16
+Head.Parent = Content
+
+local HeadTitle = Instance.new("TextLabel")
+HeadTitle.Size = UDim2.new(1, -40, 1, 0)
+HeadTitle.Position = UDim2.fromOffset(12, 0)
+HeadTitle.BackgroundTransparency = 1
+HeadTitle.Text = "Welcome"
+HeadTitle.Font = Enum.Font.GothamBold
+HeadTitle.TextSize = 14
+HeadTitle.TextColor3 = THEME.accent2
+HeadTitle.TextXAlignment = Enum.TextXAlignment.Left
+HeadTitle.ZIndex = 17
+HeadTitle.Parent = Head
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.fromOffset(28, 20)
+MinBtn.Position = UDim2.new(1, -32, 0.5, -10)
+MinBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 70)
+MinBtn.Text = "-"
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 16
+MinBtn.TextColor3 = THEME.text
+MinBtn.ZIndex = 18
+MinBtn.Parent = Head
+corner(MinBtn, 5)
+
+local tabs, pages = {}, {}
+
+local function makePage()
+	local scf = Instance.new("ScrollingFrame")
+	scf.Size = UDim2.new(1, -6, 1, -36)
+	scf.Position = UDim2.new(0, 3, 0, 34)
+	scf.BackgroundTransparency = 1
+	scf.BorderSizePixel = 0
+	scf.ScrollBarThickness = 3
+	scf.ScrollBarImageColor3 = THEME.accent
+	scf.CanvasSize = UDim2.new(0, 0, 0, 0)
+	scf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scf.Visible = false
+	scf.ZIndex = 16
+	scf.Parent = Content
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0, 8)
+	lay.Parent = scf
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingBottom = UDim.new(0, 12)
+	pad.PaddingLeft = UDim.new(0, 4)
+	pad.PaddingRight = UDim.new(0, 4)
+	pad.Parent = scf
+	return scf
+end
+
+local function card(parent, titleText)
+	local box = Instance.new("Frame")
+	box.Size = UDim2.new(1, 0, 0, 0)
+	box.AutomaticSize = Enum.AutomaticSize.Y
+	box.BackgroundColor3 = THEME.card
+	box.BackgroundTransparency = 0.12
+	box.ZIndex = 17
+	box.Parent = parent
+	corner(box, 8)
+	mkstroke(box, THEME.stroke, 1.1, 0.45)
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0, 6)
+	lay.Parent = box
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 10)
+	pad.PaddingBottom = UDim.new(0, 10)
+	pad.PaddingLeft = UDim.new(0, 12)
+	pad.PaddingRight = UDim.new(0, 12)
+	pad.Parent = box
+	local h = Instance.new("TextLabel")
+	h.Size = UDim2.new(1, 0, 0, 20)
+	h.BackgroundTransparency = 1
+	h.Text = titleText
+	h.Font = Enum.Font.GothamBold
+	h.TextSize = 13
+	h.TextColor3 = THEME.gold
+	h.TextXAlignment = Enum.TextXAlignment.Left
+	h.ZIndex = 18
+	h.Parent = box
+	return box
+end
+
+local function line(parent, text, color)
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, 0, 0, 18)
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.Font = Enum.Font.Gotham
+	l.TextSize = 12
+	l.TextColor3 = color or THEME.dim
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.TextWrapped = true
+	l.ZIndex = 18
+	l.Parent = parent
+	return l
+end
+
+local function go(name)
+	for n, p in pairs(pages) do
+		p.Visible = (n == name)
+	end
+	HeadTitle.Text = name
+	for n, b in pairs(tabs) do
+		if n == name then
+			b.BackgroundColor3 = Color3.fromRGB(55, 35, 90)
+			b.TextColor3 = THEME.gold
+		else
+			b.BackgroundColor3 = Color3.fromRGB(36, 24, 55)
+			b.TextColor3 = THEME.dim
+		end
+	end
+end
+
+local function addTab(name, order)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, 0, 0, 30)
+	b.BackgroundColor3 = Color3.fromRGB(36, 24, 55)
+	b.Text = "  " .. name
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 12
+	b.TextColor3 = THEME.dim
+	b.TextXAlignment = Enum.TextXAlignment.Left
+	b.ZIndex = 50
+	b.LayoutOrder = order or 10
+	b.Parent = Rail
+	corner(b, 8)
+	mkstroke(b, THEME.accent, 1.2, 0.5)
+	tabs[name] = b
+	local p = makePage()
+	pages[name] = p
+	b.MouseButton1Click:Connect(function()
+		go(name)
+	end)
+	b.Activated:Connect(function()
+		go(name)
+	end)
+	return p
+end
+
+local function makeToggle(parent, text, default, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 30)
+	row.BackgroundTransparency = 1
+	row.ZIndex = 18
+	row.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -56, 1, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 12
+	lbl.TextColor3 = THEME.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 19
+	lbl.Parent = row
+	local state = default and true or false
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.fromOffset(48, 24)
+	btn.Position = UDim2.new(1, -48, 0.5, -12)
+	btn.BackgroundColor3 = state and THEME.green or Color3.fromRGB(50, 35, 70)
+	btn.Text = state and "ON" or "OFF"
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 11
+	btn.TextColor3 = THEME.text
+	btn.ZIndex = 19
+	btn.Parent = row
+	corner(btn, 6)
+	btn.MouseButton1Click:Connect(function()
+		state = not state
+		btn.Text = state and "ON" or "OFF"
+		btn.BackgroundColor3 = state and THEME.green or Color3.fromRGB(50, 35, 70)
+		if callback then
+			pcall(callback, state)
+		end
+	end)
+end
+
+local function makeBtn(parent, text, fn)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, 0, 0, 32)
+	b.BackgroundColor3 = Color3.fromRGB(70, 45, 120)
+	b.Text = text
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 13
+	b.TextColor3 = THEME.text
+	b.ZIndex = 18
+	b.Parent = parent
+	corner(b, 7)
+	mkstroke(b, THEME.accent, 1.1, 0.4)
+	b.MouseButton1Click:Connect(function()
+		if fn then
+			pcall(fn)
+		end
+	end)
+end
+
+local function makeSlider(parent, text, minV, maxV, default, callback)
+	local box = Instance.new("Frame")
+	box.Size = UDim2.new(1, 0, 0, 52)
+	box.BackgroundTransparency = 1
+	box.ZIndex = 18
+	box.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -50, 0, 18)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 12
+	lbl.TextColor3 = THEME.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 19
+	lbl.Parent = box
+	local valL = Instance.new("TextLabel")
+	valL.Size = UDim2.fromOffset(48, 18)
+	valL.Position = UDim2.new(1, -48, 0, 0)
+	valL.BackgroundTransparency = 1
+	valL.Text = tostring(default)
+	valL.Font = Enum.Font.Code
+	valL.TextSize = 11
+	valL.TextColor3 = THEME.gold
+	valL.TextXAlignment = Enum.TextXAlignment.Right
+	valL.ZIndex = 19
+	valL.Parent = box
+	local track = Instance.new("Frame")
+	track.Size = UDim2.new(1, 0, 0, 8)
+	track.Position = UDim2.new(0, 0, 0, 28)
+	track.BackgroundColor3 = Color3.fromRGB(40, 28, 60)
+	track.BorderSizePixel = 0
+	track.ZIndex = 19
+	track.Parent = box
+	corner(track, 4)
+	local fill = Instance.new("Frame")
+	local pct = math.clamp((default - minV) / math.max(maxV - minV, 1), 0, 1)
+	fill.Size = UDim2.new(pct, 0, 1, 0)
+	fill.BackgroundColor3 = THEME.accent
+	fill.BorderSizePixel = 0
+	fill.ZIndex = 20
+	fill.Parent = track
+	corner(fill, 4)
+	local dragging = false
+	local function setFromX(x)
+		local rel = math.clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+		local v = math.floor(minV + (maxV - minV) * rel + 0.5)
+		fill.Size = UDim2.new(rel, 0, 1, 0)
+		valL.Text = tostring(v)
+		if callback then
+			pcall(callback, v)
+		end
+	end
+	track.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			setFromX(i.Position.X)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+			setFromX(i.Position.X)
+		end
+	end)
+end
+
+local welcomePage = addTab("Welcome", 10)
+local mainPage = addTab("Main", 11)
+local playerPage = addTab("Player", 12)
+local keybindsPage = addTab("Keybinds", 13)
+
+do
+	local profile = Instance.new("Frame")
+	profile.Size = UDim2.new(1, 0, 0, 96)
+	profile.BackgroundColor3 = THEME.card
+	profile.ZIndex = 17
+	profile.Parent = welcomePage
+	corner(profile, 8)
+	mkstroke(profile, THEME.stroke, 1, 0.4)
+
+	local avatar = Instance.new("ImageLabel")
+	avatar.Size = UDim2.fromOffset(72, 72)
+	avatar.Position = UDim2.fromOffset(12, 12)
+	avatar.BackgroundColor3 = Color3.fromRGB(40, 28, 60)
+	avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
+	avatar.ZIndex = 18
+	avatar.Parent = profile
+	corner(avatar, 10)
+	mkstroke(avatar, THEME.accent, 1.2, 0.35)
+
+	local nameL = Instance.new("TextLabel")
+	nameL.Size = UDim2.new(1, -100, 0, 22)
+	nameL.Position = UDim2.fromOffset(96, 16)
+	nameL.BackgroundTransparency = 1
+	nameL.Text = LocalPlayer.DisplayName
+	nameL.Font = Enum.Font.GothamBold
+	nameL.TextSize = 16
+	nameL.TextColor3 = THEME.gold
+	nameL.TextXAlignment = Enum.TextXAlignment.Left
+	nameL.ZIndex = 18
+	nameL.Parent = profile
+
+	local userL = Instance.new("TextLabel")
+	userL.Size = UDim2.new(1, -100, 0, 18)
+	userL.Position = UDim2.fromOffset(96, 40)
+	userL.BackgroundTransparency = 1
+	userL.Text = "@" .. LocalPlayer.Name
+	userL.Font = Enum.Font.Gotham
+	userL.TextSize = 13
+	userL.TextColor3 = THEME.dim
+	userL.TextXAlignment = Enum.TextXAlignment.Left
+	userL.ZIndex = 18
+	userL.Parent = profile
+
+	local idL = Instance.new("TextLabel")
+	idL.Size = UDim2.new(1, -100, 0, 18)
+	idL.Position = UDim2.fromOffset(96, 60)
+	idL.BackgroundTransparency = 1
+	idL.Text = "UserId: " .. tostring(LocalPlayer.UserId)
+	idL.Font = Enum.Font.Code
+	idL.TextSize = 12
+	idL.TextColor3 = THEME.mute
+	idL.TextXAlignment = Enum.TextXAlignment.Left
+	idL.ZIndex = 18
+	idL.Parent = profile
+
+	local cred = card(welcomePage, "Credits")
+	line(cred, "Kyiel & Arin · KHUB", THEME.text)
+	makeBtn(cred, "Copy Discord", function()
+		if setclipboard then setclipboard(DISCORD) elseif toclipboard then toclipboard(DISCORD) end
+	end)
+	makeBtn(cred, "Copy YouTube", function()
+		if setclipboard then setclipboard(YOUTUBE) elseif toclipboard then toclipboard(YOUTUBE) end
+	end)
+end
+
+do
+	local farm = card(mainPage, "Farm")
+	makeToggle(farm, "Auto Throw Coin", false, function(v)
+		Toggles.AutoThrow = v
+	end)
+	makeToggle(farm, "Auto Sell Items", false, function(v)
+		Toggles.AutoSell = v
+	end)
+	makeToggle(farm, "Auto Upgrade Luck", false, function(v)
+		Toggles.AutoUpgradeLuck = v
+	end)
+
+	local tp = card(mainPage, "Teleport")
+	makeBtn(tp, "Teleport Fountain", function()
+		teleportToKeyword({ "fountain", "well", "wishing", "pit", "pool", "target" }, 5)
+	end)
+	makeBtn(tp, "Teleport Sell Area", function()
+		teleportToKeyword({ "sell", "shop", "merchant", "cashier", "exchange" }, 5)
+	end)
+end
+
+do
+	local move = card(playerPage, "Movement")
+	makeToggle(move, "WalkSpeed Boost", false, function(v)
+		Toggles.WalkSpeedBoost = v
+	end)
+	makeSlider(move, "WalkSpeed", 16, 300, 35, function(v)
+		CustomSpeedValue = v
+	end)
+	makeToggle(move, "Jump Power Boost", false, function(v)
+		Toggles.JumpPowerBoost = v
+		if not v then
+			local _, _, hum = getPlayerChar()
+			if hum then
+				hum.JumpPower = 50
+			end
+		end
+	end)
+	makeSlider(move, "Jump Power", 50, 300, 100, function(v)
+		CustomJumpValue = v
+	end)
+	makeToggle(move, "Infinite Jump", false, function(v)
+		Toggles.InfiniteJump = v
+	end)
+	makeToggle(move, "Fly Mode", false, function(v)
+		Toggles.FlyMode = v
+	end)
+	makeSlider(move, "Fly Speed", 20, 200, 60, function(v)
+		FlySpeedValue = v
+	end)
+	makeToggle(move, "Anti-AFK", true, function(v)
+		Toggles.AntiAFK = v
+	end)
+end
+
+do
+	local k = card(keybindsPage, "PC Keybinds")
+	line(k, "RightShift — Show / Hide UI", THEME.text)
+	line(k, "RightControl — Show / Hide UI", THEME.text)
+	line(k, "K — Show / Hide UI", THEME.text)
+	local n = card(keybindsPage, "Notes")
+	line(n, "Camera stabilizer always on", THEME.dim)
+	line(n, "Auto throw every 0.5s when enabled", THEME.mute)
+end
+
+go("Welcome")
+
+local Orb = Instance.new("ImageButton")
+Orb.Size = UDim2.fromOffset(54, 54)
+Orb.Position = UDim2.new(0, 16, 0.5, -40)
+Orb.BackgroundColor3 = Color3.fromRGB(24, 14, 40)
+Orb.Image = LOGO_ID
+Orb.ScaleType = Enum.ScaleType.Fit
+Orb.Visible = false
+Orb.ZIndex = 100
+Orb.Parent = ScreenGui
+corner(Orb, 27)
+mkstroke(Orb, THEME.accent, 2, 0.25)
+local orbTag = Instance.new("TextLabel")
+orbTag.Size = UDim2.new(1, 0, 0, 14)
+orbTag.Position = UDim2.new(0, 0, 1, 2)
+orbTag.BackgroundTransparency = 1
+orbTag.Text = "KHUB"
+orbTag.Font = Enum.Font.GothamBold
+orbTag.TextSize = 11
+orbTag.TextColor3 = THEME.gold
+orbTag.ZIndex = 101
+orbTag.Parent = Orb
+
+local function setVisible(on)
+	Win.Visible = on
+	Orb.Visible = not on
+end
+MinBtn.MouseButton1Click:Connect(function()
+	setVisible(false)
+end)
+Orb.MouseButton1Click:Connect(function()
+	setVisible(true)
+end)
+
+local dragging, dragStart, startPos
+Header.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = i.Position
+		startPos = Win.Position
+	end
+end)
+Header.InputEnded:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		dragging = false
+	end
+end)
+local orbDrag, orbStart, orbPos
+Orb.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		orbDrag = true
+		orbStart = i.Position
+		orbPos = Orb.Position
+	end
+end)
+Orb.InputEnded:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		orbDrag = false
+	end
+end)
+UserInputService.InputChanged:Connect(function(i)
+	if i.UserInputType ~= Enum.UserInputType.MouseMovement and i.UserInputType ~= Enum.UserInputType.Touch then
+		return
+	end
+	if dragging and dragStart then
+		local d = i.Position - dragStart
+		Win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+	end
+	if orbDrag and orbStart then
+		local d = i.Position - orbStart
+		Orb.Position = UDim2.new(orbPos.X.Scale, orbPos.X.Offset + d.X, orbPos.Y.Scale, orbPos.Y.Offset + d.Y)
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.RightShift
+		or i.KeyCode == Enum.KeyCode.RightControl
+		or i.KeyCode == Enum.KeyCode.K then
+		setVisible(not Win.Visible)
+	end
+end)
+
+task.spawn(function()
+	for _ = 1, 8 do
+		task.wait(0.35)
+		pcall(function()
+			if not ScreenGui.Parent then
+				ScreenGui.Parent = getPlayerGui() or CoreGui
+			end
+			ScreenGui.Enabled = true
+			Win.Visible = true
+		end)
+	end
+end)
+
+print("[KHUB] Throw a Coin loaded")
