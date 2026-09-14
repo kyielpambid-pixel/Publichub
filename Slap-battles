@@ -1,0 +1,1261 @@
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
+local VirtualUser = game:GetService("VirtualUser")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+local LOGO_ID = "rbxassetid://140466936910510"
+local DISCORD = "https://discord.gg/rU9FyNEUQ7"
+local YOUTUBE = "https://www.youtube.com/@kyielpambid"
+
+local THEME = {
+	bg = Color3.fromRGB(18, 12, 28),
+	rail = Color3.fromRGB(24, 16, 38),
+	card = Color3.fromRGB(30, 20, 48),
+	accent = Color3.fromRGB(160, 100, 255),
+	accent2 = Color3.fromRGB(200, 140, 255),
+	gold = Color3.fromRGB(230, 190, 255),
+	text = Color3.fromRGB(235, 225, 250),
+	dim = Color3.fromRGB(160, 140, 190),
+	mute = Color3.fromRGB(110, 90, 140),
+	stroke = Color3.fromRGB(100, 60, 160),
+	green = Color3.fromRGB(90, 220, 140),
+}
+
+local Config = {
+	SlapAura = false,
+	HitboxExtend = false,
+	AutoAbility = false,
+	AntiReverse = true,
+	AntiVoid = false,
+	AntiRagdoll = false,
+	AntiFling = false,
+	AutoSlapple = false,
+	TycoonClick = false,
+	MegarockAFK = false,
+	PlayerGloveESP = false,
+	WalkSpeedBoost = false,
+	JumpPowerBoost = false,
+	InfiniteJump = false,
+	AntiAFK = true,
+}
+
+local CustomSpeedValue = 100
+local CustomJumpPower = 120
+local AuraRadius = 18
+local HitboxSize = 14
+local AntiVoidPart = nil
+
+local function getChar()
+	local char = LocalPlayer.Character
+	if not char then return nil, nil, nil end
+	local root = char:FindFirstChild("HumanoidRootPart")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	return root, hum, char
+end
+
+local function isAlive()
+	local root, hum = getChar()
+	return root and hum and hum.Health > 0
+end
+
+local function getEquippedGlove()
+	local _, _, char = getChar()
+	if char then
+		local tool = char:FindFirstChildOfClass("Tool")
+		if tool then return tool end
+	end
+	local bp = LocalPlayer:FindFirstChild("Backpack")
+	if bp then
+		return bp:FindFirstChildOfClass("Tool")
+	end
+	return nil
+end
+
+local function getGloveName(plr)
+	if not plr or not plr.Character then return "None" end
+	local tool = plr.Character:FindFirstChildOfClass("Tool")
+	if tool then return tool.Name end
+	local ls = plr:FindFirstChild("leaderstats")
+	if ls and ls:FindFirstChild("Glove") then
+		return tostring(ls.Glove.Value)
+	end
+	return "Default"
+end
+
+local function isReverseActive(plr)
+	if not plr or not plr.Character then return false end
+	local char = plr.Character
+	if char:FindFirstChild("Reverse") or char:FindFirstChild("Defense") then
+		return true
+	end
+	for _, child in pairs(char:GetChildren()) do
+		if child:IsA("Highlight") and child.FillColor == Color3.fromRGB(255, 0, 0) then
+			return true
+		end
+		if child:IsA("ParticleEmitter") and string.find(string.lower(child.Name), "reverse") then
+			return true
+		end
+	end
+	return false
+end
+
+local function UpdateCharacterSpeed()
+	pcall(function()
+		if isAlive() then
+			local _, hum = getChar()
+			if hum then
+				hum.WalkSpeed = Config.WalkSpeedBoost and CustomSpeedValue or 16
+			end
+		end
+	end)
+end
+
+local function UpdateCharacterJump()
+	pcall(function()
+		if isAlive() then
+			local _, hum = getChar()
+			if hum then
+				hum.UseJumpPower = true
+				hum.JumpPower = Config.JumpPowerBoost and CustomJumpPower or 50
+			end
+		end
+	end)
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+	task.wait(0.5)
+	UpdateCharacterSpeed()
+	UpdateCharacterJump()
+end)
+
+local function UpdateAntiVoid(enabled)
+	pcall(function()
+		if enabled then
+			if not AntiVoidPart or not AntiVoidPart.Parent then
+				AntiVoidPart = Instance.new("Part")
+				AntiVoidPart.Name = "KHUB_AntiVoid"
+				AntiVoidPart.Size = Vector3.new(3500, 4, 3500)
+				AntiVoidPart.Position = Vector3.new(0, -5, 0)
+				AntiVoidPart.Anchored = true
+				AntiVoidPart.CanCollide = true
+				AntiVoidPart.Transparency = 0.5
+				AntiVoidPart.Material = Enum.Material.ForceField
+				AntiVoidPart.Color = Color3.fromRGB(0, 220, 220)
+				AntiVoidPart.Parent = Workspace
+			end
+		else
+			if AntiVoidPart and AntiVoidPart.Parent then
+				AntiVoidPart:Destroy()
+				AntiVoidPart = nil
+			end
+		end
+	end)
+end
+
+task.spawn(function()
+	while true do
+		task.wait(0.28)
+		if Config.SlapAura then
+			pcall(function()
+				local root, hum, char = getChar()
+				local tool = getEquippedGlove()
+				if root and hum and hum.Health > 0 and tool then
+					local myPos = root.Position
+					local targetRoot = nil
+					local closestDist = AuraRadius
+					for _, plr in pairs(Players:GetPlayers()) do
+						if plr ~= LocalPlayer and plr.Character then
+							local pChar = plr.Character
+							local pHum = pChar:FindFirstChildOfClass("Humanoid")
+							local pRoot = pChar:FindFirstChild("HumanoidRootPart")
+							if pHum and pHum.Health > 0 and pRoot then
+								local reverseProtected = Config.AntiReverse and isReverseActive(plr)
+								if not reverseProtected then
+									local dist = (pRoot.Position - myPos).Magnitude
+									if dist <= closestDist then
+										closestDist = dist
+										targetRoot = pRoot
+									end
+								end
+							end
+						end
+					end
+					if targetRoot then
+						pcall(function()
+							root.CFrame = CFrame.new(root.Position, Vector3.new(targetRoot.Position.X, root.Position.Y, targetRoot.Position.Z))
+						end)
+						local gloveHitbox = tool:FindFirstChild("Hitbox") or tool:FindFirstChild("Glove") or tool:FindFirstChild("Handle")
+						if gloveHitbox and gloveHitbox:IsA("BasePart") then
+							local originalSize = gloveHitbox.Size
+							local neededReach = math.clamp(closestDist + 3, 6, 25)
+							gloveHitbox.Size = Vector3.new(neededReach, neededReach, neededReach)
+							gloveHitbox.CanCollide = false
+							tool:Activate()
+							task.delay(0.15, function()
+								if not Config.HitboxExtend and gloveHitbox and gloveHitbox.Parent then
+									gloveHitbox.Size = originalSize
+								end
+							end)
+						else
+							tool:Activate()
+						end
+					end
+				end
+			end)
+		end
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(0.5)
+		if Config.HitboxExtend then
+			pcall(function()
+				local tool = getEquippedGlove()
+				if tool then
+					local hitbox = tool:FindFirstChild("Hitbox") or tool:FindFirstChild("Glove") or tool:FindFirstChild("Handle")
+					if hitbox and hitbox:IsA("BasePart") then
+						hitbox.Size = Vector3.new(HitboxSize, HitboxSize, HitboxSize)
+						hitbox.Transparency = 0.65
+						hitbox.CanCollide = false
+					end
+				end
+			end)
+		end
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(0.8)
+		if Config.AutoAbility then
+			pcall(function()
+				local genAbility = ReplicatedStorage:FindFirstChild("GeneralAbility")
+				if genAbility and genAbility:IsA("RemoteEvent") then
+					genAbility:FireServer()
+				end
+			end)
+		end
+	end
+end)
+
+RunService.Stepped:Connect(function()
+	pcall(function()
+		local root, hum, char = getChar()
+		if hum and root and hum.Health > 0 then
+			if Config.AntiRagdoll then
+				if hum.PlatformStand then
+					hum.PlatformStand = false
+				end
+				if hum:GetState() == Enum.HumanoidStateType.Ragdoll or hum:GetState() == Enum.HumanoidStateType.FallingDown then
+					hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+				end
+				if char:FindFirstChild("Ragdolled") then
+					local rVal = char.Ragdolled
+					if rVal:IsA("BoolValue") and rVal.Value == true then
+						rVal.Value = false
+					end
+				end
+			end
+			if Config.AntiFling then
+				local vel = root.Velocity
+				if vel.Magnitude > 110 then
+					root.Velocity = Vector3.new(
+						math.clamp(vel.X, -50, 50),
+						math.clamp(vel.Y, -40, 60),
+						math.clamp(vel.Z, -50, 50)
+					)
+				end
+			end
+			if Config.WalkSpeedBoost and hum.WalkSpeed ~= CustomSpeedValue then
+				hum.WalkSpeed = CustomSpeedValue
+			end
+			if Config.JumpPowerBoost then
+				hum.UseJumpPower = true
+				if hum.JumpPower ~= CustomJumpPower then
+					hum.JumpPower = CustomJumpPower
+				end
+			end
+		end
+	end)
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(1.5)
+		if Config.AutoSlapple then
+			pcall(function()
+				local root = select(1, getChar())
+				if root then
+					local slappleFolder = Workspace:FindFirstChild("Arena")
+						and Workspace.Arena:FindFirstChild("island5")
+						and Workspace.Arena.island5:FindFirstChild("Slapples")
+						or Workspace:FindFirstChild("Slapple")
+					local targetSlapple = nil
+					if slappleFolder then
+						for _, obj in pairs(slappleFolder:GetChildren()) do
+							if obj:IsA("BasePart") or obj:IsA("Model") then
+								local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
+								if part and part.Transparency < 0.9 then
+									targetSlapple = part
+									break
+								end
+							end
+						end
+					end
+					if not targetSlapple then
+						for _, child in pairs(Workspace:GetChildren()) do
+							if string.find(string.lower(child.Name), "slapple") then
+								local p = child:IsA("BasePart") and child or child:FindFirstChildOfClass("BasePart")
+								if p then
+									targetSlapple = p
+									break
+								end
+							end
+						end
+					end
+					if targetSlapple then
+						local origPos = root.CFrame
+						root.CFrame = targetSlapple.CFrame
+						task.wait(0.1)
+						root.CFrame = origPos
+					end
+				end
+			end)
+		end
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(0.5)
+		if Config.TycoonClick then
+			pcall(function()
+				local tycoon = Workspace:FindFirstChild(LocalPlayer.Name .. "'s Tycoon") or Workspace:FindFirstChild("Tycoon")
+				if tycoon then
+					local clickPart = tycoon:FindFirstChild("Click") or tycoon:FindFirstChild("Button")
+					if clickPart and clickPart:FindFirstChild("ClickDetector") then
+						fireclickdetector(clickPart.ClickDetector)
+					end
+				end
+			end)
+		end
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(2)
+		if Config.MegarockAFK then
+			pcall(function()
+				local _, _, char = getChar()
+				if char and not char:FindFirstChild("rock") and not char:FindFirstChild("Rock") then
+					local genAbility = ReplicatedStorage:FindFirstChild("GeneralAbility")
+					if genAbility and genAbility:IsA("RemoteEvent") then
+						genAbility:FireServer()
+					end
+				end
+			end)
+		end
+	end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+	if Config.InfiniteJump then
+		local _, hum = getChar()
+		if hum and hum.Health > 0 then
+			hum:ChangeState(Enum.HumanoidStateType.Jumping)
+		end
+	end
+end)
+
+local ESPFolder = Instance.new("Folder")
+ESPFolder.Name = "KHUB_SlapBattles_ESP"
+pcall(function()
+	ESPFolder.Parent = CoreGui
+end)
+if not ESPFolder.Parent then
+	ESPFolder.Parent = Workspace
+end
+
+local function UpdateESP()
+	for _, child in pairs(ESPFolder:GetChildren()) do
+		child:Destroy()
+	end
+	if not Config.PlayerGloveESP then return end
+	local myRoot = select(1, getChar())
+	if not myRoot then return end
+	for _, plr in pairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and plr.Character then
+			local pChar = plr.Character
+			local pHead = pChar:FindFirstChild("Head")
+			local pHum = pChar:FindFirstChildOfClass("Humanoid")
+			local pRoot = pChar:FindFirstChild("HumanoidRootPart")
+			if pHead and pHum and pHum.Health > 0 and pRoot then
+				local dist = math.floor((pRoot.Position - myRoot.Position).Magnitude)
+				local gName = getGloveName(plr)
+				local isRev = isReverseActive(plr)
+				local bb = Instance.new("BillboardGui")
+				bb.Adornee = pHead
+				bb.Size = UDim2.new(0, 140, 0, 42)
+				bb.StudsOffset = Vector3.new(0, 2.5, 0)
+				bb.AlwaysOnTop = true
+				bb.Parent = ESPFolder
+				local nameLbl = Instance.new("TextLabel")
+				nameLbl.Size = UDim2.new(1, 0, 0, 14)
+				nameLbl.BackgroundTransparency = 1
+				nameLbl.Font = Enum.Font.GothamBold
+				nameLbl.TextSize = 10
+				nameLbl.TextColor3 = isRev and Color3.fromRGB(255, 60, 80) or Color3.fromRGB(255, 255, 255)
+				nameLbl.Text = plr.DisplayName .. (isRev and " [REVERSE]" or "")
+				nameLbl.Parent = bb
+				local gloveLbl = Instance.new("TextLabel")
+				gloveLbl.Size = UDim2.new(1, 0, 0, 14)
+				gloveLbl.Position = UDim2.new(0, 0, 0, 14)
+				gloveLbl.BackgroundTransparency = 1
+				gloveLbl.Font = Enum.Font.GothamBold
+				gloveLbl.TextSize = 9.5
+				gloveLbl.TextColor3 = Color3.fromRGB(0, 220, 220)
+				gloveLbl.Text = "Glove: " .. gName
+				gloveLbl.Parent = bb
+				local distLbl = Instance.new("TextLabel")
+				distLbl.Size = UDim2.new(1, 0, 0, 12)
+				distLbl.Position = UDim2.new(0, 0, 0, 28)
+				distLbl.BackgroundTransparency = 1
+				distLbl.Font = Enum.Font.Gotham
+				distLbl.TextSize = 8.5
+				distLbl.TextColor3 = Color3.fromRGB(180, 180, 190)
+				distLbl.Text = tostring(dist) .. " studs"
+				distLbl.Parent = bb
+			end
+		end
+	end
+end
+
+task.spawn(function()
+	while true do
+		task.wait(1)
+		if Config.PlayerGloveESP then
+			pcall(UpdateESP)
+		end
+	end
+end)
+
+LocalPlayer.Idled:Connect(function()
+	if Config.AntiAFK then
+		VirtualUser:CaptureController()
+		VirtualUser:ClickButton2(Vector2.new())
+	end
+end)
+
+local function TeleportToPos(pos)
+	pcall(function()
+		local root = select(1, getChar())
+		if root then
+			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
+			root.CFrame = CFrame.new(pos)
+		end
+	end)
+end
+
+-- ===================== KHUB UI =====================
+local function getPlayerGui()
+	return LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 8)
+end
+
+pcall(function()
+	local pg = getPlayerGui()
+	if pg and pg:FindFirstChild("KHUB_SlapBattles") then
+		pg.KHUB_SlapBattles:Destroy()
+	end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_SlapBattles"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999999
+ScreenGui.Enabled = true
+do
+	local pg = getPlayerGui()
+	if pg then
+		ScreenGui.Parent = pg
+	else
+		pcall(function()
+			ScreenGui.Parent = CoreGui
+		end)
+		if not ScreenGui.Parent then
+			ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+		end
+	end
+end
+
+local function corner(p, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 10)
+	c.Parent = p
+end
+
+local function mkstroke(p, col, th, tr)
+	local s = Instance.new("UIStroke")
+	s.Color = col or THEME.stroke
+	s.Thickness = th or 1.4
+	s.Transparency = tr or 0.35
+	s.Parent = p
+	return s
+end
+
+local HEADER_H = 62
+local BASE_W, BASE_H = 560, 440
+
+local Win = Instance.new("Frame")
+Win.Name = "Main"
+Win.Size = UDim2.new(0, BASE_W, 0, BASE_H)
+Win.Position = UDim2.new(0.5, 0, 0.5, 0)
+Win.AnchorPoint = Vector2.new(0.5, 0.5)
+Win.BackgroundColor3 = THEME.bg
+Win.BackgroundTransparency = 0.05
+Win.BorderSizePixel = 0
+Win.ClipsDescendants = true
+Win.Active = true
+Win.Visible = true
+Win.Parent = ScreenGui
+corner(Win, 14)
+local winStroke = mkstroke(Win, THEME.accent, 2, 0.3)
+task.spawn(function()
+	local t = 0
+	while winStroke.Parent do
+		t = t + task.wait(0.05)
+		local s = math.abs(math.sin(t * 1.1))
+		winStroke.Color = Color3.fromRGB(120 + s * 60, 70 + s * 40, 200 + s * 40)
+		winStroke.Transparency = 0.22 + s * 0.18
+	end
+end)
+
+local uiScale = Instance.new("UIScale")
+uiScale.Parent = Win
+local function applyAutoScale()
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	local vs = cam.ViewportSize
+	local touch = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+	local base = math.min(vs.X / 960, vs.Y / 720)
+	if touch or vs.X < 700 then
+		uiScale.Scale = math.clamp(base * 0.92, 0.55, 0.95)
+	else
+		uiScale.Scale = math.clamp(base, 0.75, 1.08)
+	end
+end
+applyAutoScale()
+pcall(function()
+	if Workspace.CurrentCamera then
+		Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyAutoScale)
+	end
+end)
+
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 3)
+TopBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TopBar.BorderSizePixel = 0
+TopBar.ZIndex = 25
+TopBar.Parent = Win
+local topG = Instance.new("UIGradient")
+topG.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 40, 255)),
+	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 80, 200)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 200, 120)),
+	ColorSequenceKeypoint.new(0.75, Color3.fromRGB(80, 200, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(140, 60, 255)),
+})
+topG.Parent = TopBar
+task.spawn(function()
+	local t = 0
+	while TopBar.Parent do
+		t = t + task.wait(0.045)
+		topG.Offset = Vector2.new(math.sin(t * 0.5) * 0.9, 0)
+	end
+end)
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, HEADER_H)
+Header.Position = UDim2.new(0, 0, 0, 3)
+Header.BackgroundTransparency = 1
+Header.ZIndex = 12
+Header.Active = true
+Header.Parent = Win
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0, 380, 0, 34)
+Title.Position = UDim2.new(0, 14, 0, 8)
+Title.BackgroundTransparency = 1
+Title.Text = "Slap Battles by KHUB"
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 17
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 14
+Title.Parent = Header
+local titleShine = Instance.new("UIGradient")
+titleShine.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(140, 60, 255)),
+	ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 90, 200)),
+	ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 210, 100)),
+	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(80, 220, 255)),
+	ColorSequenceKeypoint.new(0.8, Color3.fromRGB(180, 100, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 140, 220)),
+})
+titleShine.Parent = Title
+task.spawn(function()
+	local t = 0
+	while Title.Parent do
+		t = t + task.wait(0.05)
+		titleShine.Offset = Vector2.new(math.sin(t * 0.42) * 0.88, 0)
+		titleShine.Rotation = math.sin(t * 0.18) * 10
+	end
+end)
+
+local Sub = Instance.new("TextLabel")
+Sub.Size = UDim2.new(0, 360, 0, 16)
+Sub.Position = UDim2.new(0, 14, 0, 40)
+Sub.BackgroundTransparency = 1
+Sub.Text = "Kyiel & Arin  |  RightShift / K = toggle"
+Sub.Font = Enum.Font.Code
+Sub.TextSize = 12
+Sub.TextColor3 = THEME.mute
+Sub.TextXAlignment = Enum.TextXAlignment.Left
+Sub.ZIndex = 14
+Sub.Parent = Header
+
+for i = 1, 12 do
+	local dot = Instance.new("Frame")
+	dot.Size = UDim2.fromOffset(4, 4)
+	dot.BackgroundColor3 = Color3.fromHSV((i * 0.09) % 1, 0.7, 1)
+	dot.BorderSizePixel = 0
+	dot.ZIndex = 8
+	dot.Parent = Win
+	corner(dot, 99)
+	task.spawn(function()
+		local x = 20 + (i * 40) % (BASE_W - 40)
+		local y = BASE_H + 20
+		local speed = 14 + (i % 5) * 4
+		while dot.Parent do
+			y = y - speed * task.wait(0.04)
+			if y < -10 then
+				y = BASE_H + 20
+				x = 20 + ((i * 37) % (BASE_W - 40))
+			end
+			dot.Position = UDim2.fromOffset(x, y)
+			dot.BackgroundTransparency = math.clamp(y / BASE_H, 0.12, 0.78)
+		end
+	end)
+end
+
+local centerKHUB = Instance.new("TextLabel")
+centerKHUB.Size = UDim2.new(0, 480, 0, 140)
+centerKHUB.Position = UDim2.new(0.5, -240, 0.5, -70)
+centerKHUB.BackgroundTransparency = 1
+centerKHUB.Text = "KHUB"
+centerKHUB.Font = Enum.Font.GothamBlack
+centerKHUB.TextSize = 110
+centerKHUB.TextColor3 = Color3.fromRGB(255, 255, 255)
+centerKHUB.TextTransparency = 0.35
+centerKHUB.ZIndex = 7
+centerKHUB.Parent = Win
+local cGrad = Instance.new("UIGradient")
+cGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 40, 255)),
+	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 80, 180)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 200, 90)),
+	ColorSequenceKeypoint.new(0.75, Color3.fromRGB(60, 200, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 100, 255)),
+})
+cGrad.Parent = centerKHUB
+task.spawn(function()
+	local t = 0
+	while centerKHUB.Parent do
+		t = t + task.wait(0.05)
+		centerKHUB.TextTransparency = 0.3 + math.sin(t * 0.85) * 0.15
+		cGrad.Offset = Vector2.new(math.sin(t * 0.32) * 0.78, 0)
+		cGrad.Rotation = math.sin(t * 0.22) * 14
+	end
+end)
+
+local Rail = Instance.new("Frame")
+Rail.Size = UDim2.new(0, 130, 1, -HEADER_H - 3)
+Rail.Position = UDim2.new(0, 0, 0, HEADER_H + 3)
+Rail.BackgroundColor3 = THEME.rail
+Rail.BackgroundTransparency = 0.1
+Rail.BorderSizePixel = 0
+Rail.ZIndex = 40
+Rail.Active = true
+Rail.Parent = Win
+local railLay = Instance.new("UIListLayout")
+railLay.Padding = UDim.new(0, 4)
+railLay.SortOrder = Enum.SortOrder.LayoutOrder
+railLay.Parent = Rail
+local railPad = Instance.new("UIPadding")
+railPad.PaddingTop = UDim.new(0, 8)
+railPad.PaddingLeft = UDim.new(0, 6)
+railPad.PaddingRight = UDim.new(0, 6)
+railPad.Parent = Rail
+
+local brand1 = Instance.new("TextLabel")
+brand1.Size = UDim2.new(1, 0, 0, 14)
+brand1.BackgroundTransparency = 1
+brand1.Text = "KHUB"
+brand1.Font = Enum.Font.GothamBold
+brand1.TextSize = 12
+brand1.TextColor3 = THEME.text
+brand1.TextXAlignment = Enum.TextXAlignment.Left
+brand1.ZIndex = 41
+brand1.LayoutOrder = 0
+brand1.Parent = Rail
+
+local brand2 = Instance.new("TextLabel")
+brand2.Size = UDim2.new(1, 0, 0, 12)
+brand2.BackgroundTransparency = 1
+brand2.Text = "Slap Battles"
+brand2.Font = Enum.Font.Code
+brand2.TextSize = 9
+brand2.TextColor3 = THEME.mute
+brand2.TextXAlignment = Enum.TextXAlignment.Left
+brand2.ZIndex = 41
+brand2.LayoutOrder = 1
+brand2.Parent = Rail
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -134, 1, -HEADER_H - 3)
+Content.Position = UDim2.new(0, 132, 0, HEADER_H + 3)
+Content.BackgroundTransparency = 1
+Content.ZIndex = 15
+Content.Parent = Win
+
+local Head = Instance.new("Frame")
+Head.Size = UDim2.new(1, 0, 0, 32)
+Head.BackgroundColor3 = THEME.rail
+Head.BackgroundTransparency = 0.15
+Head.BorderSizePixel = 0
+Head.ZIndex = 16
+Head.Parent = Content
+
+local HeadTitle = Instance.new("TextLabel")
+HeadTitle.Size = UDim2.new(1, -40, 1, 0)
+HeadTitle.Position = UDim2.fromOffset(12, 0)
+HeadTitle.BackgroundTransparency = 1
+HeadTitle.Text = "Welcome"
+HeadTitle.Font = Enum.Font.GothamBold
+HeadTitle.TextSize = 14
+HeadTitle.TextColor3 = THEME.accent2
+HeadTitle.TextXAlignment = Enum.TextXAlignment.Left
+HeadTitle.ZIndex = 17
+HeadTitle.Parent = Head
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.fromOffset(28, 20)
+MinBtn.Position = UDim2.new(1, -32, 0.5, -10)
+MinBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 70)
+MinBtn.Text = "-"
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 16
+MinBtn.TextColor3 = THEME.text
+MinBtn.ZIndex = 18
+MinBtn.Parent = Head
+corner(MinBtn, 5)
+
+local tabs, pages = {}, {}
+
+local function makePage()
+	local scf = Instance.new("ScrollingFrame")
+	scf.Size = UDim2.new(1, -6, 1, -36)
+	scf.Position = UDim2.new(0, 3, 0, 34)
+	scf.BackgroundTransparency = 1
+	scf.BorderSizePixel = 0
+	scf.ScrollBarThickness = 3
+	scf.ScrollBarImageColor3 = THEME.accent
+	scf.CanvasSize = UDim2.new(0, 0, 0, 0)
+	scf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scf.Visible = false
+	scf.ZIndex = 16
+	scf.Parent = Content
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0, 8)
+	lay.Parent = scf
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingBottom = UDim.new(0, 12)
+	pad.PaddingLeft = UDim.new(0, 4)
+	pad.PaddingRight = UDim.new(0, 4)
+	pad.Parent = scf
+	return scf
+end
+
+local function card(parent, titleText)
+	local box = Instance.new("Frame")
+	box.Size = UDim2.new(1, 0, 0, 0)
+	box.AutomaticSize = Enum.AutomaticSize.Y
+	box.BackgroundColor3 = THEME.card
+	box.BackgroundTransparency = 0.12
+	box.ZIndex = 17
+	box.Parent = parent
+	corner(box, 8)
+	mkstroke(box, THEME.stroke, 1.1, 0.45)
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0, 6)
+	lay.Parent = box
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 10)
+	pad.PaddingBottom = UDim.new(0, 10)
+	pad.PaddingLeft = UDim.new(0, 12)
+	pad.PaddingRight = UDim.new(0, 12)
+	pad.Parent = box
+	local h = Instance.new("TextLabel")
+	h.Size = UDim2.new(1, 0, 0, 20)
+	h.BackgroundTransparency = 1
+	h.Text = titleText
+	h.Font = Enum.Font.GothamBold
+	h.TextSize = 13
+	h.TextColor3 = THEME.gold
+	h.TextXAlignment = Enum.TextXAlignment.Left
+	h.ZIndex = 18
+	h.Parent = box
+	return box
+end
+
+local function line(parent, text, color)
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, 0, 0, 18)
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.Font = Enum.Font.Gotham
+	l.TextSize = 12
+	l.TextColor3 = color or THEME.dim
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.TextWrapped = true
+	l.ZIndex = 18
+	l.Parent = parent
+	return l
+end
+
+local function go(name)
+	for n, p in pairs(pages) do
+		p.Visible = (n == name)
+	end
+	HeadTitle.Text = name
+	for n, b in pairs(tabs) do
+		if n == name then
+			b.BackgroundColor3 = Color3.fromRGB(55, 35, 90)
+			b.TextColor3 = THEME.gold
+		else
+			b.BackgroundColor3 = Color3.fromRGB(36, 24, 55)
+			b.TextColor3 = THEME.dim
+		end
+	end
+end
+
+local function addTab(name, order)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, 0, 0, 30)
+	b.BackgroundColor3 = Color3.fromRGB(36, 24, 55)
+	b.Text = "  " .. name
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 12
+	b.TextColor3 = THEME.dim
+	b.TextXAlignment = Enum.TextXAlignment.Left
+	b.ZIndex = 50
+	b.LayoutOrder = order or 10
+	b.Parent = Rail
+	corner(b, 8)
+	mkstroke(b, THEME.accent, 1.2, 0.5)
+	tabs[name] = b
+	local p = makePage()
+	pages[name] = p
+	b.MouseButton1Click:Connect(function()
+		go(name)
+	end)
+	b.Activated:Connect(function()
+		go(name)
+	end)
+	return p
+end
+
+local function makeToggle(parent, text, default, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 30)
+	row.BackgroundTransparency = 1
+	row.ZIndex = 18
+	row.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -56, 1, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 12
+	lbl.TextColor3 = THEME.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 19
+	lbl.Parent = row
+	local state = default and true or false
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.fromOffset(48, 24)
+	btn.Position = UDim2.new(1, -48, 0.5, -12)
+	btn.BackgroundColor3 = state and THEME.green or Color3.fromRGB(50, 35, 70)
+	btn.Text = state and "ON" or "OFF"
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 11
+	btn.TextColor3 = THEME.text
+	btn.ZIndex = 19
+	btn.Parent = row
+	corner(btn, 6)
+	btn.MouseButton1Click:Connect(function()
+		state = not state
+		btn.Text = state and "ON" or "OFF"
+		btn.BackgroundColor3 = state and THEME.green or Color3.fromRGB(50, 35, 70)
+		if callback then
+			pcall(callback, state)
+		end
+	end)
+end
+
+local function makeBtn(parent, text, fn)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, 0, 0, 32)
+	b.BackgroundColor3 = Color3.fromRGB(70, 45, 120)
+	b.Text = text
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 13
+	b.TextColor3 = THEME.text
+	b.ZIndex = 18
+	b.Parent = parent
+	corner(b, 7)
+	mkstroke(b, THEME.accent, 1.1, 0.4)
+	b.MouseButton1Click:Connect(function()
+		if fn then
+			pcall(fn)
+		end
+	end)
+end
+
+local function makeStepper(parent, text, value, minV, maxV, step, onChange)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 34)
+	row.BackgroundTransparency = 1
+	row.ZIndex = 18
+	row.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(0.45, 0, 1, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 12
+	lbl.TextColor3 = THEME.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 19
+	lbl.Parent = row
+	local box = Instance.new("Frame")
+	box.Size = UDim2.new(0.52, 0, 0, 28)
+	box.Position = UDim2.new(0.48, 0, 0.5, -14)
+	box.BackgroundColor3 = Color3.fromRGB(40, 28, 60)
+	box.ZIndex = 19
+	box.Parent = row
+	corner(box, 6)
+	local cur = value
+	local disp = Instance.new("TextLabel")
+	disp.Size = UDim2.new(1, -56, 1, 0)
+	disp.Position = UDim2.fromOffset(28, 0)
+	disp.BackgroundTransparency = 1
+	disp.Text = tostring(cur)
+	disp.Font = Enum.Font.GothamBold
+	disp.TextSize = 12
+	disp.TextColor3 = THEME.gold
+	disp.ZIndex = 20
+	disp.Parent = box
+	local minus = Instance.new("TextButton")
+	minus.Size = UDim2.fromOffset(26, 28)
+	minus.BackgroundTransparency = 1
+	minus.Text = "-"
+	minus.Font = Enum.Font.GothamBold
+	minus.TextSize = 14
+	minus.TextColor3 = THEME.text
+	minus.ZIndex = 20
+	minus.Parent = box
+	local plus = Instance.new("TextButton")
+	plus.Size = UDim2.fromOffset(26, 28)
+	plus.Position = UDim2.new(1, -26, 0, 0)
+	plus.BackgroundTransparency = 1
+	plus.Text = "+"
+	plus.Font = Enum.Font.GothamBold
+	plus.TextSize = 14
+	plus.TextColor3 = THEME.text
+	plus.ZIndex = 20
+	plus.Parent = box
+	minus.MouseButton1Click:Connect(function()
+		cur = math.max(minV, cur - step)
+		disp.Text = tostring(cur)
+		if onChange then onChange(cur) end
+	end)
+	plus.MouseButton1Click:Connect(function()
+		cur = math.min(maxV, cur + step)
+		disp.Text = tostring(cur)
+		if onChange then onChange(cur) end
+	end)
+end
+
+local welcomePage = addTab("Welcome", 10)
+local combatPage = addTab("Combat", 11)
+local defensePage = addTab("Defense", 12)
+local farmPage = addTab("Farm", 13)
+local playerPage = addTab("Player", 14)
+local tpPage = addTab("Teleport", 15)
+local keybindsPage = addTab("Keybinds", 16)
+
+do
+	local profile = Instance.new("Frame")
+	profile.Size = UDim2.new(1, 0, 0, 96)
+	profile.BackgroundColor3 = THEME.card
+	profile.ZIndex = 17
+	profile.Parent = welcomePage
+	corner(profile, 8)
+	mkstroke(profile, THEME.stroke, 1, 0.4)
+	local avatar = Instance.new("ImageLabel")
+	avatar.Size = UDim2.fromOffset(72, 72)
+	avatar.Position = UDim2.fromOffset(12, 12)
+	avatar.BackgroundColor3 = Color3.fromRGB(40, 28, 60)
+	avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
+	avatar.ZIndex = 18
+	avatar.Parent = profile
+	corner(avatar, 10)
+	mkstroke(avatar, THEME.accent, 1.2, 0.35)
+	local nameL = Instance.new("TextLabel")
+	nameL.Size = UDim2.new(1, -100, 0, 22)
+	nameL.Position = UDim2.fromOffset(96, 16)
+	nameL.BackgroundTransparency = 1
+	nameL.Text = LocalPlayer.DisplayName
+	nameL.Font = Enum.Font.GothamBold
+	nameL.TextSize = 16
+	nameL.TextColor3 = THEME.gold
+	nameL.TextXAlignment = Enum.TextXAlignment.Left
+	nameL.ZIndex = 18
+	nameL.Parent = profile
+	local userL = Instance.new("TextLabel")
+	userL.Size = UDim2.new(1, -100, 0, 18)
+	userL.Position = UDim2.fromOffset(96, 40)
+	userL.BackgroundTransparency = 1
+	userL.Text = "@" .. LocalPlayer.Name
+	userL.Font = Enum.Font.Gotham
+	userL.TextSize = 13
+	userL.TextColor3 = THEME.dim
+	userL.TextXAlignment = Enum.TextXAlignment.Left
+	userL.ZIndex = 18
+	userL.Parent = profile
+	local idL = Instance.new("TextLabel")
+	idL.Size = UDim2.new(1, -100, 0, 18)
+	idL.Position = UDim2.fromOffset(96, 60)
+	idL.BackgroundTransparency = 1
+	idL.Text = "UserId: " .. tostring(LocalPlayer.UserId)
+	idL.Font = Enum.Font.Code
+	idL.TextSize = 12
+	idL.TextColor3 = THEME.mute
+	idL.TextXAlignment = Enum.TextXAlignment.Left
+	idL.ZIndex = 18
+	idL.Parent = profile
+	local cred = card(welcomePage, "Credits")
+	line(cred, "Kyiel & Arin · KHUB", THEME.text)
+	makeBtn(cred, "Copy Discord", function()
+		if setclipboard then setclipboard(DISCORD) elseif toclipboard then toclipboard(DISCORD) end
+	end)
+	makeBtn(cred, "Copy YouTube", function()
+		if setclipboard then setclipboard(YOUTUBE) elseif toclipboard then toclipboard(YOUTUBE) end
+	end)
+end
+
+do
+	local c = card(combatPage, "Combat")
+	makeToggle(c, "Slap Aura", false, function(v) Config.SlapAura = v end)
+	makeToggle(c, "Smart Anti-Reverse", true, function(v) Config.AntiReverse = v end)
+	makeToggle(c, "Hitbox Extender", false, function(v) Config.HitboxExtend = v end)
+	makeToggle(c, "Auto Glove Ability", false, function(v) Config.AutoAbility = v end)
+	makeStepper(c, "Aura Radius", AuraRadius, 8, 40, 2, function(v) AuraRadius = v end)
+	makeStepper(c, "Hitbox Size", HitboxSize, 6, 30, 2, function(v) HitboxSize = v end)
+end
+
+do
+	local d = card(defensePage, "Defense")
+	makeToggle(d, "Physical Anti-Void", false, function(v)
+		Config.AntiVoid = v
+		UpdateAntiVoid(v)
+	end)
+	makeToggle(d, "Anti-Ragdoll", false, function(v) Config.AntiRagdoll = v end)
+	makeToggle(d, "Anti-Fling", false, function(v) Config.AntiFling = v end)
+end
+
+do
+	local f = card(farmPage, "Farm")
+	makeToggle(f, "Auto Slapple", false, function(v) Config.AutoSlapple = v end)
+	makeToggle(f, "Tycoon Auto-Click", false, function(v) Config.TycoonClick = v end)
+	makeToggle(f, "Megarock AFK", false, function(v) Config.MegarockAFK = v end)
+	makeToggle(f, "Player & Glove ESP", false, function(v)
+		Config.PlayerGloveESP = v
+		if not v then
+			for _, c in pairs(ESPFolder:GetChildren()) do
+				c:Destroy()
+			end
+		end
+	end)
+end
+
+do
+	local p = card(playerPage, "Movement")
+	makeToggle(p, "WalkSpeed", false, function(v)
+		Config.WalkSpeedBoost = v
+		UpdateCharacterSpeed()
+	end)
+	makeStepper(p, "Speed", CustomSpeedValue, 16, 300, 15, function(v)
+		CustomSpeedValue = v
+		UpdateCharacterSpeed()
+	end)
+	makeToggle(p, "JumpPower", false, function(v)
+		Config.JumpPowerBoost = v
+		UpdateCharacterJump()
+	end)
+	makeStepper(p, "Jump", CustomJumpPower, 50, 350, 15, function(v)
+		CustomJumpPower = v
+		UpdateCharacterJump()
+	end)
+	makeToggle(p, "Infinite Jump", false, function(v) Config.InfiniteJump = v end)
+	makeToggle(p, "Anti-AFK", true, function(v) Config.AntiAFK = v end)
+end
+
+do
+	local t = card(tpPage, "Teleport")
+	makeBtn(t, "TP Safe Lobby", function()
+		TeleportToPos(Vector3.new(-390, 328, -5))
+	end)
+	makeBtn(t, "TP Main Arena", function()
+		TeleportToPos(Vector3.new(0, 100, 0))
+	end)
+	makeBtn(t, "TP Slapple Island", function()
+		TeleportToPos(Vector3.new(-400, 50, -15))
+	end)
+	makeBtn(t, "TP Moai Island", function()
+		TeleportToPos(Vector3.new(215, -15, 0))
+	end)
+	makeBtn(t, "TP Floating Plate", function()
+		TeleportToPos(Vector3.new(-35, 75, -230))
+	end)
+	makeBtn(t, "TP Arena Cannon", function()
+		TeleportToPos(Vector3.new(245, 34, 160))
+	end)
+	makeBtn(t, "Rejoin Server", function()
+		TeleportService:Teleport(game.PlaceId, LocalPlayer)
+	end)
+end
+
+do
+	local k = card(keybindsPage, "PC Keybinds")
+	line(k, "RightShift — Show / Hide UI", THEME.text)
+	line(k, "RightControl — Show / Hide UI", THEME.text)
+	line(k, "K — Show / Hide UI", THEME.text)
+end
+
+go("Welcome")
+
+local Orb = Instance.new("ImageButton")
+Orb.Size = UDim2.fromOffset(54, 54)
+Orb.Position = UDim2.new(0, 16, 0.5, -40)
+Orb.BackgroundColor3 = Color3.fromRGB(24, 14, 40)
+Orb.Image = LOGO_ID
+Orb.ScaleType = Enum.ScaleType.Fit
+Orb.Visible = false
+Orb.ZIndex = 100
+Orb.Parent = ScreenGui
+corner(Orb, 27)
+mkstroke(Orb, THEME.accent, 2, 0.25)
+local orbTag = Instance.new("TextLabel")
+orbTag.Size = UDim2.new(1, 0, 0, 14)
+orbTag.Position = UDim2.new(0, 0, 1, 2)
+orbTag.BackgroundTransparency = 1
+orbTag.Text = "KHUB"
+orbTag.Font = Enum.Font.GothamBold
+orbTag.TextSize = 11
+orbTag.TextColor3 = THEME.gold
+orbTag.ZIndex = 101
+orbTag.Parent = Orb
+
+local function setVisible(on)
+	Win.Visible = on
+	Orb.Visible = not on
+end
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function() setVisible(true) end)
+
+local dragging, dragStart, startPos
+Header.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = i.Position
+		startPos = Win.Position
+	end
+end)
+Header.InputEnded:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		dragging = false
+	end
+end)
+local orbDrag, orbStart, orbPos
+Orb.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		orbDrag = true
+		orbStart = i.Position
+		orbPos = Orb.Position
+	end
+end)
+Orb.InputEnded:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+		orbDrag = false
+	end
+end)
+UserInputService.InputChanged:Connect(function(i)
+	if i.UserInputType ~= Enum.UserInputType.MouseMovement and i.UserInputType ~= Enum.UserInputType.Touch then return end
+	if dragging and dragStart then
+		local d = i.Position - dragStart
+		Win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+	end
+	if orbDrag and orbStart then
+		local d = i.Position - orbStart
+		Orb.Position = UDim2.new(orbPos.X.Scale, orbPos.X.Offset + d.X, orbPos.Y.Scale, orbPos.Y.Offset + d.Y)
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.RightShift
+		or i.KeyCode == Enum.KeyCode.RightControl
+		or i.KeyCode == Enum.KeyCode.K then
+		setVisible(not Win.Visible)
+	end
+end)
+
+task.spawn(function()
+	for _ = 1, 8 do
+		task.wait(0.35)
+		pcall(function()
+			if not ScreenGui.Parent then
+				ScreenGui.Parent = getPlayerGui() or CoreGui
+			end
+			ScreenGui.Enabled = true
+			Win.Visible = true
+		end)
+	end
+end)
+
+print("[KHUB] Slap Battles loaded")
