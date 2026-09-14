@@ -1,0 +1,758 @@
+--[[
+	KHUB · Capybaras VS Plants
+	UI: Monochrome structure + Violet theme + Rainbow light-pass
+	Credits: Kyiel & Arin · UI by KHUB
+	Toggle: RightShift / RightCtrl / K
+]]
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+
+local player = Players.LocalPlayer
+local LOGO_ID = "rbxassetid://140466936910510"
+local DISCORD = "https://discord.gg/rU9FyNEUQ7"
+
+-- Violet theme (as requested)
+local THEME = {
+	bg     = Color3.fromRGB(18, 12, 25),
+	rail   = Color3.fromRGB(26, 18, 36),
+	card   = Color3.fromRGB(35, 24, 48),
+	accent = Color3.fromRGB(190, 100, 255),
+	gold   = Color3.fromRGB(230, 180, 255),
+	text   = Color3.fromRGB(240, 230, 255),
+	dim    = Color3.fromRGB(150, 130, 180),
+	stroke = Color3.fromRGB(150, 80, 220),
+	green  = Color3.fromRGB(90, 255, 160),
+	red    = Color3.fromRGB(255, 90, 110),
+}
+
+local Config = {
+	AutoFarm = false,
+	AutoBuy = false,
+	AutoMoney = false,
+	InfiniteJump = false,
+}
+
+--------------------------------------------------------------------
+-- ANTI-AFK
+--------------------------------------------------------------------
+player.Idled:Connect(function()
+	pcall(function()
+		VirtualUser:Button2Down(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+		task.wait(1)
+		VirtualUser:Button2Up(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+	end)
+end)
+
+--------------------------------------------------------------------
+-- FEATURES
+--------------------------------------------------------------------
+UserInputService.JumpRequest:Connect(function()
+	if not Config.InfiniteJump then return end
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(0.12)
+		if not Config.AutoFarm then continue end
+		pcall(function()
+			local char = player.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if char then
+				for _, item in ipairs(char:GetChildren()) do
+					if item:IsA("Tool") then pcall(function() item:Activate() end) end
+				end
+			end
+			if player:FindFirstChild("Backpack") and hum then
+				for _, tool in ipairs(player.Backpack:GetChildren()) do
+					if tool:IsA("Tool") then
+						pcall(function()
+							hum:EquipTool(tool)
+							tool:Activate()
+						end)
+					end
+				end
+			end
+			for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
+				if not Config.AutoFarm then break end
+				if remote:IsA("RemoteEvent") then
+					local n = string.lower(remote.Name)
+					if n:find("attack") or n:find("farm") or n:find("hit")
+						or n:find("damage") or n:find("harvest") then
+						pcall(function()
+							remote:FireServer()
+							remote:FireServer(true)
+						end)
+					end
+				end
+			end
+		end)
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(1.0)
+		if not Config.AutoBuy then continue end
+		pcall(function()
+			for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
+				if not Config.AutoBuy then break end
+				if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
+					local n = string.lower(remote.Name)
+					if n:find("buy") or n:find("purchase") or n:find("unlock")
+						or n:find("spawn") or n:find("capybara") then
+						pcall(function()
+							if remote:IsA("RemoteEvent") then
+								remote:FireServer("Best")
+								remote:FireServer(1)
+								remote:FireServer(true)
+							else
+								remote:InvokeServer("Best")
+								remote:InvokeServer(1)
+							end
+						end)
+					end
+				end
+			end
+		end)
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(0.18)
+		if not Config.AutoMoney then continue end
+		pcall(function()
+			local char = player.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				for _, obj in ipairs(Workspace:GetDescendants()) do
+					if not Config.AutoMoney then break end
+					if obj:IsA("BasePart") then
+						local n = string.lower(obj.Name)
+						if n:find("coin") or n:find("cash") or n:find("money")
+							or n:find("drop") or n:find("reward") then
+							if firetouchinterest then
+								pcall(function()
+									firetouchinterest(hrp, obj, 0)
+									task.wait()
+									firetouchinterest(hrp, obj, 1)
+								end)
+							end
+							pcall(function() obj.CFrame = hrp.CFrame end)
+						end
+					elseif obj:IsA("ProximityPrompt") then
+						if fireproximityprompt then
+							pcall(function() fireproximityprompt(obj) end)
+						end
+					end
+				end
+			end
+			for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
+				if not Config.AutoMoney then break end
+				if remote:IsA("RemoteEvent") then
+					local n = string.lower(remote.Name)
+					if n:find("collect") or n:find("claim") or n:find("income")
+						or n:find("money") or n:find("cash") then
+						pcall(function()
+							remote:FireServer()
+							remote:FireServer(1)
+						end)
+					end
+				end
+			end
+		end)
+	end
+end)
+
+--------------------------------------------------------------------
+-- UI (Monochrome structure + Violet + Rainbow light-pass)
+--------------------------------------------------------------------
+local ParentTarget = (gethui and gethui()) or CoreGui
+pcall(function()
+	local old = ParentTarget:FindFirstChild("KHUB_CapybarasVsPlants")
+	if old then old:Destroy() end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_CapybarasVsPlants"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then
+	ScreenGui.Parent = player:WaitForChild("PlayerGui")
+end
+
+local WinUIScale = Instance.new("UIScale")
+WinUIScale.Parent = ScreenGui
+
+local function updateScale()
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	WinUIScale.Scale = math.clamp(cam.ViewportSize.X / 1350, 0.75, 1.1)
+end
+pcall(function()
+	Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+end)
+updateScale()
+
+local function corner(p, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 10)
+	c.Parent = p
+	return c
+end
+
+local function mkstroke(p, col, th, tr)
+	local s = Instance.new("UIStroke")
+	s.Color = col or THEME.stroke
+	s.Thickness = th or 1.2
+	s.Transparency = tr or 0.3
+	s.Parent = p
+	return s
+end
+
+local HEADER_H = 72
+
+local Win = Instance.new("Frame")
+Win.Name = "Window"
+Win.Size = UDim2.new(0, 560, 0, 450)
+Win.Position = UDim2.new(0.5, -280, 0.5, -225)
+Win.BackgroundColor3 = THEME.bg
+Win.BackgroundTransparency = 0.2
+Win.BorderSizePixel = 0
+Win.ClipsDescendants = true
+Win.Active = true
+Win.Parent = ScreenGui
+corner(Win, 14)
+mkstroke(Win, THEME.accent, 1.8, 0.2)
+
+-- Center KHUB watermark (static text) + color sweep via UIGradient
+local BGWatermarkContainer = Instance.new("Frame")
+BGWatermarkContainer.Size = UDim2.new(1, 0, 1, 0)
+BGWatermarkContainer.BackgroundTransparency = 1
+BGWatermarkContainer.ZIndex = 1
+BGWatermarkContainer.ClipsDescendants = true
+BGWatermarkContainer.Parent = Win
+
+local BGWatermark = Instance.new("TextLabel")
+BGWatermark.Name = "BGWatermark"
+BGWatermark.Size = UDim2.new(1, 0, 1, 0)
+BGWatermark.BackgroundTransparency = 1
+BGWatermark.Text = "KHUB"
+BGWatermark.Font = Enum.Font.GothamBlack
+BGWatermark.TextSize = 130
+BGWatermark.TextColor3 = Color3.fromRGB(255, 255, 255)
+BGWatermark.TextTransparency = 0.55
+BGWatermark.ZIndex = 1
+BGWatermark.Parent = BGWatermarkContainer
+
+-- Color only passes across fixed text (not moving text)
+local WMGrad = Instance.new("UIGradient")
+WMGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 80, 180)),
+	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(120, 80, 180)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
+	ColorSequenceKeypoint.new(0.65, Color3.fromRGB(190, 100, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(120, 80, 180)),
+})
+WMGrad.Offset = Vector2.new(-1, 0)
+WMGrad.Parent = BGWatermark
+
+task.spawn(function()
+	local hue = 0
+	while BGWatermark.Parent do
+		hue = (hue + 0.008) % 1
+		local c1 = Color3.fromHSV(hue, 0.55, 0.55)
+		local c2 = Color3.fromHSV((hue + 0.12) % 1, 0.7, 1)
+		local c3 = Color3.fromHSV((hue + 0.25) % 1, 0.85, 1)
+		WMGrad.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, c1),
+			ColorSequenceKeypoint.new(0.32, c1),
+			ColorSequenceKeypoint.new(0.5, c2),
+			ColorSequenceKeypoint.new(0.68, c3),
+			ColorSequenceKeypoint.new(1, c1),
+		})
+		WMGrad.Offset = Vector2.new(-1.2, 0)
+		TweenService:Create(WMGrad, TweenInfo.new(1.6, Enum.EasingStyle.Linear), {
+			Offset = Vector2.new(1.2, 0)
+		}):Play()
+		task.wait(2.0)
+	end
+end)
+
+-- Particles
+local ParticlesFolder = Instance.new("Folder")
+ParticlesFolder.Name = "UIParticles"
+ParticlesFolder.Parent = Win
+
+task.spawn(function()
+	for i = 1, 15 do
+		local dot = Instance.new("Frame")
+		dot.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
+		dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+		dot.BackgroundColor3 = THEME.accent
+		dot.BackgroundTransparency = 0.5
+		dot.BorderSizePixel = 0
+		dot.ZIndex = 2
+		dot.Parent = ParticlesFolder
+		corner(dot, 2)
+		task.spawn(function()
+			while task.wait(math.random(3, 6)) do
+				pcall(function()
+					TweenService:Create(dot, TweenInfo.new(2, Enum.EasingStyle.Sine), {
+						Position = UDim2.new(math.random(), 0, math.random(), 0),
+						BackgroundTransparency = math.random(3, 8) / 10
+					}):Play()
+				end)
+			end
+		end)
+	end
+end)
+
+-- Drag window
+local draggingMain, dragInputMain, dragStartMain, startPosMain
+Win.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingMain = true
+		dragStartMain = input.Position
+		startPosMain = Win.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then draggingMain = false end
+		end)
+	end
+end)
+Win.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInputMain = input
+	end
+end)
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInputMain and draggingMain then
+		local delta = input.Position - dragStartMain
+		Win.Position = UDim2.new(startPosMain.X.Scale, startPosMain.X.Offset + delta.X, startPosMain.Y.Scale, startPosMain.Y.Offset + delta.Y)
+	end
+end)
+
+-- Header
+local HeaderBand = Instance.new("Frame")
+HeaderBand.Name = "HeaderBand"
+HeaderBand.Size = UDim2.new(1, 0, 0, HEADER_H)
+HeaderBand.Position = UDim2.new(0, 0, 0, 3)
+HeaderBand.BackgroundTransparency = 1
+HeaderBand.ZIndex = 10
+HeaderBand.Parent = Win
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(0, 420, 0, 40)
+TitleLabel.Position = UDim2.new(0, 14, 0, 12)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "KHUB  ·  Capybaras VS Plants"
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 18
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.ZIndex = 12
+TitleLabel.Parent = HeaderBand
+
+-- Color only sweeps across fixed title text (UIGradient)
+local TitleGrad = Instance.new("UIGradient")
+TitleGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(180, 140, 220)),
+	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(180, 140, 220)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
+	ColorSequenceKeypoint.new(0.65, Color3.fromRGB(190, 100, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 140, 220)),
+})
+TitleGrad.Offset = Vector2.new(-1, 0)
+TitleGrad.Parent = TitleLabel
+
+task.spawn(function()
+	local hue = 0
+	while TitleLabel.Parent do
+		hue = (hue + 0.01) % 1
+		local base = Color3.fromHSV(hue, 0.4, 0.85)
+		local bright = Color3.fromHSV((hue + 0.15) % 1, 0.7, 1)
+		local tip = Color3.fromHSV((hue + 0.3) % 1, 0.85, 1)
+		TitleGrad.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, base),
+			ColorSequenceKeypoint.new(0.3, base),
+			ColorSequenceKeypoint.new(0.5, bright),
+			ColorSequenceKeypoint.new(0.7, tip),
+			ColorSequenceKeypoint.new(1, base),
+		})
+		TitleGrad.Offset = Vector2.new(-1.15, 0)
+		TweenService:Create(TitleGrad, TweenInfo.new(1.4, Enum.EasingStyle.Linear), {
+			Offset = Vector2.new(1.15, 0)
+		}):Play()
+		task.wait(1.85)
+	end
+end)
+
+local SubLabel = Instance.new("TextLabel")
+SubLabel.Size = UDim2.new(0, 400, 0, 16)
+SubLabel.Position = UDim2.new(0, 15, 0, 48)
+SubLabel.BackgroundTransparency = 1
+SubLabel.Text = "Kyiel & Arin  ·  " .. DISCORD
+SubLabel.Font = Enum.Font.Gotham
+SubLabel.TextSize = 11
+SubLabel.TextColor3 = THEME.dim
+SubLabel.TextXAlignment = Enum.TextXAlignment.Left
+SubLabel.ZIndex = 12
+SubLabel.Parent = HeaderBand
+
+-- Sidebar Rail
+local Rail = Instance.new("Frame")
+Rail.Name = "Rail"
+Rail.Size = UDim2.new(0, 142, 1, -HEADER_H - 3)
+Rail.Position = UDim2.new(0, 0, 0, HEADER_H + 3)
+Rail.BackgroundColor3 = THEME.rail
+Rail.BackgroundTransparency = 0.15
+Rail.BorderSizePixel = 0
+Rail.ZIndex = 5
+Rail.ClipsDescendants = true
+Rail.Parent = Win
+
+local function createTabButton(name, yPos, callback)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, -10, 0, 32)
+	b.Position = UDim2.fromOffset(5, yPos)
+	b.BackgroundColor3 = THEME.card
+	b.BackgroundTransparency = 0.2
+	b.Text = "  " .. name
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 11
+	b.TextColor3 = THEME.text
+	b.TextXAlignment = Enum.TextXAlignment.Left
+	b.ZIndex = 7
+	b.AutoButtonColor = false
+	b.Parent = Rail
+	corner(b, 7)
+	mkstroke(b, THEME.accent, 1, 0.4)
+	b.MouseButton1Click:Connect(callback)
+	return b
+end
+
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(1, -142, 1, -HEADER_H - 3)
+Main.Position = UDim2.new(0, 142, 0, HEADER_H + 3)
+Main.BackgroundTransparency = 1
+Main.ZIndex = 5
+Main.Parent = Win
+
+local Head = Instance.new("Frame")
+Head.Size = UDim2.new(1, 0, 0, 38)
+Head.BackgroundColor3 = THEME.rail
+Head.BackgroundTransparency = 0.15
+Head.BorderSizePixel = 0
+Head.ZIndex = 6
+Head.Parent = Main
+
+local PageTitle = Instance.new("TextLabel")
+PageTitle.Size = UDim2.new(1, -50, 0, 38)
+PageTitle.Position = UDim2.fromOffset(12, 0)
+PageTitle.BackgroundTransparency = 1
+PageTitle.Text = "Welcome & Profile"
+PageTitle.Font = Enum.Font.GothamBold
+PageTitle.TextSize = 13
+PageTitle.TextColor3 = THEME.accent
+PageTitle.TextXAlignment = Enum.TextXAlignment.Left
+PageTitle.ZIndex = 7
+PageTitle.Parent = Head
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.fromOffset(26, 22)
+MinBtn.Position = UDim2.new(1, -30, 0.5, -11)
+MinBtn.BackgroundColor3 = Color3.fromRGB(45, 30, 60)
+MinBtn.BackgroundTransparency = 0.15
+MinBtn.Text = "–"
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 14
+MinBtn.TextColor3 = THEME.text
+MinBtn.ZIndex = 8
+MinBtn.Parent = Head
+corner(MinBtn, 6)
+mkstroke(MinBtn, THEME.accent, 1, 0.2)
+
+local pages = {}
+local function createPage(name)
+	local sf = Instance.new("ScrollingFrame")
+	sf.Name = name .. "Page"
+	sf.Size = UDim2.new(1, -10, 1, -46)
+	sf.Position = UDim2.new(0, 5, 0, 42)
+	sf.BackgroundTransparency = 1
+	sf.BorderSizePixel = 0
+	sf.ScrollBarThickness = 3
+	sf.ScrollBarImageColor3 = THEME.accent
+	sf.CanvasSize = UDim2.new(0, 0, 0, 420)
+	sf.ZIndex = 6
+	sf.Visible = false
+	sf.Parent = Main
+	pages[name] = sf
+	return sf
+end
+
+local PageWelcome = createPage("Welcome")
+local PageFarm = createPage("Farm")
+local PageMove = createPage("Movement")
+local PageInfo = createPage("Info")
+
+PageWelcome.Visible = true
+
+createTabButton("✦ Welcome", 12, function()
+	for _, p in pairs(pages) do p.Visible = false end
+	PageWelcome.Visible = true
+	PageTitle.Text = "Welcome & Profile"
+end)
+createTabButton("◆ Farm", 50, function()
+	for _, p in pairs(pages) do p.Visible = false end
+	PageFarm.Visible = true
+	PageTitle.Text = "Auto Farm & Shop"
+end)
+createTabButton("⬡ Movement", 88, function()
+	for _, p in pairs(pages) do p.Visible = false end
+	PageMove.Visible = true
+	PageTitle.Text = "Movement"
+end)
+createTabButton("◇ Info", 126, function()
+	for _, p in pairs(pages) do p.Visible = false end
+	PageInfo.Visible = true
+	PageTitle.Text = "Credits & Info"
+end)
+
+local function card(parent, y, h)
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1, -6, 0, h)
+	f.Position = UDim2.new(0, 3, 0, y)
+	f.BackgroundColor3 = THEME.card
+	f.BackgroundTransparency = 0.2
+	f.BorderSizePixel = 0
+	f.ZIndex = 9
+	f.Parent = parent
+	corner(f, 9)
+	mkstroke(f, THEME.accent, 1.2, 0.25)
+	return f
+end
+
+local function label(parent, text, y, size, color, bold)
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, -16, 0, size + 4)
+	l.Position = UDim2.new(0, 8, 0, y)
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham
+	l.TextSize = size
+	l.TextColor3 = color
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.ZIndex = 10
+	l.Parent = parent
+	return l
+end
+
+local function createToggle(parent, text, yPos, callback)
+	local f = Instance.new("TextButton")
+	f.Size = UDim2.new(1, -16, 0, 32)
+	f.Position = UDim2.new(0, 8, 0, yPos)
+	f.BackgroundColor3 = Color3.fromRGB(40, 28, 55)
+	f.BackgroundTransparency = 0.25
+	f.Text = "  " .. text
+	f.Font = Enum.Font.GothamBold
+	f.TextSize = 11
+	f.TextColor3 = THEME.text
+	f.TextXAlignment = Enum.TextXAlignment.Left
+	f.ZIndex = 11
+	f.AutoButtonColor = false
+	f.Parent = parent
+	corner(f, 7)
+	mkstroke(f, THEME.accent, 1, 0.3)
+
+	local status = Instance.new("TextLabel")
+	status.Size = UDim2.fromOffset(50, 20)
+	status.Position = UDim2.new(1, -55, 0.5, -10)
+	status.BackgroundTransparency = 1
+	status.Text = "OFF"
+	status.Font = Enum.Font.GothamBold
+	status.TextSize = 11
+	status.TextColor3 = THEME.red
+	status.TextXAlignment = Enum.TextXAlignment.Right
+	status.ZIndex = 12
+	status.Parent = f
+
+	local enabled = false
+	f.MouseButton1Click:Connect(function()
+		enabled = not enabled
+		status.Text = enabled and "ON" or "OFF"
+		status.TextColor3 = enabled and THEME.green or THEME.red
+		if callback then callback(enabled) end
+	end)
+	return f
+end
+
+-- ==================== WELCOME ====================
+local WelcomeCard = card(PageWelcome, 6, 220)
+label(WelcomeCard, "Welcome to KHUB", 12, 13, THEME.gold, true)
+label(WelcomeCard, "Capybaras VS Plants  ·  by Kyiel & Arin", 32, 10, THEME.dim, false)
+
+local ProfileFrame = Instance.new("Frame")
+ProfileFrame.Size = UDim2.new(1, -16, 0, 110)
+ProfileFrame.Position = UDim2.new(0, 8, 0, 64)
+ProfileFrame.BackgroundColor3 = Color3.fromRGB(25, 16, 38)
+ProfileFrame.BackgroundTransparency = 0.25
+ProfileFrame.BorderSizePixel = 0
+ProfileFrame.ZIndex = 10
+ProfileFrame.Parent = WelcomeCard
+corner(ProfileFrame, 8)
+mkstroke(ProfileFrame, THEME.accent, 1, 0.3)
+
+local AvatarImg = Instance.new("ImageLabel")
+AvatarImg.Size = UDim2.fromOffset(80, 80)
+AvatarImg.Position = UDim2.new(0, 15, 0.5, -40)
+AvatarImg.BackgroundTransparency = 1
+AvatarImg.ZIndex = 11
+AvatarImg.Parent = ProfileFrame
+corner(AvatarImg, 40)
+
+pcall(function()
+	local content, isReady = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+	if isReady then AvatarImg.Image = content end
+end)
+
+local ProfileName = Instance.new("TextLabel")
+ProfileName.Size = UDim2.new(1, -110, 0, 24)
+ProfileName.Position = UDim2.new(0, 105, 0, 22)
+ProfileName.BackgroundTransparency = 1
+ProfileName.Text = "User: " .. player.Name
+ProfileName.Font = Enum.Font.GothamBold
+ProfileName.TextSize = 14
+ProfileName.TextColor3 = THEME.gold
+ProfileName.TextXAlignment = Enum.TextXAlignment.Left
+ProfileName.ZIndex = 11
+ProfileName.Parent = ProfileFrame
+
+local ProfileId = Instance.new("TextLabel")
+ProfileId.Size = UDim2.new(1, -110, 0, 20)
+ProfileId.Position = UDim2.new(0, 105, 0, 48)
+ProfileId.BackgroundTransparency = 1
+ProfileId.Text = "ID: " .. tostring(player.UserId)
+ProfileId.Font = Enum.Font.Gotham
+ProfileId.TextSize = 11
+ProfileId.TextColor3 = THEME.dim
+ProfileId.TextXAlignment = Enum.TextXAlignment.Left
+ProfileId.ZIndex = 11
+ProfileId.Parent = ProfileFrame
+
+local ProfileStatus = Instance.new("TextLabel")
+ProfileStatus.Size = UDim2.new(1, -110, 0, 20)
+ProfileStatus.Position = UDim2.new(0, 105, 0, 72)
+ProfileStatus.BackgroundTransparency = 1
+ProfileStatus.Text = "Status: Online / Ready"
+ProfileStatus.Font = Enum.Font.Gotham
+ProfileStatus.TextSize = 11
+ProfileStatus.TextColor3 = THEME.green
+ProfileStatus.TextXAlignment = Enum.TextXAlignment.Left
+ProfileStatus.ZIndex = 11
+ProfileStatus.Parent = ProfileFrame
+
+local InstructionsCard = card(PageWelcome, 236, 130)
+label(InstructionsCard, "How to Use:", 10, 11, THEME.gold, true)
+label(InstructionsCard, "• Toggle Menu: RightShift / RightCtrl / K", 34, 10, THEME.text, false)
+label(InstructionsCard, "• Farm tab: Auto Farm, Auto Money, Auto Buy", 56, 10, THEME.text, false)
+label(InstructionsCard, "• Movement: Infinite Jump", 78, 10, THEME.text, false)
+label(InstructionsCard, "• Credits: Kyiel & Arin · UI by KHUB", 100, 10, THEME.dim, true)
+
+-- ==================== FARM ====================
+local FarmCard = card(PageFarm, 6, 200)
+label(FarmCard, "Auto Farm & Collect", 10, 12, THEME.gold, true)
+
+createToggle(FarmCard, "Auto Farm Plants", 40, function(on)
+	Config.AutoFarm = on
+end)
+createToggle(FarmCard, "Auto Collect Money", 80, function(on)
+	Config.AutoMoney = on
+end)
+createToggle(FarmCard, "Auto Buy Best Capybara", 120, function(on)
+	Config.AutoBuy = on
+end)
+
+-- ==================== MOVEMENT ====================
+local MoveCard = card(PageMove, 6, 100)
+label(MoveCard, "Movement", 10, 12, THEME.gold, true)
+createToggle(MoveCard, "Infinite Jump", 40, function(on)
+	Config.InfiniteJump = on
+end)
+
+-- ==================== INFO ====================
+local InfoCard = card(PageInfo, 6, 160)
+label(InfoCard, "Credits", 10, 12, THEME.gold, true)
+label(InfoCard, "KHUB Script Hub", 36, 11, THEME.text, false)
+label(InfoCard, "Game: Capybaras VS Plants", 58, 11, THEME.text, false)
+label(InfoCard, "Credits: Kyiel & Arin", 80, 11, THEME.text, false)
+label(InfoCard, DISCORD, 102, 11, THEME.dim, false)
+label(InfoCard, "UI by KHUB", 124, 11, THEME.dim, true)
+
+-- Floating Orb
+local Orb = Instance.new("ImageButton")
+Orb.Name = "Orb"
+Orb.Size = UDim2.fromOffset(72, 72)
+Orb.Position = UDim2.new(0, 20, 1, -100)
+Orb.BackgroundColor3 = THEME.rail
+Orb.Image = LOGO_ID
+Orb.ScaleType = Enum.ScaleType.Fit
+Orb.Visible = false
+Orb.ZIndex = 50
+Orb.Parent = ScreenGui
+corner(Orb, 36)
+mkstroke(Orb, THEME.accent, 2, 0.1)
+
+local draggingOrb, dragInputOrb, dragStartOrb, startPosOrb
+Orb.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingOrb = true
+		dragStartOrb = input.Position
+		startPosOrb = Orb.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then draggingOrb = false end
+		end)
+	end
+end)
+Orb.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInputOrb = input
+	end
+end)
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInputOrb and draggingOrb then
+		local delta = input.Position - dragStartOrb
+		Orb.Position = UDim2.new(startPosOrb.X.Scale, startPosOrb.X.Offset + delta.X, startPosOrb.Y.Scale, startPosOrb.Y.Offset + delta.Y)
+	end
+end)
+
+local function setVisible(on)
+	Win.Visible = on
+	Orb.Visible = not on
+end
+
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function() setVisible(true) end)
+
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.RightShift or i.KeyCode == Enum.KeyCode.RightControl or i.KeyCode == Enum.KeyCode.K then
+		setVisible(not Win.Visible)
+	end
+end)
+
+print("[KHUB] Capybaras VS Plants loaded | Kyiel & Arin | " .. DISCORD)
