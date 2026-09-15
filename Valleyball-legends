@@ -1,0 +1,1903 @@
+repeat task.wait() until game:IsLoaded()
+
+-- ============================================================
+-- KHUB UI · Volleyball Legends · Full Build + Welcome Tab
+-- ============================================================
+local Players          = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui          = game:GetService("CoreGui")
+local Workspace        = game:GetService("Workspace")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
+local RunService       = game:GetService("RunService")
+local TweenService     = game:GetService("TweenService")
+local HttpService      = game:GetService("HttpService")
+local Lighting         = game:GetService("Lighting")
+
+local player = Players.LocalPlayer
+local LOGO_ID = "rbxassetid://140466936910510"
+local DISCORD = "https://discord.gg/rU9FyNEUQ7"
+
+-- ============================================================
+-- THEME
+-- ============================================================
+local THEME = {
+    bg     = Color3.fromRGB(10, 8, 14),
+    rail   = Color3.fromRGB(16, 12, 22),
+    card   = Color3.fromRGB(24, 16, 34),
+    accent = Color3.fromRGB(160, 90, 230),
+    gold   = Color3.fromRGB(210, 170, 255),
+    text   = Color3.fromRGB(235, 225, 250),
+    dim    = Color3.fromRGB(140, 120, 170),
+    stroke = Color3.fromRGB(110, 60, 170),
+    green  = Color3.fromRGB(120, 220, 160),
+    red    = Color3.fromRGB(255, 100, 120),
+}
+
+-- ============================================================
+-- CONFIG
+-- ============================================================
+local Config = {
+    RedirectSpike = false, AutoCorner = false,
+    AutoCornerSide = "Auto", AutoCornerReach = "All",
+    SilentSpike = false, SanjuTilt = false, MaxCharge = false,
+    FakeSpike = false, AutoCounter = false, AutoCounterMove = "Auto",
+    AutoCounterNetRange = 9, AutoCounterLateral = 14,
+    AutoCounterDelay = 0.05, AutoCounterAutoJump = true,
+    HitboxEnable = false, HitboxSize = 5, HitboxColor = "Blue",
+    AntiLag = false,
+    Desync = false, AutoReceive = false, AutoReceiveRange = 10,
+    AutoReceiveLead = 0.35, KisukiDive = false, KisukiCharge = 1,
+    AkariDash = false, LeadFeet = false,
+    AirMove = false, AirSpeed = 16, AutoShiftLock = false,
+    BallMarker = false, ScoreEffectEnabled = false,
+    ScoreEffectName = "SupernovaScoreEffect", RandomEffect = false,
+    PlayerCardEnabled = false, PlayerCardName = "UltimateChampionPlayerCard",
+    RandomCard = false, TitleChanger = false,
+    BallSkinEnabled = false, BallSkinName = "ClassicBall",
+    AutoApplyBall = false, RandomBall = false,
+    JerseyEnabled = false, JerseyName = "DragonTuxedoJersey",
+    AutoApplyJersey = false,
+    Protection = false, TSHAnimation = false, HidariAnimation = false,
+    KazanaBlueJump = false, KazanaWhiteJump = false,
+    MaxServe = false, JumpESP = false,
+    AutoStyle = false, SpinType = "Normal", TargetStyle = "",
+    AutoAbilitySpin = false, AbilitySpinType = "Normal", TargetAbility = "",
+}
+
+-- ============================================================
+-- STATE
+-- ============================================================
+local State = {
+    hitboxEnabled = false, hitboxScale = 5,
+    hitboxColor = Color3.fromRGB(0, 0, 255), hitboxTransparency = 0.3,
+    redirectSpike = false, sanjuTilt = false, maxCharge = false,
+    silentSpike = false, akariDash = false, leadFeet = false,
+    maxServe = false, desync = false, airMove = false,
+    autoShiftLock = false, jumpESP = false, protection = false,
+    kazanaBlue = false, kazanaWhite = false,
+    scoreEffect = false, playerCard = false,
+    ballSkin = false, jersey = false,
+    autoStyle = false, autoAbility = false,
+    stopBallVisible = false, aimVisible = false,
+    ballMarker = false, autoCounter = false, autoCorner = false,
+    _spikeHooked = false,
+}
+
+-- ============================================================
+-- CONFIG SAVE/LOAD
+-- ============================================================
+local CONFIG_FOLDER = "KHUB_Configs"
+local selectedConfig = nil
+local configList = {}
+
+local function ensureFolder()
+    pcall(function()
+        if makefolder and not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+    end)
+end
+
+local function listConfigs()
+    configList = {}
+    pcall(function()
+        if listfiles and isfolder and isfolder(CONFIG_FOLDER) then
+            for _, path in ipairs(listfiles(CONFIG_FOLDER)) do
+                local name = string.match(path, "([^/\\]+)%.json$")
+                if name then table.insert(configList, name) end
+            end
+        end
+    end)
+    table.sort(configList)
+    return configList
+end
+
+local function saveConfig(name, data)
+    if not name or name == "" then return false, "Empty name" end
+    ensureFolder()
+    local ok, err = pcall(function()
+        if not writefile then error("writefile not supported") end
+        writefile(CONFIG_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode(data or Config))
+    end)
+    return ok, err
+end
+
+local function loadConfig(name)
+    if not name or name == "" then return nil, "No config" end
+    local ok, result = pcall(function()
+        if not readfile or not isfile then error("readfile not supported") end
+        local path = CONFIG_FOLDER .. "/" .. name .. ".json"
+        if not isfile(path) then error("File not found") end
+        return HttpService:JSONDecode(readfile(path))
+    end)
+    if ok then return result else return nil, result end
+end
+
+local function deleteConfig(name)
+    if not name or name == "" then return false, "No config" end
+    local ok, err = pcall(function()
+        if not delfile or not isfile then error("delfile not supported") end
+        local path = CONFIG_FOLDER .. "/" .. name .. ".json"
+        if isfile(path) then delfile(path) else error("File not found") end
+    end)
+    return ok, err
+end
+
+-- ============================================================
+-- SCREEN GUI
+-- ============================================================
+local ParentTarget = (gethui and gethui()) or CoreGui
+pcall(function()
+    local old = ParentTarget:FindFirstChild("KHUB_UI")
+    if old then old:Destroy() end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_UI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then
+    ScreenGui.Parent = player:WaitForChild("PlayerGui")
+end
+
+local WinUIScale = Instance.new("UIScale")
+WinUIScale.Parent = ScreenGui
+
+local function updateScale()
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+    local vx = cam.ViewportSize.X
+    local scale
+    if vx < 500 then scale = math.clamp(vx / 900, 0.55, 0.85)
+    elseif vx < 900 then scale = math.clamp(vx / 1100, 0.7, 0.95)
+    else scale = math.clamp(vx / 1350, 0.8, 1.15) end
+    WinUIScale.Scale = scale
+end
+pcall(function()
+    Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+end)
+updateScale()
+
+local function corner(p, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 10)
+    c.Parent = p
+    return c
+end
+
+local function mkstroke(p, col, th, tr)
+    local s = Instance.new("UIStroke")
+    s.Color = col or THEME.stroke
+    s.Thickness = th or 1.2
+    s.Transparency = tr or 0.3
+    s.Parent = p
+    return s
+end
+
+local HEADER_H = 72
+
+-- ============================================================
+-- WINDOW
+-- ============================================================
+local Win = Instance.new("Frame")
+Win.Name = "Window"
+Win.Size = UDim2.new(0, 660, 0, 500)
+Win.Position = UDim2.new(0.5, -330, 0.5, -250)
+Win.BackgroundColor3 = THEME.bg
+Win.BackgroundTransparency = 0.15
+Win.BorderSizePixel = 0
+Win.ClipsDescendants = true
+Win.Active = true
+Win.Parent = ScreenGui
+corner(Win, 14)
+mkstroke(Win, THEME.accent, 1.8, 0.22)
+
+local BlendOverlay = Instance.new("Frame")
+BlendOverlay.Size = UDim2.new(1, 0, 1, 0)
+BlendOverlay.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+BlendOverlay.BackgroundTransparency = 0.92
+BlendOverlay.BorderSizePixel = 0
+BlendOverlay.ZIndex = 0
+BlendOverlay.Parent = Win
+local blendGrad = Instance.new("UIGradient")
+blendGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(8, 6, 12)),
+    ColorSequenceKeypoint.new(0.45, Color3.fromRGB(14, 10, 22)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(28, 16, 48)),
+})
+blendGrad.Rotation = 90
+blendGrad.Parent = BlendOverlay
+
+-- ⭐ KHUB Watermark sa gitna
+local WMFrame = Instance.new("Frame")
+WMFrame.Name = "WMContainer"
+WMFrame.Size = UDim2.new(1, 0, 1, 0)
+WMFrame.BackgroundTransparency = 1
+WMFrame.ClipsDescendants = true
+WMFrame.ZIndex = 2
+WMFrame.Parent = Win
+
+local BGWatermark = Instance.new("TextLabel")
+BGWatermark.Name = "KHUB_Watermark"
+BGWatermark.Size = UDim2.new(1, 0, 1, 0)
+BGWatermark.Position = UDim2.new(0, 0, 0, 0)
+BGWatermark.BackgroundTransparency = 1
+BGWatermark.Text = "KHUB"
+BGWatermark.Font = Enum.Font.GothamBlack
+BGWatermark.TextSize = 150
+BGWatermark.TextColor3 = Color3.fromRGB(255, 255, 255)
+BGWatermark.TextTransparency = 0.82
+BGWatermark.TextXAlignment = Enum.TextXAlignment.Center
+BGWatermark.TextYAlignment = Enum.TextYAlignment.Center
+BGWatermark.ZIndex = 2
+BGWatermark.Parent = WMFrame
+
+local WMStroke = Instance.new("UIStroke")
+WMStroke.Color = THEME.accent
+WMStroke.Thickness = 3
+WMStroke.Transparency = 0.35
+WMStroke.Parent = BGWatermark
+
+local WMGrad = Instance.new("UIGradient")
+WMGrad.Offset = Vector2.new(-1, 0)
+WMGrad.Parent = BGWatermark
+
+task.spawn(function()
+    while BGWatermark.Parent do
+        local base   = Color3.fromRGB(70, 30, 160)
+        local bright = Color3.fromRGB(220, 70, 255)
+        local tip    = Color3.fromRGB(90, 210, 255)
+        WMGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, base),
+            ColorSequenceKeypoint.new(0.32, base),
+            ColorSequenceKeypoint.new(0.5, bright),
+            ColorSequenceKeypoint.new(0.68, tip),
+            ColorSequenceKeypoint.new(1, base),
+        })
+        WMGrad.Offset = Vector2.new(-1.2, 0)
+        TweenService:Create(WMGrad, TweenInfo.new(4.5, Enum.EasingStyle.Linear), {
+            Offset = Vector2.new(1.2, 0)
+        }):Play()
+        task.wait(4.7)
+    end
+end)
+
+-- Dragging
+local dragging, dragInput, dragStart, startPos
+Win.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = Win.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+Win.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        Win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- ============================================================
+-- HEADER
+-- ============================================================
+local HeaderBand = Instance.new("Frame")
+HeaderBand.Size = UDim2.new(1, 0, 0, HEADER_H)
+HeaderBand.Position = UDim2.new(0, 0, 0, 3)
+HeaderBand.BackgroundTransparency = 1
+HeaderBand.ZIndex = 10
+HeaderBand.Parent = Win
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(0, 380, 0, 40)
+TitleLabel.Position = UDim2.new(0, 16, 0, 10)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "KHUB  ·  Volleyball Legends"
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 18
+TitleLabel.TextColor3 = Color3.new(1, 1, 1)
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.ZIndex = 12
+TitleLabel.Parent = HeaderBand
+
+local TitleGrad = Instance.new("UIGradient")
+TitleGrad.Offset = Vector2.new(-1, 0)
+TitleGrad.Parent = TitleLabel
+
+task.spawn(function()
+    while TitleLabel.Parent do
+        local base   = Color3.fromRGB(100, 60, 200)
+        local bright = Color3.fromRGB(240, 110, 255)
+        local tip    = Color3.fromRGB(140, 230, 255)
+        TitleGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, base),
+            ColorSequenceKeypoint.new(0.3, base),
+            ColorSequenceKeypoint.new(0.5, bright),
+            ColorSequenceKeypoint.new(0.7, tip),
+            ColorSequenceKeypoint.new(1, base),
+        })
+        TitleGrad.Offset = Vector2.new(-1.15, 0)
+        TweenService:Create(TitleGrad, TweenInfo.new(3.8, Enum.EasingStyle.Linear), {
+            Offset = Vector2.new(1.15, 0)
+        }):Play()
+        task.wait(4.0)
+    end
+end)
+
+local SubLabel = Instance.new("TextLabel")
+SubLabel.Size = UDim2.new(0, 500, 0, 16)
+SubLabel.Position = UDim2.new(0, 16, 0, 46)
+SubLabel.BackgroundTransparency = 1
+SubLabel.Text = "Parasite Backend  ·  RightShift / K = toggle"
+SubLabel.Font = Enum.Font.Gotham
+SubLabel.TextSize = 11
+SubLabel.TextColor3 = THEME.dim
+SubLabel.TextXAlignment = Enum.TextXAlignment.Left
+SubLabel.ZIndex = 12
+SubLabel.Parent = HeaderBand
+
+-- ============================================================
+-- RAIL + MAIN
+-- ============================================================
+local Rail = Instance.new("Frame")
+Rail.Name = "Rail"
+Rail.Size = UDim2.new(0, 155, 1, -HEADER_H - 3)
+Rail.Position = UDim2.new(0, 0, 0, HEADER_H + 3)
+Rail.BackgroundColor3 = THEME.rail
+Rail.BackgroundTransparency = 0.12
+Rail.BorderSizePixel = 0
+Rail.ZIndex = 6
+Rail.ClipsDescendants = true
+Rail.Parent = Win
+
+local railPad = Instance.new("UIPadding")
+railPad.PaddingTop = UDim.new(0, 10)
+railPad.PaddingLeft = UDim.new(0, 6)
+railPad.PaddingRight = UDim.new(0, 6)
+railPad.Parent = Rail
+
+local railLay = Instance.new("UIListLayout")
+railLay.Padding = UDim.new(0, 6)
+railLay.SortOrder = Enum.SortOrder.LayoutOrder
+railLay.Parent = Rail
+
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(1, -155, 1, -HEADER_H - 3)
+Main.Position = UDim2.new(0, 155, 0, HEADER_H + 3)
+Main.BackgroundTransparency = 1
+Main.ClipsDescendants = true
+Main.ZIndex = 5
+Main.Parent = Win
+
+local Head = Instance.new("Frame")
+Head.Size = UDim2.new(1, 0, 0, 36)
+Head.BackgroundColor3 = THEME.rail
+Head.BackgroundTransparency = 0.15
+Head.BorderSizePixel = 0
+Head.ZIndex = 6
+Head.Parent = Main
+
+local PageTitle = Instance.new("TextLabel")
+PageTitle.Size = UDim2.new(1, -50, 0, 36)
+PageTitle.Position = UDim2.fromOffset(12, 0)
+PageTitle.BackgroundTransparency = 1
+PageTitle.Text = "Welcome & Profile"
+PageTitle.Font = Enum.Font.GothamBold
+PageTitle.TextSize = 13
+PageTitle.TextColor3 = THEME.accent
+PageTitle.TextXAlignment = Enum.TextXAlignment.Left
+PageTitle.ZIndex = 7
+PageTitle.Parent = Head
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.fromOffset(26, 22)
+MinBtn.Position = UDim2.new(1, -32, 0.5, -11)
+MinBtn.BackgroundColor3 = THEME.card
+MinBtn.BackgroundTransparency = 0.15
+MinBtn.Text = "–"
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 14
+MinBtn.TextColor3 = THEME.text
+MinBtn.ZIndex = 8
+MinBtn.Parent = Head
+corner(MinBtn, 6)
+mkstroke(MinBtn, THEME.stroke, 1, 0.3)
+
+-- ============================================================
+-- ICON SET
+-- ============================================================
+local ICON_IDS = {
+    Welcome  = "rbxassetid://140466936910510",  -- KHUB logo
+    Spike    = "rbxassetid://6023426926",       -- sword
+    Hitbox   = "rbxassetid://6034684930",       -- crosshair
+    Movement = "rbxassetid://6023564981",       -- running man
+    Visuals  = "rbxassetid://6031075931",       -- eye
+    Misc     = "rbxassetid://6035047409",       -- sparkle
+    Settings = "rbxassetid://6031280882",       -- gear
+}
+
+local FALLBACK_COLORS = {
+    Welcome  = Color3.fromRGB(210, 170, 255),
+    Spike    = Color3.fromRGB(255, 100, 100),
+    Hitbox   = Color3.fromRGB(255, 200, 80),
+    Movement = Color3.fromRGB(120, 220, 160),
+    Visuals  = Color3.fromRGB(120, 180, 255),
+    Misc     = Color3.fromRGB(210, 170, 255),
+    Settings = Color3.fromRGB(180, 180, 200),
+}
+
+-- ============================================================
+-- PAGES
+-- ============================================================
+local pages = {}
+local tabButtons = {}
+tabButtons.ActiveId = nil
+
+local function createPage(name)
+    local sf = Instance.new("ScrollingFrame")
+    sf.Name = name .. "Page"
+    sf.Size = UDim2.new(1, -10, 1, -44)
+    sf.Position = UDim2.new(0, 5, 0, 40)
+    sf.BackgroundTransparency = 1
+    sf.BorderSizePixel = 0
+    sf.ScrollBarThickness = 4
+    sf.ScrollBarImageColor3 = THEME.accent
+    sf.CanvasSize = UDim2.new(0, 0, 0, 0)
+    sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    sf.ZIndex = 6
+    sf.Visible = false
+    sf.Parent = Main
+
+    local lay = Instance.new("UIListLayout")
+    lay.Padding = UDim.new(0, 10)
+    lay.SortOrder = Enum.SortOrder.LayoutOrder
+    lay.Parent = sf
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 8)
+    pad.PaddingBottom = UDim.new(0, 16)
+    pad.PaddingLeft = UDim.new(0, 4)
+    pad.PaddingRight = UDim.new(0, 4)
+    pad.Parent = sf
+
+    pages[name] = sf
+    return sf
+end
+
+local function switchPage(name, title)
+    for k, p in pairs(pages) do p.Visible = (k == name) end
+    PageTitle.Text = title or name
+    tabButtons.ActiveId = name
+
+    for id, btn in pairs(tabButtons) do
+        if type(id) == "string" and not id:find("_") then
+            local active    = (id == name)
+            local iconFrame = tabButtons[id .. "_Frame"]
+            local glow      = tabButtons[id .. "_Glow"]
+            local bar       = tabButtons[id .. "_Bar"]
+            local lbl       = tabButtons[id .. "_Label"]
+            local icon      = tabButtons[id .. "_Icon"]
+            local stroke    = tabButtons[id .. "_Stroke"]
+
+            if active then
+                TweenService:Create(btn, TweenInfo.new(0.2), { BackgroundTransparency = 0.05 }):Play()
+                if iconFrame then TweenService:Create(iconFrame, TweenInfo.new(0.2), { BackgroundTransparency = 0 }):Play() end
+                if glow then TweenService:Create(glow, TweenInfo.new(0.3), { BackgroundTransparency = 0.55, Size = UDim2.fromOffset(34, 34), Position = UDim2.new(0, 3, 0.5, -17) }):Play() end
+                if bar then bar.Visible = true end
+                if lbl then lbl.TextColor3 = THEME.gold end
+                if icon then icon.ImageColor3 = Color3.fromRGB(255, 255, 255) end
+                if stroke then stroke.Color = THEME.gold; stroke.Transparency = 0.15 end
+            else
+                TweenService:Create(btn, TweenInfo.new(0.2), { BackgroundTransparency = 0.25 }):Play()
+                if iconFrame then TweenService:Create(iconFrame, TweenInfo.new(0.2), { BackgroundTransparency = 0.15 }):Play() end
+                if glow then TweenService:Create(glow, TweenInfo.new(0.25), { BackgroundTransparency = 0.85, Size = UDim2.fromOffset(28, 28), Position = UDim2.new(0, 6, 0.5, -14) }):Play() end
+                if bar then bar.Visible = false end
+                if lbl then lbl.TextColor3 = THEME.text end
+                if icon then icon.ImageColor3 = Color3.fromRGB(220, 200, 240) end
+                if stroke then stroke.Color = THEME.accent; stroke.Transparency = 0.45 end
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- TAB BUTTON
+-- ============================================================
+local function createTabButton(id, label, layoutOrder, title)
+    local b = Instance.new("TextButton")
+    b.Name = "Tab_" .. id
+    b.Size = UDim2.new(1, 0, 0, 40)
+    b.BackgroundColor3 = THEME.card
+    b.BackgroundTransparency = 0.25
+    b.Text = ""
+    b.AutoButtonColor = false
+    b.LayoutOrder = layoutOrder
+    b.ZIndex = 7
+    b.Parent = Rail
+    corner(b, 8)
+    local btnStroke = mkstroke(b, THEME.accent, 1, 0.45)
+
+    local iconFrame = Instance.new("Frame")
+    iconFrame.Name = "IconFrame"
+    iconFrame.Size = UDim2.fromOffset(26, 26)
+    iconFrame.Position = UDim2.new(0, 8, 0.5, -13)
+    iconFrame.BackgroundColor3 = Color3.fromRGB(30, 20, 48)
+    iconFrame.BackgroundTransparency = 0.15
+    iconFrame.BorderSizePixel = 0
+    iconFrame.ZIndex = 9
+    iconFrame.Parent = b
+    corner(iconFrame, 13)
+    mkstroke(iconFrame, THEME.accent, 1.2, 0.2)
+
+    local glow = Instance.new("Frame")
+    glow.Name = "Glow"
+    glow.Size = UDim2.fromOffset(30, 30)
+    glow.Position = UDim2.new(0, 6, 0.5, -15)
+    glow.BackgroundColor3 = THEME.accent
+    glow.BackgroundTransparency = 0.85
+    glow.BorderSizePixel = 0
+    glow.ZIndex = 8
+    glow.Parent = b
+    corner(glow, 15)
+
+    local fallbackDot = Instance.new("Frame")
+    fallbackDot.Name = "FallbackDot"
+    fallbackDot.Size = UDim2.fromOffset(10, 10)
+    fallbackDot.Position = UDim2.new(0.5, -5, 0.5, -5)
+    fallbackDot.BackgroundColor3 = FALLBACK_COLORS[id] or THEME.gold
+    fallbackDot.BorderSizePixel = 0
+    fallbackDot.Visible = false
+    fallbackDot.ZIndex = 11
+    fallbackDot.Parent = iconFrame
+    corner(fallbackDot, 5)
+
+    local icon = Instance.new("ImageLabel")
+    icon.Name = "Icon"
+    icon.Size = UDim2.new(1, -6, 1, -6)
+    icon.Position = UDim2.fromOffset(3, 3)
+    icon.BackgroundTransparency = 1
+    icon.Image = ICON_IDS[id] or ICON_IDS.Spike
+    icon.ScaleType = Enum.ScaleType.Fit
+    icon.ImageColor3 = Color3.fromRGB(220, 200, 240)
+    icon.ZIndex = 10
+    icon.Parent = iconFrame
+
+    task.spawn(function()
+        task.wait(1)
+        if not icon.IsLoaded then
+            fallbackDot.Visible = true
+            icon.Visible = false
+        else
+            icon:GetPropertyChangedSignal("IsLoaded"):Connect(function()
+                if not icon.IsLoaded then
+                    fallbackDot.Visible = true
+                    icon.Visible = false
+                end
+            end)
+        end
+    end)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Name = "Label"
+    lbl.Size = UDim2.new(1, -44, 1, 0)
+    lbl.Position = UDim2.fromOffset(40, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = label
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 12
+    lbl.TextColor3 = THEME.text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 9
+    lbl.Parent = b
+
+    local activeBar = Instance.new("Frame")
+    activeBar.Name = "ActiveBar"
+    activeBar.Size = UDim2.new(0, 3, 0.7, 0)
+    activeBar.Position = UDim2.new(0, 0, 0.15, 0)
+    activeBar.BackgroundColor3 = THEME.gold
+    activeBar.BorderSizePixel = 0
+    activeBar.ZIndex = 11
+    activeBar.Visible = false
+    activeBar.Parent = b
+    corner(activeBar, 2)
+
+    b.MouseEnter:Connect(function()
+        TweenService:Create(b, TweenInfo.new(0.15), { BackgroundTransparency = 0.1 }):Play()
+        TweenService:Create(iconFrame, TweenInfo.new(0.15), { BackgroundTransparency = 0 }):Play()
+        TweenService:Create(glow, TweenInfo.new(0.2), { BackgroundTransparency = 0.6, Size = UDim2.fromOffset(36, 36), Position = UDim2.new(0, 3, 0.5, -18) }):Play()
+    end)
+
+    b.MouseLeave:Connect(function()
+        if tabButtons.ActiveId ~= id then
+            TweenService:Create(b, TweenInfo.new(0.2), { BackgroundTransparency = 0.25 }):Play()
+            TweenService:Create(iconFrame, TweenInfo.new(0.2), { BackgroundTransparency = 0.15 }):Play()
+            TweenService:Create(glow, TweenInfo.new(0.25), { BackgroundTransparency = 0.85, Size = UDim2.fromOffset(30, 30), Position = UDim2.new(0, 6, 0.5, -15) }):Play()
+        end
+    end)
+
+    tabButtons[id]          = b
+    tabButtons[id .. "_Icon"]  = icon
+    tabButtons[id .. "_Fallback"] = fallbackDot
+    tabButtons[id .. "_Label"] = lbl
+    tabButtons[id .. "_Frame"] = iconFrame
+    tabButtons[id .. "_Glow"]  = glow
+    tabButtons[id .. "_Bar"]   = activeBar
+    tabButtons[id .. "_Stroke"] = btnStroke
+
+    b.MouseButton1Click:Connect(function() switchPage(id, title) end)
+    return b
+end
+
+-- ============================================================
+-- WIDGETS
+-- ============================================================
+local function card(parent, titleText)
+    local box = Instance.new("Frame")
+    box.Name = "Card"
+    box.Size = UDim2.new(1, 0, 0, 0)
+    box.AutomaticSize = Enum.AutomaticSize.Y
+    box.BackgroundColor3 = THEME.card
+    box.BackgroundTransparency = 0.18
+    box.BorderSizePixel = 0
+    box.ZIndex = 9
+    box.Parent = parent
+    corner(box, 9)
+    mkstroke(box, THEME.stroke, 1.2, 0.28)
+
+    local lay = Instance.new("UIListLayout")
+    lay.Padding = UDim.new(0, 8)
+    lay.SortOrder = Enum.SortOrder.LayoutOrder
+    lay.Parent = box
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 12)
+    pad.PaddingBottom = UDim.new(0, 12)
+    pad.PaddingLeft = UDim.new(0, 14)
+    pad.PaddingRight = UDim.new(0, 14)
+    pad.Parent = box
+
+    if titleText then
+        local h = Instance.new("TextLabel")
+        h.Size = UDim2.new(1, 0, 0, 22)
+        h.BackgroundTransparency = 1
+        h.Text = titleText
+        h.Font = Enum.Font.GothamBold
+        h.TextSize = 13
+        h.TextColor3 = THEME.gold
+        h.TextXAlignment = Enum.TextXAlignment.Left
+        h.ZIndex = 18
+        h.LayoutOrder = 0
+        h.Parent = box
+    end
+    return box
+end
+
+local function line(parent, text, color)
+    local l = Instance.new("TextLabel")
+    l.Name = "Line"
+    l.Size = UDim2.new(1, 0, 0, 20)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.Font = Enum.Font.Gotham
+    l.TextSize = 11
+    l.TextColor3 = color or THEME.dim
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.TextWrapped = true
+    l.AutomaticSize = Enum.AutomaticSize.Y
+    l.ZIndex = 18
+    l.Parent = parent
+    return l
+end
+
+local function btn(parent, text, callback, color)
+    local b = Instance.new("TextButton")
+    b.Name = "Button"
+    b.Size = UDim2.new(1, 0, 0, 32)
+    b.BackgroundColor3 = color or Color3.fromRGB(40, 28, 60)
+    b.Text = text
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 12
+    b.TextColor3 = THEME.text
+    b.ZIndex = 17
+    b.Parent = parent
+    corner(b, 7)
+    mkstroke(b, THEME.accent, 1.1, 0.45)
+    b.MouseButton1Click:Connect(function() if callback then pcall(callback) end end)
+    return b
+end
+
+local function toggle(parent, labelText, default, callback)
+    local row = Instance.new("Frame")
+    row.Name = "Toggle"
+    row.Size = UDim2.new(1, 0, 0, 28)
+    row.BackgroundTransparency = 1
+    row.ZIndex = 17
+    row.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0.75, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 12
+    lbl.TextColor3 = THEME.text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 18
+    lbl.Parent = row
+
+    local state = default and true or false
+    local sw = Instance.new("TextButton")
+    sw.Size = UDim2.fromOffset(42, 22)
+    sw.Position = UDim2.new(1, -42, 0.5, -11)
+    sw.BackgroundColor3 = state and THEME.accent or Color3.fromRGB(50, 30, 70)
+    sw.Text = ""
+    sw.AutoButtonColor = false
+    sw.ZIndex = 18
+    sw.Parent = row
+    corner(sw, 11)
+    mkstroke(sw, THEME.accent, 1, 0.4)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(16, 16)
+    knob.Position = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
+    knob.BackgroundColor3 = Color3.fromRGB(235, 225, 250)
+    knob.ZIndex = 19
+    knob.Parent = sw
+    corner(knob, 8)
+
+    sw.MouseButton1Click:Connect(function()
+        state = not state
+        sw.BackgroundColor3 = state and THEME.accent or Color3.fromRGB(50, 30, 70)
+        TweenService:Create(knob, TweenInfo.new(0.15, Enum.EasingStyle.Quad),
+            { Position = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8) }):Play()
+        if callback then pcall(callback, state) end
+    end)
+    return sw
+end
+
+local function slider(parent, labelText, min, max, default, callback, isInt)
+    local row = Instance.new("Frame")
+    row.Name = "Slider"
+    row.Size = UDim2.new(1, 0, 0, 42)
+    row.BackgroundTransparency = 1
+    row.ZIndex = 17
+    row.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0.7, 0, 0, 16)
+    lbl.Position = UDim2.new(0, 0, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 11
+    lbl.TextColor3 = THEME.text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 18
+    lbl.Parent = row
+
+    local function fmt(v)
+        if isInt then return tostring(math.floor(v + 0.5)) end
+        return (string.format("%.2f", v):gsub("%.?0+$", ""))
+    end
+
+    local val = Instance.new("TextLabel")
+    val.Size = UDim2.new(0.3, 0, 0, 16)
+    val.Position = UDim2.new(0.7, 0, 0, 0)
+    val.BackgroundTransparency = 1
+    val.Text = fmt(default)
+    val.Font = Enum.Font.Code
+    val.TextSize = 11
+    val.TextColor3 = THEME.gold
+    val.TextXAlignment = Enum.TextXAlignment.Right
+    val.ZIndex = 18
+    val.Parent = row
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, 0, 0, 7)
+    bar.Position = UDim2.new(0, 0, 0, 24)
+    bar.BackgroundColor3 = Color3.fromRGB(45, 30, 65)
+    bar.ZIndex = 18
+    bar.Parent = row
+    corner(bar, 4)
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    fill.BackgroundColor3 = THEME.accent
+    fill.ZIndex = 19
+    fill.Parent = bar
+    corner(fill, 4)
+
+    local dragging = false
+    local function setFromX(x)
+        local rel = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+        local v = min + (max - min) * rel
+        if isInt then v = math.floor(v + 0.5) end
+        fill.Size = UDim2.new(rel, 0, 1, 0)
+        val.Text = fmt(v)
+        if callback then pcall(callback, v) end
+    end
+
+    bar.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; setFromX(i.Position.X)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            setFromX(i.Position.X)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    return bar
+end
+
+local function dropdown(parent, labelText, options, default, callback)
+    local row = Instance.new("Frame")
+    row.Name = "Dropdown"
+    row.Size = UDim2.new(1, 0, 0, 48)
+    row.BackgroundTransparency = 1
+    row.ZIndex = 17
+    row.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 0, 16)
+    lbl.Position = UDim2.new(0, 0, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 11
+    lbl.TextColor3 = THEME.text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 18
+    lbl.Parent = row
+
+    local current = default or options[1]
+    local btnSel = Instance.new("TextButton")
+    btnSel.Size = UDim2.new(1, 0, 0, 24)
+    btnSel.Position = UDim2.new(0, 0, 0, 20)
+    btnSel.BackgroundColor3 = Color3.fromRGB(18, 12, 28)
+    btnSel.BackgroundTransparency = 0.15
+    btnSel.Text = tostring(current)
+    btnSel.Font = Enum.Font.Gotham
+    btnSel.TextSize = 11
+    btnSel.TextColor3 = THEME.gold
+    btnSel.ZIndex = 60
+    btnSel.Parent = row
+    corner(btnSel, 5)
+    mkstroke(btnSel, THEME.stroke, 1, 0.5)
+
+    local list = Instance.new("Frame")
+    list.Size = UDim2.new(1, 0, 0, math.min(#options, 6) * 22 + 6)
+    list.Position = UDim2.new(0, 0, 1, 2)
+    list.BackgroundColor3 = Color3.fromRGB(20, 14, 30)
+    list.Visible = false
+    list.ZIndex = 61
+    list.Parent = row
+    corner(list, 6)
+    mkstroke(list, THEME.accent, 1, 0.4)
+
+    local listLay = Instance.new("UIListLayout")
+    listLay.Padding = UDim.new(0, 2)
+    listLay.Parent = list
+    local listPad = Instance.new("UIPadding")
+    listPad.PaddingTop = UDim.new(0, 3)
+    listPad.PaddingLeft = UDim.new(0, 4)
+    listPad.PaddingRight = UDim.new(0, 4)
+    listPad.Parent = list
+
+    for _, opt in ipairs(options) do
+        local o = Instance.new("TextButton")
+        o.Size = UDim2.new(1, 0, 0, 20)
+        o.BackgroundTransparency = 1
+        o.Text = tostring(opt)
+        o.Font = Enum.Font.Gotham
+        o.TextSize = 11
+        o.TextColor3 = THEME.text
+        o.ZIndex = 62
+        o.Parent = list
+        o.MouseButton1Click:Connect(function()
+            current = opt
+            btnSel.Text = tostring(opt)
+            list.Visible = false
+            if callback then pcall(callback, opt) end
+        end)
+    end
+
+    btnSel.MouseButton1Click:Connect(function()
+        list.Visible = not list.Visible
+    end)
+    return btnSel
+end
+
+local function input(parent, labelText, default, callback, isNumeric)
+    local row = Instance.new("Frame")
+    row.Name = "Input"
+    row.Size = UDim2.new(1, 0, 0, 46)
+    row.BackgroundTransparency = 1
+    row.ZIndex = 17
+    row.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 0, 16)
+    lbl.Position = UDim2.new(0, 0, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 11
+    lbl.TextColor3 = THEME.text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 18
+    lbl.Parent = row
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(1, 0, 0, 24)
+    box.Position = UDim2.new(0, 0, 0, 20)
+    box.BackgroundColor3 = Color3.fromRGB(18, 12, 28)
+    box.BackgroundTransparency = 0.15
+    box.Text = tostring(default or "")
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 11
+    box.TextColor3 = THEME.gold
+    box.PlaceholderText = "..."
+    box.PlaceholderColor3 = THEME.dim
+    box.ClearTextOnFocus = false
+    box.ZIndex = 18
+    box.Parent = row
+    corner(box, 5)
+    mkstroke(box, THEME.stroke, 1, 0.5)
+
+    box.FocusLost:Connect(function()
+        if callback then
+            if isNumeric then pcall(callback, tonumber(box.Text))
+            else pcall(callback, box.Text) end
+        end
+    end)
+    return box
+end
+
+-- ============================================================
+-- FEATURE LOGIC
+-- ============================================================
+local function getBallPart(ball)
+    for _, d in ipairs(ball:GetDescendants()) do
+        if d:IsA("BasePart") then return d end
+    end
+    return nil
+end
+
+local function updateHitboxes()
+    if not State.hitboxEnabled then return end
+    for _, child in ipairs(Workspace:GetChildren()) do
+        if child:IsA("Model") and child.Name:match("^CLIENT_BALL_%d+$") then
+            local hb = child:FindFirstChild("PARASITE.BALL")
+            local base = getBallPart(child)
+            if not hb and base then
+                local part = Instance.new("Part")
+                part.Name = "PARASITE.BALL"
+                part.Shape = Enum.PartType.Ball
+                part.Size = Vector3.new(2, 2, 2) * State.hitboxScale
+                part.CFrame = base.CFrame
+                part.Anchored = true
+                part.CanCollide = false
+                part.Transparency = State.hitboxTransparency
+                part.Material = Enum.Material.ForceField
+                part.Color = State.hitboxColor
+                part.Parent = child
+            elseif hb then
+                hb.Size = Vector3.new(2, 2, 2) * State.hitboxScale
+                hb.Color = State.hitboxColor
+                hb.Transparency = State.hitboxTransparency
+            end
+        end
+    end
+end
+
+local function clearHitboxes()
+    for _, child in ipairs(Workspace:GetChildren()) do
+        if child:IsA("Model") and child.Name:match("^CLIENT_BALL_%d+$") then
+            local hb = child:FindFirstChild("PARASITE.BALL")
+            if hb then hb:Destroy() end
+        end
+    end
+end
+
+local function setHitboxColor(name)
+    local map = {
+        Invisible = {Color3.fromRGB(255,255,255), 1},
+        White     = {Color3.fromRGB(255,255,255), 0.3},
+        Green     = {Color3.fromRGB(0,255,0),     0.3},
+        Blue      = {Color3.fromRGB(0,0,255),     0.3},
+        Red       = {Color3.fromRGB(255,0,0),     0.3},
+        Yellow    = {Color3.fromRGB(255,255,0),   0.3},
+        Purple    = {Color3.fromRGB(128,0,128),   0.3},
+        Orange    = {Color3.fromRGB(255,165,0),   0.3},
+        Pink      = {Color3.fromRGB(255,105,180), 0.3},
+    }
+    local e = map[name]
+    if e then
+        State.hitboxColor = e[1]
+        State.hitboxTransparency = e[2]
+        if State.hitboxEnabled then updateHitboxes() end
+    end
+end
+
+local ballService = ReplicatedStorage.Packages
+    and ReplicatedStorage.Packages._Index
+    and ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"]
+    and ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit
+    and ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit.Services
+    and ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit.Services.BallService
+
+local function installSpikeHooks()
+    if not ballService then return end
+    if State._spikeHooked then return end
+    State._spikeHooked = true
+
+    local meta = getrawmetatable and getrawmetatable(game)
+    if not meta then return end
+    local orig = meta.__namecall
+    if setreadonly then setreadonly(meta, false) end
+
+    meta.__namecall = function(self, ...)
+        local method = getnamecallmethod and getnamecallmethod()
+        local args = {...}
+        if self == ballService.RF.Interact and method == "InvokeServer" then
+            local a1 = args[1]
+            if type(a1) == "table" then
+                if State.redirectSpike and a1.Move == "Spike" then
+                    local look = Workspace.CurrentCamera.CFrame.LookVector
+                    a1.LookVector = look
+                    a1.Direction = look
+                    if a1.MoveDirection then a1.MoveDirection = look end
+                end
+                if State.sanjuTilt and a1.Move == "Spike" then
+                    if a1.TiltDirection and a1.LookVector then
+                        local td = a1.TiltDirection
+                        if math.abs(td.X) > 0.01 or math.abs(td.Z) > 0.01 then
+                            local lv = a1.LookVector
+                            local v = Vector3.new(td.X, 0, td.Z)
+                            a1.LookVector = Vector3.new(lv.X + v.X * 0.3, lv.Y, lv.Z + v.Z * 0.3).Unit
+                            a1.TiltDirection = Vector3.new(td.X * 1.35, td.Y, td.Z * 1.35)
+                        end
+                    end
+                end
+                if State.maxCharge and a1.Move == "Spike" then
+                    a1.Charge = 1
+                    a1.SpecialCharge = 1
+                end
+            end
+            return orig(self, a1)
+        end
+        return orig(self, ...)
+    end
+    if setreadonly then setreadonly(meta, true) end
+end
+
+local function doSilentSpike()
+    if not State.silentSpike then return end
+    local ball = nil
+    for _, c in ipairs(Workspace:GetChildren()) do
+        if c.Name:match("^CLIENT_BALL_") then ball = c break end
+    end
+    if not ball then return end
+    local look = Workspace.CurrentCamera.CFrame.LookVector
+    pcall(function()
+        ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit.Services
+            .BallService.RE.DoMove:FireServer("Spike", false, false, look)
+    end)
+end
+
+local function enableProtection()
+    State.protection = true
+    pcall(function()
+        if _G.PARASITE then _G.PARASITE.Enable() end
+    end)
+    task.spawn(function()
+        while State.protection do
+            task.wait(1)
+            pcall(function()
+                player:SetAttribute("User_Title", "<font color='#FF0000'><b>Pro</b></font>")
+            end)
+        end
+    end)
+end
+
+local function disableProtection()
+    State.protection = false
+    pcall(function()
+        if _G.PARASITE then _G.PARASITE.Disable() end
+    end)
+end
+
+local markerFolder = nil
+local function getMarkerFolder()
+    if markerFolder and markerFolder.Parent then return markerFolder end
+    markerFolder = Instance.new("Folder")
+    markerFolder.Name = "KHUB_BallMarkers"
+    markerFolder.Parent = Workspace
+    return markerFolder
+end
+
+task.spawn(function()
+    while task.wait(0.05) do
+        if not State.ballMarker then
+            if markerFolder then
+                for _, c in ipairs(markerFolder:GetChildren()) do c:Destroy() end
+            end
+            continue
+        end
+        local f = getMarkerFolder()
+        for _, c in ipairs(f:GetChildren()) do c:Destroy() end
+        local ball = nil
+        for _, c in ipairs(Workspace:GetChildren()) do
+            if c.Name:match("^CLIENT_BALL_") then ball = c break end
+        end
+        if ball then
+            local bp = ball.PrimaryPart or ball:FindFirstChildWhichIsA("BasePart")
+            if bp then
+                local predictPos = bp.Position + Vector3.new(0, -2, 0)
+                local mk = Instance.new("Part")
+                mk.Shape = Enum.PartType.Cylinder
+                mk.Size = Vector3.new(0.2, 6, 6)
+                mk.Anchored = true
+                mk.CanCollide = false
+                mk.Material = Enum.Material.Neon
+                mk.Color = Color3.fromRGB(60, 220, 90)
+                mk.Transparency = 0.4
+                mk.CFrame = CFrame.new(predictPos) * CFrame.Angles(0, 0, math.rad(90))
+                mk.Parent = f
+            end
+        end
+    end
+end)
+
+local antiLagActive = false
+local function enableAntiLag()
+    if antiLagActive then return end
+    antiLagActive = true
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
+    pcall(function()
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 1e6
+        for _, c in ipairs(Lighting:GetChildren()) do
+            if c:IsA("PostEffect") then c.Enabled = false end
+            if c:IsA("Atmosphere") then c.Density = 0 end
+        end
+    end)
+end
+
+local function disableAntiLag()
+    antiLagActive = false
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+    end)
+end
+
+local bodyVel
+task.spawn(function()
+    while task.wait(0.1) do
+        local char = player.Character
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+        if not State.airMove or not hum or not hrp then
+            if bodyVel then bodyVel:Destroy() bodyVel = nil end
+            continue
+        end
+        if not bodyVel or bodyVel.Parent ~= hrp then
+            if bodyVel then bodyVel:Destroy() end
+            bodyVel = Instance.new("BodyVelocity")
+            bodyVel.MaxForce = Vector3.zero
+            bodyVel.Velocity = Vector3.zero
+            bodyVel.P = 12500
+            bodyVel.Parent = hrp
+        end
+        if hum.FloorMaterial == Enum.Material.Air and hum.MoveDirection.Magnitude > 0 then
+            bodyVel.MaxForce = Vector3.new(math.huge, 0, math.huge)
+            bodyVel.Velocity = hum.MoveDirection.Unit * Config.AirSpeed
+        else
+            bodyVel.MaxForce = Vector3.zero
+            bodyVel.Velocity = Vector3.zero
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(0.2) do
+        if State.hitboxEnabled then updateHitboxes() end
+    end
+end)
+
+-- ============================================================
+-- BUILD PAGES
+-- ============================================================
+
+-- ─── ⭐ WELCOME (NEW — first tab) ──────────────────────────
+local PageWelcome = createPage("Welcome")
+createTabButton("Welcome", "Welcome", 1, "Welcome & Profile")
+
+-- Welcome card
+local WelcomeCard = card(PageWelcome, "Welcome to KHUB")
+line(WelcomeCard, "Volleyball Legends  ·  Parasite Backend", THEME.dim)
+line(WelcomeCard, "Built by Kyiel & Arin", THEME.gold)
+
+-- Profile card
+local ProfileCard = card(PageWelcome, "Profile")
+
+local ProfileFrame = Instance.new("Frame")
+ProfileFrame.Size = UDim2.new(1, 0, 0, 100)
+ProfileFrame.BackgroundColor3 = Color3.fromRGB(14, 10, 20)
+ProfileFrame.BackgroundTransparency = 0.2
+ProfileFrame.BorderSizePixel = 0
+ProfileFrame.ZIndex = 10
+ProfileFrame.Parent = ProfileCard
+corner(ProfileFrame, 8)
+mkstroke(ProfileFrame, THEME.stroke, 1, 0.35)
+
+local AvatarImg = Instance.new("ImageLabel")
+AvatarImg.Size = UDim2.fromOffset(72, 72)
+AvatarImg.Position = UDim2.new(0, 12, 0.5, -36)
+AvatarImg.BackgroundColor3 = Color3.fromRGB(40, 28, 60)
+AvatarImg.BackgroundTransparency = 0.2
+AvatarImg.ZIndex = 11
+AvatarImg.Parent = ProfileFrame
+corner(AvatarImg, 36)
+mkstroke(AvatarImg, THEME.accent, 1.5, 0.3)
+
+pcall(function()
+    local content, isReady = Players:GetUserThumbnailAsync(
+        player.UserId,
+        Enum.ThumbnailType.HeadShot,
+        Enum.ThumbnailSize.Size150x150
+    )
+    if isReady then AvatarImg.Image = content end
+end)
+
+local ProfileName = Instance.new("TextLabel")
+ProfileName.Size = UDim2.new(1, -100, 0, 22)
+ProfileName.Position = UDim2.new(0, 96, 0, 18)
+ProfileName.BackgroundTransparency = 1
+ProfileName.Text = "User: " .. player.DisplayName
+ProfileName.Font = Enum.Font.GothamBold
+ProfileName.TextSize = 14
+ProfileName.TextColor3 = THEME.gold
+ProfileName.TextXAlignment = Enum.TextXAlignment.Left
+ProfileName.ZIndex = 11
+ProfileName.Parent = ProfileFrame
+
+local ProfileUser = Instance.new("TextLabel")
+ProfileUser.Size = UDim2.new(1, -100, 0, 18)
+ProfileUser.Position = UDim2.new(0, 96, 0, 42)
+ProfileUser.BackgroundTransparency = 1
+ProfileUser.Text = "@" .. player.Name
+ProfileUser.Font = Enum.Font.Gotham
+ProfileUser.TextSize = 11
+ProfileUser.TextColor3 = THEME.dim
+ProfileUser.TextXAlignment = Enum.TextXAlignment.Left
+ProfileUser.ZIndex = 11
+ProfileUser.Parent = ProfileFrame
+
+local ProfileId = Instance.new("TextLabel")
+ProfileId.Size = UDim2.new(1, -100, 0, 18)
+ProfileId.Position = UDim2.new(0, 96, 0, 62)
+ProfileId.BackgroundTransparency = 1
+ProfileId.Text = "ID: " .. tostring(player.UserId)
+ProfileId.Font = Enum.Font.Code
+ProfileId.TextSize = 11
+ProfileId.TextColor3 = THEME.dim
+ProfileId.TextXAlignment = Enum.TextXAlignment.Left
+ProfileId.ZIndex = 11
+ProfileId.Parent = ProfileFrame
+
+-- Info card
+local InfoCard = card(PageWelcome, "Info")
+line(InfoCard, "Toggle UI: RightShift / RightCtrl / K", THEME.text)
+line(InfoCard, "Discord: " .. DISCORD, THEME.dim)
+line(InfoCard, "Backend: Parasite Hub (Knit)", THEME.dim)
+
+-- Credits card
+local CreditsCard = card(PageWelcome, "Credits")
+btn(CreditsCard, "Copy Discord Invite", function()
+    if setclipboard then setclipboard(DISCORD) end
+    print("[KHUB] Discord copied")
+end)
+btn(CreditsCard, "Copy UI Info", function()
+    if setclipboard then
+        setclipboard("KHUB UI · Volleyball Legends · by Kyiel & Arin")
+    end
+    print("[KHUB] Info copied")
+end)
+
+-- ─── SPIKE ─────────────────────────────────────────────────
+local PageSpike = createPage("Spike")
+createTabButton("Spike", "Spike Settings", 2, "Spike Settings")
+
+local SpikeCard1 = card(PageSpike, "Spike Settings")
+toggle(SpikeCard1, "Redirect Spike", Config.RedirectSpike, function(v)
+    Config.RedirectSpike = v
+    State.redirectSpike = v
+    installSpikeHooks()
+end)
+toggle(SpikeCard1, "Auto Corner", Config.AutoCorner, function(v)
+    Config.AutoCorner = v
+    State.autoCorner = v
+end)
+dropdown(SpikeCard1, "Corner Side", {"Auto", "Left", "Right"}, Config.AutoCornerSide, function(v)
+    Config.AutoCornerSide = v
+end)
+dropdown(SpikeCard1, "Corner Depth", {"All", "Back", "Nearest"}, Config.AutoCornerReach, function(v)
+    Config.AutoCornerReach = v
+end)
+toggle(SpikeCard1, "Silent Spike [R]", Config.SilentSpike, function(v)
+    Config.SilentSpike = v
+    State.silentSpike = v
+end)
+toggle(SpikeCard1, "Sanju Tilt", Config.SanjuTilt, function(v)
+    Config.SanjuTilt = v
+    State.sanjuTilt = v
+    installSpikeHooks()
+end)
+toggle(SpikeCard1, "Max Charge Special", Config.MaxCharge, function(v)
+    Config.MaxCharge = v
+    State.maxCharge = v
+    installSpikeHooks()
+end)
+toggle(SpikeCard1, "Fake Spike", Config.FakeSpike, function(v) Config.FakeSpike = v end)
+
+local SpikeCard2 = card(PageSpike, "Auto Counter")
+toggle(SpikeCard2, "Auto Counter [N]", Config.AutoCounter, function(v)
+    Config.AutoCounter = v
+    State.autoCounter = v
+end)
+dropdown(SpikeCard2, "Counter Move", {"Auto", "Block", "Spike"}, Config.AutoCounterMove, function(v)
+    Config.AutoCounterMove = v
+end)
+slider(SpikeCard2, "Counter Net Range", 3, 20, Config.AutoCounterNetRange, function(v)
+    Config.AutoCounterNetRange = v
+end, true)
+slider(SpikeCard2, "Counter Width", 4, 30, Config.AutoCounterLateral, function(v)
+    Config.AutoCounterLateral = v
+end, true)
+slider(SpikeCard2, "Counter Delay", 0, 0.5, Config.AutoCounterDelay, function(v)
+    Config.AutoCounterDelay = v
+end)
+
+-- ─── HITBOX ────────────────────────────────────────────────
+local PageHitbox = createPage("Hitbox")
+createTabButton("Hitbox", "Hitbox", 3, "Hitbox Settings")
+
+local HbCard = card(PageHitbox, "Hitbox Settings")
+toggle(HbCard, "Enable Hitbox", Config.HitboxEnable, function(v)
+    State.hitboxEnabled = v
+    if v then updateHitboxes() else clearHitboxes() end
+end)
+slider(HbCard, "Hitbox Size (studs)", 0, 20, Config.HitboxSize, function(v)
+    State.hitboxScale = v
+    if State.hitboxEnabled then updateHitboxes() end
+end, true)
+dropdown(HbCard, "Hitbox Color",
+    {"Invisible","White","Green","Blue","Red","Yellow","Purple","Orange","Pink"},
+    Config.HitboxColor,
+    function(v) setHitboxColor(v) end)
+btn(HbCard, "Remove Hitboxes", function() clearHitboxes() end)
+btn(HbCard, "Show Stop Ball", function()
+    State.stopBallVisible = not State.stopBallVisible
+    print("[KHUB] Stop Ball:", State.stopBallVisible)
+end)
+btn(HbCard, "Show Aim", function()
+    State.aimVisible = not State.aimVisible
+    print("[KHUB] Aim indicator:", State.aimVisible)
+end)
+
+local PerfCard = card(PageHitbox, "Performance")
+toggle(PerfCard, "Anti-Lag", Config.AntiLag, function(v)
+    Config.AntiLag = v
+    if v then enableAntiLag() else disableAntiLag() end
+end)
+
+-- ─── MOVEMENT ──────────────────────────────────────────────
+local PageMovement = createPage("Movement")
+createTabButton("Movement", "Movement", 4, "Movement & Attributes")
+
+local MoveCard = card(PageMovement, "Movement")
+toggle(MoveCard, "Desync", Config.Desync, function(v) Config.Desync = v end)
+toggle(MoveCard, "Auto Receive [X]", Config.AutoReceive, function(v) Config.AutoReceive = v end)
+slider(MoveCard, "Receive Range", 3, 20, Config.AutoReceiveRange, function(v) Config.AutoReceiveRange = v end, true)
+slider(MoveCard, "Receive Lead", 0, 1, Config.AutoReceiveLead, function(v) Config.AutoReceiveLead = v end)
+toggle(MoveCard, "Kisuki Dive", Config.KisukiDive, function(v) Config.KisukiDive = v end)
+slider(MoveCard, "Dive Charge", 0, 1, Config.KisukiCharge, function(v) Config.KisukiCharge = v end)
+toggle(MoveCard, "Akari Dash [F]", Config.AkariDash, function(v)
+    Config.AkariDash = v
+    State.akariDash = v
+end)
+toggle(MoveCard, "Lead Feet [G]", Config.LeadFeet, function(v)
+    Config.LeadFeet = v
+    State.leadFeet = v
+end)
+toggle(MoveCard, "Max Serve", Config.MaxServe, function(v)
+    Config.MaxServe = v
+    State.maxServe = v
+end)
+toggle(MoveCard, "Jump ESP", Config.JumpESP, function(v)
+    Config.JumpESP = v
+    State.jumpESP = v
+end)
+
+local AttrCard = card(PageMovement, "Attributes")
+input(AttrCard, "Dive Speed (e.g. 0.95)", "", function(v)
+    if v then player:SetAttribute("Multiplier_DiveSpeed", v) end
+end, true)
+input(AttrCard, "Jump Power (e.g. 1.1)", "", function(v)
+    if v then player:SetAttribute("Multiplier_JumpPower", v) end
+end, true)
+input(AttrCard, "Speed (e.g. 0.85)", "", function(v)
+    if v then player:SetAttribute("Multiplier_Speed", v) end
+end, true)
+
+local CharCard = card(PageMovement, "Character")
+toggle(CharCard, "Air Movement", Config.AirMove, function(v) State.airMove = v end)
+slider(CharCard, "Air Speed", 0, 100, Config.AirSpeed, function(v) Config.AirSpeed = v end, true)
+toggle(CharCard, "Auto Shift Lock", Config.AutoShiftLock, function(v) State.autoShiftLock = v end)
+
+-- ─── VISUALS ───────────────────────────────────────────────
+local PageVisuals = createPage("Visuals")
+createTabButton("Visuals", "Visuals", 5, "Visuals & Protection")
+
+local VisCard1 = card(PageVisuals, "Ball Prediction")
+toggle(VisCard1, "Landing Marker", Config.BallMarker, function(v)
+    Config.BallMarker = v
+    State.ballMarker = v
+end)
+
+local VisCard2 = card(PageVisuals, "Score Effect")
+toggle(VisCard2, "ScoreEffect Changer", Config.ScoreEffectEnabled, function(v)
+    Config.ScoreEffectEnabled = v
+    State.scoreEffect = v
+end)
+dropdown(VisCard2, "Select Effect",
+    {"SupernovaScoreEffect","GroundHit1","GroundHit2"},
+    Config.ScoreEffectName,
+    function(v) Config.ScoreEffectName = v end)
+toggle(VisCard2, "Random Effect", Config.RandomEffect, function(v) Config.RandomEffect = v end)
+
+local VisCard3 = card(PageVisuals, "Player Card")
+toggle(VisCard3, "PlayerCard Changer", Config.PlayerCardEnabled, function(v)
+    Config.PlayerCardEnabled = v
+    State.playerCard = v
+end)
+dropdown(VisCard3, "Select Card",
+    {"ContentCreatorPlayerCard","UltimateChampionPlayerCard","ProPlayerCard"},
+    Config.PlayerCardName,
+    function(v) Config.PlayerCardName = v end)
+toggle(VisCard3, "Random Card", Config.RandomCard, function(v) Config.RandomCard = v end)
+
+local VisCard4 = card(PageVisuals, "Ball & Jersey")
+toggle(VisCard4, "Ball Changer", Config.BallSkinEnabled, function(v)
+    Config.BallSkinEnabled = v
+    State.ballSkin = v
+end)
+dropdown(VisCard4, "Select Ball",
+    {"ClassicBall","ExtremeBall","MediumBall"},
+    Config.BallSkinName,
+    function(v) Config.BallSkinName = v end)
+toggle(VisCard4, "Auto Apply Ball", Config.AutoApplyBall, function(v) Config.AutoApplyBall = v end)
+toggle(VisCard4, "Jersey Changer", Config.JerseyEnabled, function(v)
+    Config.JerseyEnabled = v
+    State.jersey = v
+end)
+dropdown(VisCard4, "Select Jersey",
+    {"DragonTuxedoJersey","ClassicJersey"},
+    Config.JerseyName,
+    function(v) Config.JerseyName = v end)
+toggle(VisCard4, "Auto Apply Jersey", Config.AutoApplyJersey, function(v) Config.AutoApplyJersey = v end)
+
+local VisCard5 = card(PageVisuals, "Protection")
+toggle(VisCard5, "Protect", Config.Protection, function(v)
+    Config.Protection = v
+    if v then enableProtection() else disableProtection() end
+end)
+toggle(VisCard5, "TSH Animation", Config.TSHAnimation, function(v) Config.TSHAnimation = v end)
+toggle(VisCard5, "Hidari Animation", Config.HidariAnimation, function(v) Config.HidariAnimation = v end)
+toggle(VisCard5, "Kazana Blue Jump", Config.KazanaBlueJump, function(v)
+    Config.KazanaBlueJump = v
+    State.kazanaBlue = v
+end)
+toggle(VisCard5, "Kazana White Jump", Config.KazanaWhiteJump, function(v)
+    Config.KazanaWhiteJump = v
+    State.kazanaWhite = v
+end)
+
+-- ─── MISC ──────────────────────────────────────────────────
+local PageMisc = createPage("Misc")
+createTabButton("Misc", "Misc", 6, "Misc & Rewards")
+
+local MiscCard1 = card(PageMisc, "Auto Style Spin")
+toggle(MiscCard1, "Auto Style Spin", Config.AutoStyle, function(v)
+    Config.AutoStyle = v
+    State.autoStyle = v
+end)
+dropdown(MiscCard1, "Spin Type", {"Normal","Lucky"}, Config.SpinType, function(v)
+    Config.SpinType = v
+end)
+input(MiscCard1, "Target Style", "", function(v) Config.TargetStyle = v end)
+dropdown(MiscCard1, "Style List (auto-fill)",
+    {"Ronin","Hidari","Jinko","Timeskip Hinto","Timeskip Kyamo","Akuto","Taichou","Sanju",
+     "Mikage","Kazana","Timeskip Okazu","Kisuki","Bakuri","Kyamo","Okazu","Hirakumi",
+     "Kozai","Azmei","Uchikai","Yokai","Yogan","Sazuroku","Kyoshin","Yomosuke","Oyatsu"},
+    "Ronin",
+    function(v) Config.TargetStyle = v end)
+
+local MiscCard2 = card(PageMisc, "Auto Ability Spin")
+toggle(MiscCard2, "Auto Ability Spin", Config.AutoAbilitySpin, function(v)
+    Config.AutoAbilitySpin = v
+    State.autoAbility = v
+end)
+dropdown(MiscCard2, "Spin Type", {"Normal","Lucky"}, Config.AbilitySpinType, function(v)
+    Config.AbilitySpinType = v
+end)
+input(MiscCard2, "Target Ability", "", function(v) Config.TargetAbility = v end)
+dropdown(MiscCard2, "Ability List (auto-fill)",
+    {"Shield Breaker","Magnetic Pull","Lead Feet","Extra Touch","Godly","Redirection Jump",
+     "Curve Spike","Divine Strength","Legendary","Steel Block","Zero Gravity Set","Rare",
+     "Boom Jump","Moonball","Common","Super Sprint","Team Spirit","Rolling Thunder"},
+    "Shield Breaker",
+    function(v) Config.TargetAbility = v end)
+
+local MiscCard3 = card(PageMisc, "Shop")
+btn(MiscCard3, "Buy Emote", function()
+    pcall(function()
+        ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit.Services
+            .PackService.RF.Open:InvokeServer("Emote1")
+    end)
+end)
+btn(MiscCard3, "Buy Effect", function()
+    pcall(function()
+        ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit.Services
+            .PackService.RF.Open:InvokeServer("ScoreEffect1")
+    end)
+end)
+btn(MiscCard3, "Buy Extreme Ball", function()
+    pcall(function()
+        ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit.Services
+            .PackService.RF.Open:InvokeServer("Extreme")
+    end)
+end)
+btn(MiscCard3, "Buy Medium Ball", function()
+    pcall(function()
+        ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit.Services
+            .PackService.RF.Open:InvokeServer("Medium")
+    end)
+end)
+btn(MiscCard3, "Buy Basic Ball", function()
+    pcall(function()
+        ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit.Services
+            .PackService.RF.Open:InvokeServer("Basic")
+    end)
+end)
+
+local MiscCard4 = card(PageMisc, "Claim Rewards")
+btn(MiscCard4, "Claim Level Rewards", function()
+    pcall(function()
+        ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit.Services
+            .LevelService.RF.ClaimLevelRewards:InvokeServer()
+    end)
+end)
+btn(MiscCard4, "Claim Quest Rewards", function()
+    pcall(function()
+        ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit.Services
+            .QuestService.RF.ClaimAll:InvokeServer(true)
+    end)
+end)
+btn(MiscCard4, "Redeem All Codes", function()
+    local codes = {}
+    pcall(function()
+        local body = game:HttpGet("https://beebom.com/haikyuu-legends-codes/")
+        for m in string.gmatch(body, "[^ ]+") do
+            if string.find(m, "(NEW)") then
+                local c = string.match(m, "(%u+[%u%d_]+)")
+                if c then table.insert(codes, c) end
+            end
+            if #codes >= 3 then break end
+        end
+    end)
+    for _, code in ipairs(codes) do
+        pcall(function()
+            ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit.Services
+                .CodeService.RF.Redeem:InvokeServer(code)
+        end)
+        task.wait(0.01)
+    end
+    print("[KHUB] Redeemed", #codes, "codes")
+end, THEME.green)
+
+local MiscCard5 = card(PageMisc, "Game Join")
+local modes = {
+    {"Chaos Mode", "ChaosMode"},
+    {"1v1 Mini Map", "OnesMini"},
+    {"2v2 Ranked", "Twos"},
+    {"3v3 Ranked", "Threes"},
+    {"4v4 Ranked", "Fours"},
+    {"6v6 Ranked", "Sixes"},
+    {"Training", "Training"},
+}
+for _, m in ipairs(modes) do
+    btn(MiscCard5, m[1], function()
+        pcall(function()
+            ReplicatedStorage.Packages._Index["sleitnick_knit@1.7.0"].knit.Services
+                .PartyService.RF.RequestTeleport:InvokeServer(m[2])
+        end)
+        print("[KHUB] Joining", m[1])
+    end)
+end
+
+-- ─── SETTINGS ──────────────────────────────────────────────
+local PageSettings = createPage("Settings")
+createTabButton("Settings", "Settings", 7, "Config Settings")
+
+local SetCard = card(PageSettings, "Custom Config")
+
+local NameBox = Instance.new("TextBox")
+NameBox.Size = UDim2.new(1, 0, 0, 30)
+NameBox.BackgroundColor3 = Color3.fromRGB(18, 12, 28)
+NameBox.BackgroundTransparency = 0.15
+NameBox.Text = ""
+NameBox.PlaceholderText = "Type config name..."
+NameBox.PlaceholderColor3 = THEME.dim
+NameBox.Font = Enum.Font.Gotham
+NameBox.TextSize = 12
+NameBox.TextColor3 = THEME.text
+NameBox.ClearTextOnFocus = false
+NameBox.ZIndex = 11
+NameBox.Parent = SetCard
+corner(NameBox, 6)
+mkstroke(NameBox, THEME.stroke, 1, 0.35)
+
+local StatusLbl = Instance.new("TextLabel")
+StatusLbl.Size = UDim2.new(1, 0, 0, 18)
+StatusLbl.BackgroundTransparency = 1
+StatusLbl.Text = "Status: Ready"
+StatusLbl.Font = Enum.Font.Gotham
+StatusLbl.TextSize = 11
+StatusLbl.TextColor3 = THEME.dim
+StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+StatusLbl.ZIndex = 18
+StatusLbl.Parent = SetCard
+
+btn(SetCard, "Create / Save Config", function()
+    local name = NameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+    if name == "" then
+        StatusLbl.Text = "Status: Type a name first"
+        StatusLbl.TextColor3 = THEME.red
+        return
+    end
+    local ok, err = saveConfig(name, Config)
+    if ok then
+        selectedConfig = name
+        StatusLbl.Text = "Status: Saved \"" .. name .. "\""
+        StatusLbl.TextColor3 = THEME.green
+        refreshConfigList()
+    else
+        StatusLbl.Text = "Status: Save failed — " .. tostring(err)
+        StatusLbl.TextColor3 = THEME.red
+    end
+end)
+
+local ListCard = card(PageSettings, "Saved Configs")
+local ListFrame = Instance.new("ScrollingFrame")
+ListFrame.Size = UDim2.new(1, 0, 0, 100)
+ListFrame.BackgroundColor3 = Color3.fromRGB(14, 10, 20)
+ListFrame.BackgroundTransparency = 0.2
+ListFrame.BorderSizePixel = 0
+ListFrame.ScrollBarThickness = 3
+ListFrame.ScrollBarImageColor3 = THEME.accent
+ListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ListFrame.ZIndex = 11
+ListFrame.Parent = ListCard
+corner(ListFrame, 6)
+mkstroke(ListFrame, THEME.stroke, 1, 0.4)
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.Padding = UDim.new(0, 4)
+ListLayout.Parent = ListFrame
+
+local listPad = Instance.new("UIPadding")
+listPad.PaddingTop = UDim.new(0, 4)
+listPad.PaddingLeft = UDim.new(0, 4)
+listPad.PaddingRight = UDim.new(0, 4)
+listPad.Parent = ListFrame
+
+function refreshConfigList()
+    for _, child in ipairs(ListFrame:GetChildren()) do
+        if child:IsA("TextButton") or child:IsA("TextLabel") then child:Destroy() end
+    end
+    listConfigs()
+    if #configList == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Size = UDim2.new(1, -8, 0, 24)
+        empty.BackgroundTransparency = 1
+        empty.Text = "No configs yet"
+        empty.Font = Enum.Font.Gotham
+        empty.TextSize = 11
+        empty.TextColor3 = THEME.dim
+        empty.ZIndex = 12
+        empty.Parent = ListFrame
+    else
+        for i, name in ipairs(configList) do
+            local b = Instance.new("TextButton")
+            b.Size = UDim2.new(1, -8, 0, 26)
+            b.BackgroundColor3 = (selectedConfig == name) and THEME.accent or Color3.fromRGB(30, 22, 42)
+            b.BackgroundTransparency = (selectedConfig == name) and 0.3 or 0.2
+            b.Text = "  " .. name
+            b.Font = Enum.Font.GothamBold
+            b.TextSize = 11
+            b.TextColor3 = (selectedConfig == name) and THEME.gold or THEME.text
+            b.TextXAlignment = Enum.TextXAlignment.Left
+            b.ZIndex = 12
+            b.LayoutOrder = i
+            b.Parent = ListFrame
+            corner(b, 5)
+            b.MouseButton1Click:Connect(function()
+                selectedConfig = name
+                NameBox.Text = name
+                StatusLbl.Text = "Selected: " .. name
+                StatusLbl.TextColor3 = THEME.gold
+                refreshConfigList()
+            end)
+        end
+    end
+    ListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(100, #configList * 30 + 8))
+end
+
+btn(ListCard, "Load Config", function()
+    local name = selectedConfig or NameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+    if not name or name == "" then
+        StatusLbl.Text = "Status: Select or type a config"
+        StatusLbl.TextColor3 = THEME.red
+        return
+    end
+    local data, err = loadConfig(name)
+    if data then
+        for k, v in pairs(data) do
+            if Config[k] ~= nil then Config[k] = v end
+        end
+        StatusLbl.Text = "Status: Loaded \"" .. name .. "\""
+        StatusLbl.TextColor3 = THEME.green
+        NameBox.Text = name
+        selectedConfig = name
+    else
+        StatusLbl.Text = "Status: Load failed — " .. tostring(err)
+        StatusLbl.TextColor3 = THEME.red
+    end
+end)
+
+btn(ListCard, "Delete Selected", function()
+    local name = selectedConfig
+    if not name or name == "" then
+        StatusLbl.Text = "Status: Select a config to delete"
+        StatusLbl.TextColor3 = THEME.red
+        return
+    end
+    local ok, err = deleteConfig(name)
+    if ok then
+        StatusLbl.Text = "Status: Deleted \"" .. name .. "\""
+        StatusLbl.TextColor3 = THEME.green
+        selectedConfig = nil
+        NameBox.Text = ""
+        refreshConfigList()
+    else
+        StatusLbl.Text = "Status: Delete failed — " .. tostring(err)
+        StatusLbl.TextColor3 = THEME.red
+    end
+end, THEME.red)
+
+btn(ListCard, "Refresh List", function()
+    refreshConfigList()
+    StatusLbl.Text = "Status: List refreshed"
+    StatusLbl.TextColor3 = THEME.dim
+end)
+
+task.defer(refreshConfigList)
+
+-- ============================================================
+-- ORB
+-- ============================================================
+local Orb = Instance.new("ImageButton")
+Orb.Name = "Orb"
+Orb.Size = UDim2.fromOffset(64, 64)
+Orb.Position = UDim2.new(0, 20, 1, -90)
+Orb.BackgroundColor3 = THEME.rail
+Orb.Image = LOGO_ID
+Orb.ScaleType = Enum.ScaleType.Fit
+Orb.Visible = false
+Orb.ZIndex = 50
+Orb.Parent = ScreenGui
+corner(Orb, 32)
+mkstroke(Orb, THEME.accent, 2, 0.15)
+
+local draggingOrb, dragInputOrb, dragStartOrb, startPosOrb
+Orb.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        draggingOrb = true
+        dragStartOrb = input.Position
+        startPosOrb = Orb.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then draggingOrb = false end
+        end)
+    end
+end)
+Orb.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInputOrb = input
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInputOrb and draggingOrb then
+        local delta = input.Position - dragStartOrb
+        Orb.Position = UDim2.new(startPosOrb.X.Scale, startPosOrb.X.Offset + delta.X, startPosOrb.Y.Scale, startPosOrb.Y.Offset + delta.Y)
+    end
+end)
+
+local function setVisible(on)
+    Win.Visible = on
+    Orb.Visible = not on
+end
+
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function() setVisible(true) end)
+
+-- ============================================================
+-- KEYBINDS
+-- ============================================================
+UserInputService.InputBegan:Connect(function(i, gp)
+    if gp then return end
+    if i.KeyCode == Enum.KeyCode.RightShift or i.KeyCode == Enum.KeyCode.RightControl or i.KeyCode == Enum.KeyCode.K then
+        setVisible(not Win.Visible)
+    end
+    if i.KeyCode == Enum.KeyCode.R then doSilentSpike() end
+    if i.KeyCode == Enum.KeyCode.N then
+        State.autoCounter = not State.autoCounter
+        Config.AutoCounter = State.autoCounter
+        print("[KHUB] Auto Counter:", State.autoCounter)
+    end
+end)
+
+-- ============================================================
+-- INIT
+-- ============================================================
+installSpikeHooks()
+switchPage("Welcome", "Welcome & Profile")   -- ⭐ Welcome muna
+
+print("[KHUB] Volleyball Legends UI loaded — Welcome tab added, all features intact")
