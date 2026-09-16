@@ -1,1061 +1,229 @@
 --[[
-	KHUB Karinderya
-	New violet UI - no FluentPro
-	Credits: Yvaine & Kyiel - UI by KHUB
-	Discord: https://discord.gg/EKPb7BRDH8
-	Keybinds: RightShift / RightCtrl / K = toggle UI
+    KHUB Karinderya — FULL FIXED EDITION
+    - Fixed syntax error
+    - Robust module loading
+    - Bypass trash (fast + anti-kick)
+    - Park mode serve
+    - Restored dish wash
 ]]
 
 repeat task.wait() until game:IsLoaded()
+task.wait(1)
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local Players          = game:GetService("Players")
+local TweenService     = game:GetService("TweenService")
+local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local Workspace = game:GetService("Workspace")
-local CoreGui = game:GetService("CoreGui")
+local CoreGui          = game:GetService("CoreGui")
+local Workspace        = game:GetService("Workspace")
+local HttpService      = game:GetService("HttpService")
+local player           = Players.LocalPlayer
 
-local player = Players.LocalPlayer
 local LOGO_ID = "rbxassetid://140466936910510"
 local DISCORD = "https://discord.gg/EKPb7BRDH8"
-local YOUTUBE = "https://www.youtube.com/@kyielpambid"
 
-local THEME = {
-	bg = Color3.fromRGB(18, 12, 28),
-	rail = Color3.fromRGB(24, 16, 38),
-	card = Color3.fromRGB(30, 20, 48),
-	accent = Color3.fromRGB(160, 100, 255),
-	accent2 = Color3.fromRGB(200, 140, 255),
-	gold = Color3.fromRGB(230, 190, 255),
-	text = Color3.fromRGB(235, 225, 250),
-	dim = Color3.fromRGB(160, 140, 190),
-	mute = Color3.fromRGB(110, 90, 140),
-	stroke = Color3.fromRGB(100, 60, 160),
-	green = Color3.fromRGB(90, 220, 140),
-	red = Color3.fromRGB(230, 80, 100),
-}
-
--- Stub so old game loops still work
-local Library = { Unloaded = false }
+print("[KHUB] Script starting...")
 
 --=====================================================================
--- ANTI DETECTION (from KHUB anti stack)
+-- CONFIG
 --=====================================================================
-local AntiState = {
-	Enabled = false,
-	AntiAFK = false,
-	BlockKick = true,
-}
+local Config = {
+    BypassSpeed      = 400,
+    BypassSteps      = 12,
+    BypassFloatY     = 2.5,
+    ShowTrailLine    = true,
+    TrailLineLife    = 0.35,
+    WallBypass       = true,
 
-local VirtualUser = game:GetService("VirtualUser")
+    TrashMicroStuds  = 15,
+    TrashMicroDelay  = 0.008,
+    TrashMicroMax    = 30,
 
-pcall(function()
-	player.Idled:Connect(function()
-		if not AntiState.AntiAFK then return end
-		pcall(function()
-			VirtualUser:CaptureController()
-			VirtualUser:ClickButton2(Vector2.new())
-		end)
-	end)
-end)
-
-pcall(function()
-	local mt = getrawmetatable and getrawmetatable(game)
-	if not mt then return end
-	local okRo = pcall(function()
-		if setreadonly then setreadonly(mt, false) end
-	end)
-	local oldNamecall = mt.__namecall
-	local wrap = newcclosure or function(f) return f end
-	mt.__namecall = wrap(function(self, ...)
-		local method = getnamecallmethod and getnamecallmethod() or ""
-		if AntiState.Enabled and AntiState.BlockKick then
-			local m = string.lower(tostring(method))
-			if (m == "kick" or m == "kickplayer") and self == player then
-				warn("[KHUB Anti-Detection] Blocked local Kick attempt")
-				return
-			end
-		end
-		return oldNamecall(self, ...)
-	end)
-	pcall(function()
-		if setreadonly then setreadonly(mt, true) end
-	end)
-end)
-
-pcall(function()
-	local mt = getrawmetatable and getrawmetatable(player)
-	if not mt then return end
-	pcall(function()
-		if setreadonly then setreadonly(mt, false) end
-	end)
-	local oldIndex = mt.__namecall
-	if oldIndex then
-		local wrap = newcclosure or function(f) return f end
-		-- keep player namecall if separate; main hook is on game
-	end
-	pcall(function()
-		if setreadonly then setreadonly(mt, true) end
-	end)
-end)
-
-
--- Valax / key-system safe: PlayerGui first
-local function getPlayerGui()
-	local pg = player:FindFirstChild("PlayerGui")
-	if pg then return pg end
-	local ok, res = pcall(function()
-		return player:WaitForChild("PlayerGui", 10)
-	end)
-	if ok then return res end
-	return nil
-end
-
-pcall(function()
-	local pg = getPlayerGui()
-	if pg then
-		for _, n in ipairs({"KHUB_Karinderya", "KHUB_KeySystem", "KHUB_FloatIcon"}) do
-			local o = pg:FindFirstChild(n)
-			if o then o:Destroy() end
-		end
-	end
-end)
-pcall(function()
-	for _, n in ipairs({"KHUB_Karinderya", "KHUB_KeySystem", "KHUB_FloatIcon"}) do
-		local o = CoreGui:FindFirstChild(n)
-		if o then o:Destroy() end
-	end
-end)
-
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "KHUB_Karinderya"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.IgnoreGuiInset = true
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.DisplayOrder = 999999
-ScreenGui.Enabled = true
-
-local function parentGui(gui)
-	local pg = getPlayerGui()
-	if pg then
-		gui.Parent = pg
-		return true
-	end
-	pcall(function() gui.Parent = CoreGui end)
-	return gui.Parent ~= nil
-end
-parentGui(ScreenGui)
-
-task.spawn(function()
-	for _ = 1, 10 do
-		task.wait(0.4)
-		pcall(function()
-			if not ScreenGui.Parent then parentGui(ScreenGui) end
-			ScreenGui.Enabled = true
-			local w = ScreenGui:FindFirstChild("Window")
-			if w then w.Visible = true end
-		end)
-	end
-end)
-
-local function corner(p, r)
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, r or 10)
-	c.Parent = p
-	return c
-end
-local function mkstroke(p, col, th, tr)
-	local s = Instance.new("UIStroke")
-	s.Color = col or THEME.stroke
-	s.Thickness = th or 1.4
-	s.Transparency = tr or 0.35
-	s.Parent = p
-	return s
-end
-
-local HEADER_H = 58
-local BASE_W, BASE_H = 520, 380
-
-local Win = Instance.new("Frame")
-Win.Name = "Window"
-Win.Size = UDim2.new(0, BASE_W, 0, BASE_H)
-Win.Position = UDim2.new(0.5, -BASE_W/2, 0.5, -BASE_H/2)
-Win.BackgroundColor3 = THEME.bg
-Win.BackgroundTransparency = 0.06
-Win.BorderSizePixel = 0
-Win.ClipsDescendants = true
-Win.Active = true
-Win.Parent = ScreenGui
-corner(Win, 14)
-local winStroke = mkstroke(Win, THEME.accent, 2, 0.3)
-task.spawn(function()
-	local t = 0
-	while winStroke.Parent do
-		t = t + task.wait(0.04)
-		local s = math.abs(math.sin(t * 1.4))
-		winStroke.Color = Color3.fromRGB(120 + s*60, 70 + s*40, 200 + s*40)
-		winStroke.Transparency = 0.25 + s * 0.2
-	end
-end)
-
--- Auto-scale window only (NOT floating icon)
-local uiScale = Instance.new("UIScale")
-uiScale.Scale = 1
-uiScale.Parent = Win
-local function applyAutoScale()
-	local cam = Workspace.CurrentCamera
-	if not cam then return end
-	local vs = cam.ViewportSize
-	uiScale.Scale = math.clamp(math.min(vs.X / 960, vs.Y / 720), 0.75, 1.05)
-end
-applyAutoScale()
-pcall(function()
-	if Workspace.CurrentCamera then
-		Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyAutoScale)
-	end
-end)
-
--- Top accent bar
-local TopBar = Instance.new("Frame")
-TopBar.Size = UDim2.new(1, 0, 0, 3)
-TopBar.BackgroundColor3 = Color3.fromRGB(255,255,255)
-TopBar.BorderSizePixel = 0
-TopBar.ZIndex = 25
-TopBar.Parent = Win
-local topG = Instance.new("UIGradient")
-topG.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 60, 220)),
-	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(220, 160, 255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(120, 60, 220)),
-})
-topG.Parent = TopBar
-task.spawn(function()
-	local t = 0
-	while TopBar.Parent do
-		t = t + task.wait(0.03)
-		topG.Offset = Vector2.new(math.sin(t * 1.2) * 0.85, 0)
-	end
-end)
-
--- Header
-local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, HEADER_H)
-Header.Position = UDim2.new(0, 0, 0, 3)
-Header.BackgroundTransparency = 1
-Header.ZIndex = 12
-Header.Active = true
-Header.Parent = Win
-
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(0, 300, 0, 32)
-Title.Position = UDim2.new(0, 14, 0, 8)
-Title.BackgroundTransparency = 1
-Title.Text = "Karinderya by KHUB"
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 17
-Title.TextColor3 = THEME.gold
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.ZIndex = 14
-Title.Parent = Header
-mkstroke(Title, THEME.accent, 1.2, 0.2)
-
--- Shine that passes across the title
-local titleShine = Instance.new("UIGradient")
-titleShine.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(180, 120, 255)),
-	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(255, 240, 255)),
-	ColorSequenceKeypoint.new(0.55, Color3.fromRGB(220, 180, 255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(160, 100, 255)),
-})
-titleShine.Parent = Title
-task.spawn(function()
-	local t = 0
-	while Title.Parent do
-		t = t + task.wait(0.035)
-		titleShine.Offset = Vector2.new(math.sin(t * 0.85) * 0.7, 0)
-	end
-end)
-
-local Sub = Instance.new("TextLabel")
-Sub.Size = UDim2.new(0, 300, 0, 14)
-Sub.Position = UDim2.new(0, 14, 0, 38)
-Sub.BackgroundTransparency = 1
-Sub.Text = "Yvaine & Kyiel - RightShift / K = toggle"
-Sub.Font = Enum.Font.Code
-Sub.TextSize = 10
-Sub.TextColor3 = THEME.mute
-Sub.TextXAlignment = Enum.TextXAlignment.Left
-Sub.ZIndex = 14
-Sub.Parent = Header
-
--- Upward floating dots (not orbiting)
-for i = 1, 12 do
-	local dot = Instance.new("Frame")
-	dot.Size = UDim2.fromOffset(3, 3)
-	dot.BackgroundColor3 = Color3.fromHSV(0.72 + (i % 5) * 0.04, 0.7, 1)
-	dot.BorderSizePixel = 0
-	dot.ZIndex = 8
-	dot.Active = false
-	dot.Parent = Win
-	corner(dot, 99)
-	task.spawn(function()
-		local x = 20 + (i * 40) % (BASE_W - 40)
-		local y = BASE_H + math.random(0, 80)
-		local speed = 18 + (i % 5) * 6
-		while dot.Parent do
-			y = y - speed * task.wait(0.03)
-			if y < -10 then
-				y = BASE_H + math.random(10, 60)
-				x = 20 + math.random(0, BASE_W - 40)
-			end
-			dot.Position = UDim2.fromOffset(x, y)
-			dot.BackgroundTransparency = math.clamp(y / BASE_H, 0.15, 0.75)
-		end
-	end)
-end
-
--- Center KHUB (bigger, design passes through)
-local centerKHUB = Instance.new("TextLabel")
-centerKHUB.Size = UDim2.new(0, 220, 0, 48)
-centerKHUB.Position = UDim2.new(0.5, -110, 0.5, -24)
-centerKHUB.BackgroundTransparency = 1
-centerKHUB.Text = "KHUB"
-centerKHUB.Font = Enum.Font.GothamBlack
-centerKHUB.TextSize = 42
-centerKHUB.TextColor3 = Color3.fromRGB(200, 160, 255)
-centerKHUB.TextTransparency = 0.58
-centerKHUB.ZIndex = 7
-centerKHUB.Active = false
-centerKHUB.Parent = Win
-local cGrad = Instance.new("UIGradient")
-cGrad.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(140, 80, 255)),
-	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 220, 255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(160, 100, 255)),
-})
-cGrad.Parent = centerKHUB
-task.spawn(function()
-	local t = 0
-	while centerKHUB.Parent do
-		t = t + task.wait(0.04)
-		centerKHUB.TextTransparency = 0.52 + math.sin(t * 1.8) * 0.08
-		cGrad.Offset = Vector2.new(math.sin(t * 0.7) * 0.6, 0)
-	end
-end)
-
--- Rail
-local Rail = Instance.new("Frame")
-Rail.Size = UDim2.new(0, 118, 1, -HEADER_H - 3)
-Rail.Position = UDim2.new(0, 0, 0, HEADER_H + 3)
-Rail.BackgroundColor3 = THEME.rail
-Rail.BackgroundTransparency = 0.1
-Rail.BorderSizePixel = 0
-Rail.ZIndex = 40
-Rail.Active = true
-Rail.Parent = Win
-
-local brand = Instance.new("TextLabel")
-brand.Size = UDim2.new(1, -8, 0, 14)
-brand.Position = UDim2.fromOffset(8, 8)
-brand.BackgroundTransparency = 1
-brand.Text = "Karinderya"
-brand.Font = Enum.Font.GothamBold
-brand.TextSize = 11
-brand.TextColor3 = THEME.text
-brand.TextXAlignment = Enum.TextXAlignment.Left
-brand.ZIndex = 41
-brand.Active = false
-brand.Parent = Rail
-local brandSub = Instance.new("TextLabel")
-brandSub.Size = UDim2.new(1, -8, 0, 12)
-brandSub.Position = UDim2.fromOffset(8, 22)
-brandSub.BackgroundTransparency = 1
-brandSub.Text = "by KHUB"
-brandSub.Font = Enum.Font.Code
-brandSub.TextSize = 9
-brandSub.TextColor3 = THEME.mute
-brandSub.TextXAlignment = Enum.TextXAlignment.Left
-brandSub.ZIndex = 41
-brandSub.Active = false
-brandSub.Parent = Rail
-
-local tabs, pages = {}, {}
-local tabOrder = {"Welcome", "Main", "Trash", "Stock", "Codes", "Tables", "Signage", "Credits"}
-
-local function makeTabBtn(name, y)
-	local b = Instance.new("TextButton")
-	b.Name = "Tab_" .. name
-	b.Size = UDim2.new(1, -10, 0, 28)
-	b.Position = UDim2.fromOffset(5, y)
-	b.BackgroundColor3 = Color3.fromRGB(36, 24, 55)
-	b.Text = "  " .. name
-	b.Font = Enum.Font.GothamBold
-	b.TextSize = 11
-	b.TextColor3 = THEME.dim
-	b.TextXAlignment = Enum.TextXAlignment.Left
-	b.ZIndex = 50
-	b.Active = true
-	b.Selectable = true
-	b.AutoButtonColor = true
-	b.Parent = Rail
-	corner(b, 7)
-	local st = mkstroke(b, THEME.accent, 1.2, 0.55)
-	task.spawn(function()
-		local t = 0
-		while b.Parent do
-			t = t + task.wait(0.05)
-			if tabs._active == name then
-				st.Transparency = 0.15 + math.abs(math.sin(t * 2)) * 0.2
-				st.Color = THEME.accent2
-			else
-				st.Transparency = 0.55
-				st.Color = THEME.stroke
-			end
-		end
-	end)
-	tabs[name] = b
-	return b
-end
-
-for i, name in ipairs(tabOrder) do
-	makeTabBtn(name, 42 + (i - 1) * 32)
-end
-tabs._active = "Welcome"
-
-local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1, -122, 1, -HEADER_H - 3)
-Content.Position = UDim2.new(0, 120, 0, HEADER_H + 3)
-Content.BackgroundTransparency = 1
-Content.ZIndex = 15
-Content.Active = false
-Content.Parent = Win
-
-local Head = Instance.new("Frame")
-Head.Size = UDim2.new(1, 0, 0, 28)
-Head.BackgroundColor3 = THEME.rail
-Head.BackgroundTransparency = 0.15
-Head.BorderSizePixel = 0
-Head.ZIndex = 11
-Head.Parent = Content
-local HeadTitle = Instance.new("TextLabel")
-HeadTitle.Size = UDim2.new(1, -40, 1, 0)
-HeadTitle.Position = UDim2.fromOffset(10, 0)
-HeadTitle.BackgroundTransparency = 1
-HeadTitle.Text = "Welcome"
-HeadTitle.Font = Enum.Font.GothamBold
-HeadTitle.TextSize = 12
-HeadTitle.TextColor3 = THEME.accent2
-HeadTitle.TextXAlignment = Enum.TextXAlignment.Left
-HeadTitle.ZIndex = 12
-HeadTitle.Parent = Head
-local MinBtn = Instance.new("TextButton")
-MinBtn.Size = UDim2.fromOffset(24, 18)
-MinBtn.Position = UDim2.new(1, -28, 0.5, -9)
-MinBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 70)
-MinBtn.Text = "-"
-MinBtn.Font = Enum.Font.GothamBold
-MinBtn.TextSize = 14
-MinBtn.TextColor3 = THEME.text
-MinBtn.ZIndex = 13
-MinBtn.Parent = Head
-corner(MinBtn, 5)
-
-local function makePage(name)
-	local sf = Instance.new("ScrollingFrame")
-	sf.Size = UDim2.new(1, -6, 1, -32)
-	sf.Position = UDim2.new(0, 3, 0, 30)
-	sf.BackgroundTransparency = 1
-	sf.BorderSizePixel = 0
-	sf.ScrollBarThickness = 3
-	sf.ScrollBarImageColor3 = THEME.accent
-	sf.CanvasSize = UDim2.new(0, 0, 0, 0)
-	sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	sf.Visible = false
-	sf.ZIndex = 16
-	sf.Active = true
-	sf.ScrollingEnabled = true
-	sf.Parent = Content
-	local lay = Instance.new("UIListLayout")
-	lay.Padding = UDim.new(0, 5)
-	lay.SortOrder = Enum.SortOrder.LayoutOrder
-	lay.Parent = sf
-	local pad = Instance.new("UIPadding")
-	pad.PaddingTop = UDim.new(0, 4)
-	pad.PaddingBottom = UDim.new(0, 8)
-	pad.PaddingLeft = UDim.new(0, 2)
-	pad.PaddingRight = UDim.new(0, 2)
-	pad.Parent = sf
-	pages[name] = sf
-	return sf
-end
-
-for _, name in ipairs(tabOrder) do
-	makePage(name)
-end
-pages.Welcome.Visible = true
-
-local function selectTab(name)
-	tabs._active = name
-	for n, p in pairs(pages) do p.Visible = (n == name) end
-	HeadTitle.Text = name
-	for n, b in pairs(tabs) do
-		if type(b) == "Instance" then
-			if n == name then
-				b.BackgroundColor3 = Color3.fromRGB(55, 35, 90)
-				b.TextColor3 = THEME.gold
-			else
-				b.BackgroundColor3 = Color3.fromRGB(36, 24, 55)
-				b.TextColor3 = THEME.dim
-			end
-		end
-	end
-end
-for name, btn in pairs(tabs) do
-	if typeof(btn) == "Instance" and btn:IsA("GuiButton") then
-		local function onTab()
-			selectTab(name)
-		end
-		btn.MouseButton1Click:Connect(onTab)
-		btn.Activated:Connect(onTab)
-		btn.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch then
-				selectTab(name)
-			end
-		end)
-	end
-end
-
-local function section(parent, title)
-	local f = Instance.new("Frame")
-	f.Size = UDim2.new(1, 0, 0, 20)
-	f.BackgroundTransparency = 1
-	f.ZIndex = 12
-	f.Parent = parent
-	local l = Instance.new("TextLabel")
-	l.Size = UDim2.new(1, 0, 1, 0)
-	l.BackgroundTransparency = 1
-	l.Text = title
-	l.Font = Enum.Font.GothamBold
-	l.TextSize = 12
-	l.TextColor3 = THEME.gold
-	l.TextXAlignment = Enum.TextXAlignment.Left
-	l.ZIndex = 13
-	l.Parent = f
-	return f
-end
-
-local function makeToggle(parent, text, default, callback)
-	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1, 0, 0, 28)
-	row.BackgroundColor3 = THEME.card
-	row.ZIndex = 12
-	row.Parent = parent
-	corner(row, 6)
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -52, 1, 0)
-	lbl.Position = UDim2.new(0, 8, 0, 0)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = text
-	lbl.Font = Enum.Font.Gotham
-	lbl.TextSize = 11
-	lbl.TextColor3 = THEME.text
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.ZIndex = 13
-	lbl.Parent = row
-	local state = default
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.fromOffset(40, 20)
-	btn.Position = UDim2.new(1, -46, 0.5, -10)
-	btn.BackgroundColor3 = state and THEME.green or Color3.fromRGB(55, 45, 70)
-	btn.Text = state and "ON" or "OFF"
-	btn.Font = Enum.Font.GothamBold
-	btn.TextSize = 9
-	btn.TextColor3 = Color3.new(1,1,1)
-	btn.ZIndex = 14
-	btn.Parent = row
-	corner(btn, 5)
-	btn.MouseButton1Click:Connect(function()
-		state = not state
-		btn.BackgroundColor3 = state and THEME.green or Color3.fromRGB(55, 45, 70)
-		btn.Text = state and "ON" or "OFF"
-		if callback then callback(state) end
-	end)
-	return function() return state end
-end
-
-local function makeSlider(parent, text, min, max, default, callback)
-	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1, 0, 0, 44)
-	row.BackgroundColor3 = THEME.card
-	row.ZIndex = 12
-	row.Parent = parent
-	corner(row, 6)
-	local value = default
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -12, 0, 16)
-	lbl.Position = UDim2.new(0, 8, 0, 3)
-	lbl.BackgroundTransparency = 1
-	lbl.Text = text .. ": " .. tostring(value)
-	lbl.Font = Enum.Font.Gotham
-	lbl.TextSize = 11
-	lbl.TextColor3 = THEME.text
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.ZIndex = 13
-	lbl.Parent = row
-	local track = Instance.new("Frame")
-	track.Size = UDim2.new(1, -16, 0, 7)
-	track.Position = UDim2.new(0, 8, 0, 26)
-	track.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
-	track.ZIndex = 13
-	track.Parent = row
-	corner(track, 4)
-	local fill = Instance.new("Frame")
-	fill.Size = UDim2.new((value - min) / math.max(max - min, 1), 0, 1, 0)
-	fill.BackgroundColor3 = THEME.accent
-	fill.ZIndex = 14
-	fill.Parent = track
-	corner(fill, 4)
-	local dragging = false
-	local function setVal(v)
-		value = math.clamp(math.floor(v + 0.5), min, max)
-		fill.Size = UDim2.new((value - min) / math.max(max - min, 1), 0, 1, 0)
-		lbl.Text = text .. ": " .. tostring(value)
-		if callback then callback(value) end
-	end
-	track.InputBegan:Connect(function(inp)
-		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			local rel = math.clamp((inp.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
-			setVal(min + rel * (max - min))
-		end
-	end)
-	UserInputService.InputEnded:Connect(function(inp)
-		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-		end
-	end)
-	UserInputService.InputChanged:Connect(function(inp)
-		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
-			local rel = math.clamp((inp.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
-			setVal(min + rel * (max - min))
-		end
-	end)
-	return function() return value end
-end
-
-local function makeButton(parent, text, callback)
-	local b = Instance.new("TextButton")
-	b.Size = UDim2.new(1, 0, 0, 28)
-	b.BackgroundColor3 = Color3.fromRGB(70, 45, 120)
-	b.Text = text
-	b.Font = Enum.Font.GothamBold
-	b.TextSize = 11
-	b.TextColor3 = THEME.text
-	b.ZIndex = 12
-	b.Parent = parent
-	corner(b, 6)
-	b.MouseButton1Click:Connect(function() if callback then callback() end end)
-	return b
-end
-
-local function makeLabel(parent, text)
-	local l = Instance.new("TextLabel")
-	l.Size = UDim2.new(1, 0, 0, 18)
-	l.BackgroundTransparency = 1
-	l.Text = text
-	l.Font = Enum.Font.Gotham
-	l.TextSize = 11
-	l.TextColor3 = THEME.dim
-	l.TextXAlignment = Enum.TextXAlignment.Left
-	l.TextWrapped = true
-	l.AutomaticSize = Enum.AutomaticSize.Y
-	l.ZIndex = 12
-	l.Parent = parent
-	return l
-end
-
--- Welcome tab
-section(pages.Welcome, "Profile")
-makeLabel(pages.Welcome, "Player: " .. player.Name)
-makeLabel(pages.Welcome, "Display: " .. player.DisplayName)
-makeLabel(pages.Welcome, "UserId: " .. tostring(player.UserId))
-makeLabel(pages.Welcome, "Place: " .. tostring(game.PlaceId))
-
-section(pages.Welcome, "Status")
-local statusMain = makeLabel(pages.Welcome, "Status: Ready")
-statusMain.TextColor3 = THEME.gold
-
-section(pages.Welcome, "How to use")
-makeLabel(pages.Welcome, "1. Open Main tab")
-makeLabel(pages.Welcome, "2. Turn ON Auto Serve Loop")
-makeLabel(pages.Welcome, "3. Optional: Auto Softdrinks, Dirty Dishes, Whack")
-makeLabel(pages.Welcome, "4. Use Trash / Stock / Codes tabs as needed")
-makeLabel(pages.Welcome, "5. Status updates live on Welcome + Main")
-
-section(pages.Welcome, "PC Keybinds")
-makeLabel(pages.Welcome, "RightShift / RightCtrl / K  →  Toggle UI")
-makeLabel(pages.Welcome, "LeftCtrl  →  (legacy minimize)")
-makeLabel(pages.Welcome, "Drag header to move window")
-makeLabel(pages.Welcome, "Floating icon: click to reopen - drag to move")
-
--- Floating icon (NOT auto-scaled)
-local Orb = Instance.new("ImageButton")
-Orb.Name = "FloatingIcon"
-Orb.Size = UDim2.fromOffset(56, 56)
-Orb.Position = UDim2.new(0, 16, 0.5, -40)
-Orb.BackgroundColor3 = Color3.fromRGB(24, 14, 40)
-Orb.Image = LOGO_ID
-Orb.ScaleType = Enum.ScaleType.Fit
-Orb.Visible = false
-Orb.ZIndex = 50
-Orb.Parent = ScreenGui
-corner(Orb, 28)
-mkstroke(Orb, THEME.accent, 2.2, 0.2)
-local orbPulse = Instance.new("UIStroke")
-orbPulse.Color = THEME.accent2
-orbPulse.Thickness = 3
-orbPulse.Transparency = 0.5
-orbPulse.Parent = Orb
-task.spawn(function()
-	local t = 0
-	while Orb.Parent do
-		t = t + task.wait(0.04)
-		orbPulse.Transparency = 0.3 + math.abs(math.sin(t * 2.2)) * 0.4
-		Orb.Rotation = math.sin(t * 1.3) * 4
-	end
-end)
-local orbTag = Instance.new("TextLabel")
-orbTag.Size = UDim2.new(1, 0, 0, 12)
-orbTag.Position = UDim2.new(0, 0, 1, 2)
-orbTag.BackgroundTransparency = 1
-orbTag.Text = "KHUB"
-orbTag.Font = Enum.Font.GothamBold
-orbTag.TextSize = 9
-orbTag.TextColor3 = THEME.gold
-orbTag.ZIndex = 51
-orbTag.Parent = Orb
-
-local OrbLocked = false
-local function setVisible(on)
-	Win.Visible = on
-	Orb.Visible = not on
-end
-MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
-Orb.MouseButton1Click:Connect(function() setVisible(true) end)
-
-local dragging, dragStart, startPos
-Header.InputBegan:Connect(function(i)
-	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-		dragging = true; dragStart = i.Position; startPos = Win.Position
-	end
-end)
-Header.InputEnded:Connect(function(i)
-	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-		dragging = false
-	end
-end)
-local orbDrag, orbStart, orbPos
-Orb.InputBegan:Connect(function(i)
-	if OrbLocked then return end
-	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-		orbDrag = true; orbStart = i.Position; orbPos = Orb.Position
-	end
-end)
-Orb.InputEnded:Connect(function(i)
-	if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-		orbDrag = false
-	end
-end)
-UserInputService.InputChanged:Connect(function(i)
-	if i.UserInputType ~= Enum.UserInputType.MouseMovement and i.UserInputType ~= Enum.UserInputType.Touch then return end
-	if dragging and dragStart then
-		local d = i.Position - dragStart
-		Win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
-	end
-	if orbDrag and orbStart and not OrbLocked then
-		local d = i.Position - orbStart
-		Orb.Position = UDim2.new(orbPos.X.Scale, orbPos.X.Offset + d.X, orbPos.Y.Scale, orbPos.Y.Offset + d.Y)
-	end
-end)
-UserInputService.InputBegan:Connect(function(i, gp)
-	if gp then return end
-	if i.KeyCode == Enum.KeyCode.RightShift or i.KeyCode == Enum.KeyCode.RightControl or i.KeyCode == Enum.KeyCode.K then
-		setVisible(not Win.Visible)
-	end
-end)
-
--- UI builders exposed for binding after State exists
-_G.__KHUB_KARI_UI = {
-	section = section,
-	makeToggle = makeToggle,
-	makeSlider = makeSlider,
-	makeButton = makeButton,
-	makeLabel = makeLabel,
-	pages = pages,
-	statusMain = statusMain,
-	setOrbLocked = function(v) OrbLocked = v end,
-	Library = Library,
-	ScreenGui = ScreenGui,
-	selectTab = selectTab,
-	THEME = THEME,
-	DISCORD = DISCORD,
-	YOUTUBE = YOUTUBE,
-	setVisible = setVisible,
-}
-
-Win.Visible = true
-print("[KHUB] Karinderya UI shell ready - loading game logic...")
-
-
--- GAME BINDINGS (deferred so UI always shows first)
---=====================================================================
-
-task.spawn(function()
-    local okLoad, errLoad = pcall(function()
-
--- GAME BINDINGS
---=====================================================================
-
-local Players           = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace         = game:GetService("Workspace")
-
-local LocalPlayer = Players.LocalPlayer
-
-local Modules = ReplicatedStorage:WaitForChild("Modules", 12)
-if not Modules then
-    error("Modules not found - join the Karinderya game first", 0)
-end
-local FoodConfig        = require(Modules:WaitForChild("FoodConfig"))
-local IngredientsConfig = require(Modules:WaitForChild("IngredientsConfig"))
-local HandState         = require(Modules:WaitForChild("HandState"))
-local SharedIngredientCaps = {
-    Softdrinks = 36,
-}
-
-local NPCConfig       = require(Modules:WaitForChild("NPCConfig"))
-local NPCTypes        = NPCConfig.Types or {}
-local CodeConfig      = require(Modules:WaitForChild("CodeConfig"))
-local FurnitureConfig = require(Modules:WaitForChild("FurnitureConfig"))
-local PaintConfig     = require(Modules:WaitForChild("PaintConfig"))
-local MaterialConfig  = require(Modules:WaitForChild("MaterialConfig"))
-local SignageConfig   = require(Modules:WaitForChild("SignageConfig"))
-
-local Remotes         = ReplicatedStorage:WaitForChild("Remotes")
-local CounterRemotes  = Remotes:WaitForChild("CounterRemotes")
-local ShopRemotes     = Remotes:WaitForChild("ShopRemotes")
-local NPCRemotes      = Remotes:WaitForChild("NPCRemotes")
-local MyInfoRemotes   = Remotes:WaitForChild("MyInfoRemotes")
-
-local GetCounterInfo  = CounterRemotes:WaitForChild("GetCounterInfo")
-local AssignNPC       = CounterRemotes:WaitForChild("AssignNPC")
-local RejectNPC       = CounterRemotes:WaitForChild("RejectNPC")
-local BuyIngredient   = ShopRemotes:WaitForChild("BuyIngredient")
-local GiveSoftdrink   = ShopRemotes:WaitForChild("GiveSoftdrink")
-local AdditionalOrder = NPCRemotes:WaitForChild("AdditionalOrder")
-local NPCDrink        = NPCRemotes:WaitForChild("NPCDrink")
-local SoftdrinkOrdersUpdated = NPCRemotes:WaitForChild("SoftdrinkOrdersUpdated")
-local HitRunawayEvent = Remotes:WaitForChild("HitRunawayEvent")
-local RedeemCode      = Remotes:WaitForChild("RedeemCode"):WaitForChild("RedeemCode")
-local BuyTableEvent       = Remotes:WaitForChild("BuyTableEvent")
-local GetUnlockedTables   = Remotes:WaitForChild("GetUnlockedTables")
-local PlaceFurnitureEvent = Remotes:WaitForChild("PlaceFurnitureEvent")
-local GetFurnitureInventory = ShopRemotes:WaitForChild("GetFurnitureInventory")
-local GetShopInfo     = ShopRemotes:WaitForChild("GetShopInfo")
-local BuyFurniture    = ShopRemotes:WaitForChild("BuyFurniture")
-local ShopRestocked   = ShopRemotes:WaitForChild("ShopRestocked")
-local GetMyInfoData   = MyInfoRemotes:WaitForChild("GetMyInfoData")
-local BuySignage      = MyInfoRemotes:WaitForChild("BuySignage")
-local EquipSignage    = MyInfoRemotes:WaitForChild("EquipSignage")
-
---=====================================================================
--- STATE & CONFIG
---=====================================================================
-
-local State = {
-    -- serve loop
-    Enabled          = false,
-    AutoBuy          = true,
+    AutoServe        = false,
+    AutoGrabCooked   = true,
+    AutoBuyIngredients = true,
     AutoReject       = true,
     MinOrderValue    = 0,
     MaxRunaway       = 100,
-    WhackEnabled     = false,
-    WhackTeleport    = true,
-    WhackPoll        = 0.1,
-    WhackRetry       = 2.5,
-    LoopDelay        = 0.35,
+
+    ParkModeEnabled  = true,
+    ParkMaxAttempts  = 10,
+    ParkAttemptDelay = 0.4,
+    ParkMaxTime      = 15,
+
     SoftdrinkEnabled = true,
     SoftdrinkRetry   = 1.5,
 
-    -- dirty-dish workflow
-    DishEnabled          = false,
-    DishBatchSize        = 3,
-    DishWashHoldDuration = 10,
-    DishSettleTime       = 0.15,
-    DishConfirmTime      = 1.5,
-    DishServeYield       = 15,
+    DishEnabled      = false,
+    DishBatchSize    = 3,
+    DishWashHold     = 10,
+    DishSettle       = 0.15,
+    DishConfirm      = 1.5,
+    DishYield        = 15,
 
-    -- tables & furniture
-    TableBuyEnabled   = false,
+    TrashEnabled     = false,
+    TrashByValue     = true,
+    TrashYield       = true,
+    TrashDelay       = 0.3,
+    TrashRescan      = 4,
+    TrashSettleTime  = 0.2,
+    TrashMaxAttempts = 3,
+
+    StockEnabled     = false,
+    StockThreshold   = 20,
+    StockTarget      = 80,
+    StockCap         = 100,
+    CashReserve      = 5000,
+    BrokeBackoff     = 30,
+    StockInterval    = 5,
+
+    WhackEnabled     = false,
+    WhackTeleport    = true,
+    WhackPoll        = 0.15,
+    WhackRetry       = 3.0,
+
+    CodesEnabled     = true,
+    CodeDelay        = 3,
+    CodeRescan       = 120,
+
+    TableBuyEnabled  = false,
     TablePlaceEnabled = false,
-    TableInterval     = 2,
+    TableInterval    = 2,
     FurnitureInterval = 1,
 
-    -- furniture shop
-    ShopEnabled  = false,
-    ShopInterval = 1,
-    ShopSelected = {
-        Tables = {}, Chairs = {}, Stoves = {}, Paints = {}, Materials = {},
-    },
+    ShopEnabled      = false,
+    ShopInterval     = 1,
+    ShopSelected     = { Tables = {}, Chairs = {}, Stoves = {}, Paints = {}, Materials = {} },
 
-    -- signages
     SignageBuyEnabled   = false,
-    SignageEquipEnabled = false,
+    SignageEquipEnabled = true,
     SignageInterval     = 2,
     SignageSelected     = {},
 
-    -- codes
-    CodesEnabled = true,
-    CodeDelay    = 3,
-    CodeRescan   = 120,
-
-    -- ingredient restock
-    StockEnabled   = false,
-    StockThreshold = 20,
-    StockTarget    = 80,
-    StockCap       = 100,
-    CashReserve    = 5000,
-    BrokeBackoff   = 30,
-    StockInterval  = 5,
-
-    -- trash loop
-    TrashEnabled = false,
-    TrashByValue = true,
-    TrashYield   = true,
-    TrashDelay   = 0.25,
-    TrashRescan  = 3,
-
-    -- shared
     ReturnToStart = true,
     SettleTime    = 0.25,
+    LoopDelay     = 0.35,
 }
+
+local SharedIngredientCaps = { Softdrinks = 36 }
 
 local Stats = {
-    Served          = 0,
-    PickedUp        = 0,
-    Assigned        = 0,
-    Rejected        = 0,
-    Bought          = 0,
-    Trash           = 0,
-    TrashCash       = 0,
-    StockBought     = 0,
-    Whacked         = 0,
-    WhackTries      = 0,
-    Codes           = 0,
-    CodeState       = "Idle",
-    TablesBought    = 0,
-    Placed          = 0,
-    TableState      = "Idle",
-    ShopBought      = 0,
-    ShopSpent       = 0,
-    ShopState       = "Idle",
-    DishesPicked    = 0,
-    DishesSunk      = 0,
-    WashCycles      = 0,
-    DishState       = "Idle",
-    SoftdrinksGiven = 0,
-    SoftdrinkState  = "Watching for requests",
-    SignagesBought  = 0,
-    SignageSpent    = 0,
-    SignageState    = "Idle",
-    Status          = "Idle",
-    TrashState      = "Idle",
-    StockState      = "Idle",
+    Served = 0, PickedUp = 0, Assigned = 0, Rejected = 0, Bought = 0,
+    Trash = 0, TrashCash = 0, StockBought = 0, Whacked = 0, WhackTries = 0,
+    Codes = 0, TablesBought = 0, Placed = 0, ShopBought = 0, ShopSpent = 0,
+    DishesPicked = 0, DishesSunk = 0, WashCycles = 0, SoftdrinksGiven = 0,
+    SignagesBought = 0, SignageSpent = 0, TrashFailed = 0,
+    Status = "Idle", TrashState = "Idle", StockState = "Idle",
+    DishState = "Idle", CodeState = "Idle", TableState = "Idle",
+    ShopState = "Idle", SignageState = "Idle", SoftdrinkState = "Watching",
 }
 
 --=====================================================================
--- DRINK KEY RESOLUTION
+-- GAME BINDINGS (Robust)
 --=====================================================================
+local RS = game:GetService("ReplicatedStorage")
 
-local function resolveDrinkKey(rawKey)
-    if not rawKey then return "Kola" end
-    local str = tostring(rawKey)
-    local lower = str:lower():gsub("%s+", "")
-
-    for ingName, _ in pairs(IngredientsConfig or {}) do
-        if tostring(ingName):lower():gsub("%s+", "") == lower then
-            return ingName
-        end
+local function safeWait(parent, name, timeout)
+    timeout = timeout or 30
+    if not parent then return nil end
+    local child = parent:FindFirstChild(name)
+    if child then return child end
+    local start = tick()
+    while tick() - start < timeout do
+        child = parent:FindFirstChild(name)
+        if child then return child end
+        task.wait(0.2)
     end
-
-    if lower == "cola" or lower == "kola" or lower == "coca-cola" or lower == "cocacola" then
-        if IngredientsConfig and IngredientsConfig["Kola"] then return "Kola" end
-        if IngredientsConfig and IngredientsConfig["Cola"] then return "Cola" end
-        return "Kola"
-    elseif lower == "suprise" or lower == "surprise" then
-        if IngredientsConfig and IngredientsConfig["Suprise"] then return "Suprise" end
-        if IngredientsConfig and IngredientsConfig["Surprise"] then return "Surprise" end
-        return "Suprise"
-    elseif lower == "loyal" then
-        return "Loyal"
-    end
-
-    return str
+    return nil
 end
 
---=====================================================================
--- MOVEMENT LOCK
---=====================================================================
-
-local MoveLock = false
-local MoveLockTime = 0
-
-local function acquireMove(timeout)
-    local now = os.clock()
-    if MoveLock and (now - MoveLockTime > 3.5) then
-        MoveLock = false
-    end
-
-    local waited = 0
-    timeout = timeout or 3
-    while MoveLock and waited < timeout do
-        task.wait(0.05)
-        waited = waited + 0.05
-        if MoveLock and (os.clock() - MoveLockTime > 3.5) then
-            MoveLock = false
-            break
-        end
-    end
-    if MoveLock then return false end
-    MoveLock = true
-    MoveLockTime = os.clock()
-    return true
+local Modules = safeWait(RS, "Modules", 60)
+if not Modules then
+    warn("[KHUB] Modules not found after 60s — game not ready or wrong game")
+    return
 end
 
-local function releaseMove()
-    MoveLock = false
+print("[KHUB] Modules found")
+
+local function safeRequire(parent, name)
+    local mod = safeWait(parent, name, 30)
+    if not mod then return nil end
+    local ok, res = pcall(require, mod)
+    if not ok then
+        warn("[KHUB] Failed to require", name, ":", res)
+        return nil
+    end
+    return res
 end
+
+local FoodConfig        = safeRequire(Modules, "FoodConfig") or {}
+local IngredientsConfig = safeRequire(Modules, "IngredientsConfig") or {}
+local HandState         = safeRequire(Modules, "HandState")
+local NPCConfig         = safeRequire(Modules, "NPCConfig") or {}
+local CodeConfig        = safeRequire(Modules, "CodeConfig") or {}
+local FurnitureConfig   = safeRequire(Modules, "FurnitureConfig") or {}
+local PaintConfig       = safeRequire(Modules, "PaintConfig") or {}
+local MaterialConfig    = safeRequire(Modules, "MaterialConfig") or {}
+local SignageConfig     = safeRequire(Modules, "SignageConfig") or {}
+
+local NPCTypes = NPCConfig.Types or {}
+
+print("[KHUB] Modules loaded")
+
+local Remotes = safeWait(RS, "Remotes", 60) or Instance.new("Folder")
+
+local CounterRemotes = safeWait(Remotes, "CounterRemotes", 20)
+local ShopRemotes    = safeWait(Remotes, "ShopRemotes", 20)
+local NPCRemotes     = safeWait(Remotes, "NPCRemotes", 20)
+local MyInfoRemotes  = safeWait(Remotes, "MyInfoRemotes", 20)
+
+local GetCounterInfo = CounterRemotes and safeWait(CounterRemotes, "GetCounterInfo", 10) or nil
+local AssignNPC      = CounterRemotes and safeWait(CounterRemotes, "AssignNPC", 10) or nil
+local RejectNPC      = CounterRemotes and safeWait(CounterRemotes, "RejectNPC", 10) or nil
+local BuyIngredient  = ShopRemotes and safeWait(ShopRemotes, "BuyIngredient", 10) or nil
+local GiveSoftdrink  = ShopRemotes and safeWait(ShopRemotes, "GiveSoftdrink", 10) or nil
+local AdditionalOrder = NPCRemotes and safeWait(NPCRemotes, "AdditionalOrder", 10) or nil
+local NPCDrink       = NPCRemotes and safeWait(NPCRemotes, "NPCDrink", 10) or nil
+local SoftdrinkOrdersUpdated = NPCRemotes and safeWait(NPCRemotes, "SoftdrinkOrdersUpdated", 10) or nil
+local HitRunawayEvent = safeWait(Remotes, "HitRunawayEvent", 10)
+local RedeemCode     = safeWait(Remotes, "RedeemCode", 10)
+if RedeemCode then RedeemCode = safeWait(RedeemCode, "RedeemCode", 10) end
+local BuyTableEvent  = safeWait(Remotes, "BuyTableEvent", 10)
+local GetUnlockedTables = safeWait(Remotes, "GetUnlockedTables", 10)
+local PlaceFurnitureEvent = safeWait(Remotes, "PlaceFurnitureEvent", 10)
+local GetFurnitureInventory = ShopRemotes and safeWait(ShopRemotes, "GetFurnitureInventory", 10) or nil
+local GetShopInfo    = ShopRemotes and safeWait(ShopRemotes, "GetShopInfo", 10) or nil
+local BuyFurniture   = ShopRemotes and safeWait(ShopRemotes, "BuyFurniture", 10) or nil
+local ShopRestocked  = ShopRemotes and safeWait(ShopRemotes, "ShopRestocked", 10) or nil
+local GetMyInfoData  = MyInfoRemotes and safeWait(MyInfoRemotes, "GetMyInfoData", 10) or nil
+local BuySignage     = MyInfoRemotes and safeWait(MyInfoRemotes, "BuySignage", 10) or nil
+local EquipSignage   = MyInfoRemotes and safeWait(MyInfoRemotes, "EquipSignage", 10) or nil
+
+print("[KHUB] Remotes loaded")
 
 --=====================================================================
 -- HELPERS
 --=====================================================================
-
 local function getCash()
-    local ls = LocalPlayer:FindFirstChild("leaderstats")
+    local ls = player:FindFirstChild("leaderstats")
     local c = ls and ls:FindFirstChild("Cash")
     return c and c.Value or 0
 end
 
 local function getRoot()
-    local char = LocalPlayer.Character
+    local char = player.Character
     return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHumanoid()
+    local char = player.Character
+    return char and char:FindFirstChildOfClass("Humanoid")
 end
 
 local function getPlot()
     for _, folder in ipairs(Workspace:GetChildren()) do
         if folder.Name:match("^Karenderya")
-        and tostring(folder:GetAttribute("Owner")) == tostring(LocalPlayer.UserId) then
+        and tostring(folder:GetAttribute("Owner")) == tostring(player.UserId) then
             return folder
         end
     end
@@ -1070,63 +238,172 @@ local function pivotOf(inst)
     return part and part.Position or nil
 end
 
-local function firePromptAt(prompt, position, alreadyLocked)
-    if not prompt or not prompt.Parent or not prompt.Enabled then return false end
-    if not position then return false end
+--=====================================================================
+-- BYPASS MOVEMENT
+--=====================================================================
+local TrailFolder = Instance.new("Folder")
+TrailFolder.Name = "_KHUB_Trails"
+TrailFolder.Parent = Workspace
 
+local function drawTrailLine(fromPos, toPos, color)
+    if not Config.ShowTrailLine then return end
+    local dist = (toPos - fromPos).Magnitude
+    if dist < 0.5 then return end
+
+    local part = Instance.new("Part")
+    part.Name = "_trail_" .. tick()
+    part.Anchored = true
+    part.CanCollide = false
+    part.CanQuery = false
+    part.CanTouch = false
+    part.CastShadow = false
+    part.Material = Enum.Material.Neon
+    part.Color = color or Color3.fromRGB(160, 90, 255)
+    part.Transparency = 0.35
+    part.Size = Vector3.new(0.15, 0.15, dist)
+    part.CFrame = CFrame.lookAt((fromPos + toPos) * 0.5, toPos)
+    part.Parent = TrailFolder
+
+    TweenService:Create(part, TweenInfo.new(Config.TrailLineLife, Enum.EasingStyle.Linear), {
+        Transparency = 1,
+        Size = Vector3.new(0.05, 0.05, dist),
+    }):Play()
+
+    task.delay(Config.TrailLineLife + 0.1, function()
+        if part and part.Parent then part:Destroy() end
+    end)
+end
+
+local MoveLock = false
+local MoveLockTime = 0
+
+local function acquireMove(timeout)
+    local now = os.clock()
+    if MoveLock and (now - MoveLockTime > 5) then MoveLock = false end
+    local waited = 0
+    timeout = timeout or 3
+    while MoveLock and waited < timeout do
+        task.wait(0.03)
+        waited = waited + 0.03
+        if MoveLock and (os.clock() - MoveLockTime > 5) then
+            MoveLock = false
+            break
+        end
+    end
+    if MoveLock then return false end
+    MoveLock = true
+    MoveLockTime = os.clock()
+    return true
+end
+
+local function releaseMove()
+    MoveLock = false
+end
+
+local function teleportBypass(targetPos, customMicroStuds, customMicroDelay, customMaxSteps)
     local root = getRoot()
     if not root then return false end
 
-    if not alreadyLocked then
-        if not acquireMove() then return false end
+    local startPos = root.Position
+    local dist = (startPos - targetPos).Magnitude
+    if dist < 1 then return true end
+
+    local prevCollide = {}
+    if Config.WallBypass then
+        for _, part in ipairs(player.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                prevCollide[part] = part.CanCollide
+                part.CanCollide = false
+            end
+        end
     end
 
-    local origin = root.CFrame
-    root.CFrame = CFrame.new(position + Vector3.new(0, 2, 0))
-    task.wait(State.SettleTime)
+    local microStuds = customMicroStuds or Config.TrashMicroStuds
+    local microDelay = customMicroDelay or Config.TrashMicroDelay
+    local maxSteps = customMaxSteps or Config.TrashMicroMax
+    
+    local steps = math.ceil(dist / microStuds)
+    steps = math.clamp(steps, 3, maxSteps)
+    
+    local speedMul = math.clamp(Config.BypassSpeed / 400, 0.25, 5)
+    local stepDelay = microDelay / speedMul
+    stepDelay = math.clamp(stepDelay, 0.003, 0.03)
 
-    local fired = false
-    if prompt.Parent and prompt.Enabled then
-        pcall(fireproximityprompt, prompt, 0)
-        task.wait(0.2)
-        fired = true
+    for i = 1, steps do
+        local t = i / steps
+        local r = getRoot()
+        if not r then break end
+
+        local lerped = startPos:Lerp(targetPos, t)
+        local floatY = math.sin(t * math.pi) * Config.BypassFloatY
+        local newCF = CFrame.new(lerped + Vector3.new(0, floatY, 0))
+
+        if i > 1 then
+            drawTrailLine(r.Position, newCF.Position, Color3.fromRGB(160, 90, 255))
+        end
+
+        r.CFrame = newCF
+        task.wait(stepDelay)
     end
 
-    if State.ReturnToStart then
-        root.CFrame = origin
+    local finalRoot = getRoot()
+    if finalRoot then
+        finalRoot.CFrame = CFrame.new(targetPos)
     end
 
-    if not alreadyLocked then
-        releaseMove()
+    if Config.WallBypass then
+        for part, collide in pairs(prevCollide) do
+            if part and part.Parent then
+                pcall(function() part.CanCollide = collide end)
+            end
+        end
     end
-    return fired
+
+    return true
 end
 
 --=====================================================================
 -- INGREDIENTS
 --=====================================================================
+local function resolveDrinkKey(rawKey)
+    if not rawKey then return "Kola" end
+    local str = tostring(rawKey)
+    local lower = str:lower():gsub("%s+", "")
+    for ingName, _ in pairs(IngredientsConfig or {}) do
+        if tostring(ingName):lower():gsub("%s+", "") == lower then
+            return ingName
+        end
+    end
+    if lower == "cola" or lower == "kola" or lower == "cocacola" then
+        if IngredientsConfig["Kola"] then return "Kola" end
+        if IngredientsConfig["Cola"] then return "Cola" end
+        return "Kola"
+    elseif lower == "suprise" or lower == "surprise" then
+        if IngredientsConfig["Suprise"] then return "Suprise" end
+        if IngredientsConfig["Surprise"] then return "Surprise" end
+        return "Suprise"
+    end
+    return str
+end
 
 local function missingIngredients(foodKey)
     local food = FoodConfig[foodKey]
     if not food then return {} end
-
-    local inv = LocalPlayer:FindFirstChild("Ingredients")
+    local inv = player:FindFirstChild("Ingredients")
     local missing = {}
     for _, name in ipairs(food.RequiredIngredients or {}) do
         local value = inv and inv:FindFirstChild(name)
-        if not value or value.Value <= 0 then
-            table.insert(missing, name)
-        end
+        if not value or value.Value <= 0 then table.insert(missing, name) end
     end
     return missing
 end
 
 local function buyIngredient(key)
+    if not BuyIngredient then return false end
     local resolvedKey = resolveDrinkKey(key)
     local cfg = IngredientsConfig[resolvedKey] or IngredientsConfig[key]
     if not cfg or not cfg.Cost then return false end
-    if getCash() - cfg.Cost < State.CashReserve then return false end
-
+    if getCash() - cfg.Cost < Config.CashReserve then return false end
     local okCall, success = pcall(function()
         return BuyIngredient:InvokeServer(resolvedKey, 1, "Cash")
     end)
@@ -1138,59 +415,54 @@ local function buyIngredient(key)
 end
 
 --=====================================================================
--- SOFTDRINK STREAM & DIRECT FULFILLMENT (NATIVE REMOTE CONTRACT)
+-- SOFTDRINK
 --=====================================================================
-
 local activeDrinkOrders = {}
 local lastDrinkAttempt = {}
 
-local executorEnv = getgenv()
-for _, connection in ipairs(executorEnv.KarinderyaDrinkConns or {}) do
-    pcall(function() connection:Disconnect() end)
-end
-local drinkConns = {}
-executorEnv.KarinderyaDrinkConns = drinkConns
-
-table.insert(drinkConns, SoftdrinkOrdersUpdated.OnClientEvent:Connect(function(orders)
-    if type(orders) == "table" then
-        activeDrinkOrders = {}
-        for _, drink in pairs(orders) do
-            table.insert(activeDrinkOrders, resolveDrinkKey(drink))
+if SoftdrinkOrdersUpdated then
+    SoftdrinkOrdersUpdated.OnClientEvent:Connect(function(orders)
+        if type(orders) == "table" then
+            activeDrinkOrders = {}
+            for _, drink in pairs(orders) do
+                table.insert(activeDrinkOrders, resolveDrinkKey(drink))
+            end
         end
-    end
-end))
+    end)
+end
 
-table.insert(drinkConns, AdditionalOrder.OnClientEvent:Connect(function(npcName, drinkKey)
-    if drinkKey ~= nil then
-        local resolved = resolveDrinkKey(drinkKey)
-        table.insert(activeDrinkOrders, resolved)
-        Stats.SoftdrinkState = string.format("Customer requested %s", resolved)
-    end
-end))
+if AdditionalOrder then
+    AdditionalOrder.OnClientEvent:Connect(function(npcName, drinkKey)
+        if drinkKey ~= nil then
+            local resolved = resolveDrinkKey(drinkKey)
+            table.insert(activeDrinkOrders, resolved)
+            Stats.SoftdrinkState = string.format("Customer wants %s", resolved)
+        end
+    end)
+end
 
-table.insert(drinkConns, NPCDrink.OnClientEvent:Connect(function(_npcName, drinkKey)
-    Stats.SoftdrinksGiven = Stats.SoftdrinksGiven + 1
-    Stats.SoftdrinkState = string.format("Delivered %s!", resolveDrinkKey(drinkKey))
-end))
+if NPCDrink then
+    NPCDrink.OnClientEvent:Connect(function(_npcName, drinkKey)
+        Stats.SoftdrinksGiven = Stats.SoftdrinksGiven + 1
+        Stats.SoftdrinkState = string.format("Delivered %s!", resolveDrinkKey(drinkKey))
+    end)
+end
 
 local function stepFulfillSoftdrinkOrders()
-    if not State.SoftdrinkEnabled or #activeDrinkOrders == 0 then return false end
-
-    local drinkKey = activeDrinkOrders[1]
-    drinkKey = resolveDrinkKey(drinkKey)
-
+    if not Config.SoftdrinkEnabled or #activeDrinkOrders == 0 then return false end
+    if not GiveSoftdrink then return false end
+    local drinkKey = resolveDrinkKey(activeDrinkOrders[1])
     local now = os.clock()
     if now < (lastDrinkAttempt[drinkKey] or 0) then return false end
-    lastDrinkAttempt[drinkKey] = now + State.SoftdrinkRetry
+    lastDrinkAttempt[drinkKey] = now + Config.SoftdrinkRetry
 
-    -- 1. Ensure ingredient is in stock
-    local ingredients = LocalPlayer:FindFirstChild("Ingredients")
+    local ingredients = player:FindFirstChild("Ingredients")
     local stock = ingredients and ingredients:FindFirstChild(drinkKey)
     if not stock or stock.Value <= 0 then
-        if State.AutoBuy then
+        if Config.AutoBuyIngredients then
             buyIngredient(drinkKey)
             task.wait(0.2)
-            ingredients = LocalPlayer:FindFirstChild("Ingredients")
+            ingredients = player:FindFirstChild("Ingredients")
             stock = ingredients and ingredients:FindFirstChild(drinkKey)
         end
         if not stock or stock.Value <= 0 then
@@ -1200,15 +472,13 @@ local function stepFulfillSoftdrinkOrders()
         end
     end
 
-    -- 2. Directly fulfill softdrink order via game remote
     local okCall, success, msg = pcall(function()
         return GiveSoftdrink:InvokeServer(drinkKey)
     end)
-
     if okCall and success then
         table.remove(activeDrinkOrders, 1)
         Stats.SoftdrinksGiven = Stats.SoftdrinksGiven + 1
-        Stats.SoftdrinkState = string.format("Delivered %s to customer!", drinkKey)
+        Stats.SoftdrinkState = string.format("Delivered %s!", drinkKey)
         return true
     else
         if tostring(msg):match("Nobody") or tostring(msg):match("ordered") then
@@ -1220,37 +490,33 @@ local function stepFulfillSoftdrinkOrders()
 end
 
 --=====================================================================
--- SERVE - ORDER TAKING & FOOD PLATES
+-- SERVE
 --=====================================================================
-
 local function stepTakeOrder()
+    if not GetCounterInfo or not AssignNPC then return end
     local ok, npc, freeTables = pcall(function()
         return GetCounterInfo:InvokeServer()
     end)
     if not ok or type(npc) ~= "table" then return end
 
-    local order    = npc.Order
-    local food     = order and FoodConfig[order]
+    local order = npc.Order
+    local food = order and FoodConfig[order]
     local template = npc.TemplateName or ""
-    local npcData  = NPCTypes[template]
+    local npcData = NPCTypes[template]
 
-    if food and State.MinOrderValue > 0 and (food.Cost or 0) < State.MinOrderValue then
-        if State.AutoReject then
+    if food and Config.MinOrderValue > 0 and (food.Cost or 0) < Config.MinOrderValue then
+        if Config.AutoReject and RejectNPC then
             pcall(function() RejectNPC:FireServer() end)
             Stats.Rejected = Stats.Rejected + 1
-            Stats.Status = "Rejected " .. template .. " (low value: " .. tostring(order) .. ")"
         end
         return
     end
 
-    if npcData and State.MaxRunaway < 100 then
-        local runaway = npcData.RunawayChance or 0
-        if runaway > State.MaxRunaway then
-            if State.AutoReject then
+    if npcData and Config.MaxRunaway < 100 then
+        if (npcData.RunawayChance or 0) > Config.MaxRunaway then
+            if Config.AutoReject and RejectNPC then
                 pcall(function() RejectNPC:FireServer() end)
                 Stats.Rejected = Stats.Rejected + 1
-                Stats.Status = string.format("Rejected %s (%s, %d%% runaway)",
-                    template, npcData.Rarity or "?", runaway)
             end
             return
         end
@@ -1258,16 +524,14 @@ local function stepTakeOrder()
 
     local missing = missingIngredients(order)
     if #missing > 0 then
-        if State.AutoBuy then
+        if Config.AutoBuyIngredients then
             Stats.Status = "Buying " .. table.concat(missing, ", ")
-            for _, key in ipairs(missing) do
-                buyIngredient(key)
-            end
+            for _, key in ipairs(missing) do buyIngredient(key) end
             task.wait(0.2)
             missing = missingIngredients(order)
         end
         if #missing > 0 then
-            if State.AutoReject then
+            if Config.AutoReject and RejectNPC then
                 pcall(function() RejectNPC:FireServer() end)
                 Stats.Rejected = Stats.Rejected + 1
             end
@@ -1278,31 +542,29 @@ local function stepTakeOrder()
     freeTables = (type(freeTables) == "table") and freeTables or {}
     local slot = freeTables[1]
     if not slot then
-        Stats.Status = "Waiting for tables to free up"
+        Stats.Status = "Waiting for tables"
         return
     end
 
     local npcId = npc.NpcId or npc.TemplateName or ""
     local sent = pcall(function()
         AssignNPC:FireServer({
-            Slot    = slot.Slot,
-            Seat    = slot.Seat,
-            NPCName = npcId,
-            NpcId   = npcId,
+            Slot = slot.Slot, Seat = slot.Seat,
+            NPCName = npcId, NpcId = npcId,
         })
     end)
-
     if sent then
         Stats.Assigned = Stats.Assigned + 1
-        Stats.Status = "Seated " .. tostring(npc.TemplateName) .. " -> " .. tostring(slot.Name)
+        Stats.Status = "Seated " .. tostring(npc.TemplateName)
     end
 end
 
 local function carryingFood()
     if HandState and typeof(HandState.IsHoldingFood) == "function" then
-        return HandState.IsHoldingFood()
+        local ok, res = pcall(HandState.IsHoldingFood)
+        if ok then return res end
     end
-    local char = LocalPlayer.Character
+    local char = player.Character
     if not char then return false end
     for _, item in ipairs(char:GetChildren()) do
         if item:IsA("Accessory") and item:GetAttribute("IsFood") then
@@ -1312,137 +574,293 @@ local function carryingFood()
     return false
 end
 
+--=====================================================================
+-- PARK MODE PICKUP
+--=====================================================================
 local plateBackoff = {}
+local currentPickupTarget = nil
+local currentPickupAttempts = 0
+local currentPickupStart = 0
 
-local function stepPickupCooked(plot)
-    if HandState and typeof(HandState.CanPickUpFood) == "function" then
-        if not HandState.CanPickUpFood() then
-            return false
-        end
-    end
-
+local function findCookedPlate(plot)
     local serve = plot:FindFirstChild("Serve")
-    if not serve then return false end
+    if not serve then return nil end
 
     local now = os.clock()
+    local best = nil
+    local bestDist = math.huge
+    local root = getRoot()
+    local here = root and root.Position or Vector3.zero
+
     for _, spot in ipairs(serve:GetChildren()) do
         for _, model in ipairs(spot:GetChildren()) do
-            if model.Name:match("^Cooked_") and now >= (plateBackoff[model] or 0) then
+            local isCooked = model.Name:match("^Cooked_") or 
+                            model.Name:match("^Food_") or
+                            model.Name:match("^Dish_") or
+                            model:GetAttribute("IsFood") == true
+            if isCooked and now >= (plateBackoff[model] or 0) then
                 local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
                 if prompt and prompt.Enabled then
-                    Stats.Status = "Picking up " .. model.Name:gsub("^Cooked_", "")
-                    local platePart = prompt.Parent
-                    local pos = platePart:IsA("BasePart") and platePart.Position or platePart:GetPivot().Position
-
-                    local root = getRoot()
-                    if root and acquireMove(2) then
-                        local origin = root.CFrame
-                        root.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
-                        task.wait(State.SettleTime)
-
-                        pcall(fireproximityprompt, prompt, 0)
-                        task.wait(0.25)
-
-                        if carryingFood() then
-                            Stats.PickedUp = Stats.PickedUp + 1
-                            releaseMove()
-                            return true
-                        else
-                            plateBackoff[model] = os.clock() + 4
-                            if State.ReturnToStart and getRoot() then
-                                getRoot().CFrame = origin
-                            end
+                    local pos = pivotOf(prompt.Parent) or pivotOf(model)
+                    if pos then
+                        local d = (pos - here).Magnitude
+                        if d < bestDist then
+                            bestDist = d
+                            best = { model = model, prompt = prompt, pos = pos }
                         end
-                        releaseMove()
                     end
                 end
             end
         end
+    end
+    return best
+end
+
+local function stepPickupCooked(plot)
+    if not Config.AutoServe and not Config.AutoGrabCooked then return false end
+    if carryingFood() then
+        currentPickupTarget = nil
+        currentPickupAttempts = 0
+        return false
+    end
+
+    if HandState and typeof(HandState.CanPickUpFood) == "function" then
+        local ok, canPickup = pcall(HandState.CanPickUpFood)
+        if ok and not canPickup then return false end
+    end
+
+    if not currentPickupTarget or not currentPickupTarget.model.Parent then
+        local target = findCookedPlate(plot)
+        if not target then
+            currentPickupTarget = nil
+            currentPickupAttempts = 0
+            return false
+        end
+        currentPickupTarget = target
+        currentPickupAttempts = 0
+        currentPickupStart = os.clock()
+    end
+
+    local target = currentPickupTarget
+    local prompt = target.prompt
+    local model = target.model
+
+    if not model.Parent or not prompt.Parent or not prompt.Enabled then
+        currentPickupTarget = nil
+        currentPickupAttempts = 0
+        plateBackoff[model] = os.clock() + 2
+        return false
+    end
+
+    if os.clock() - currentPickupStart > Config.ParkMaxTime then
+        Stats.Status = "Pickup timeout"
+        plateBackoff[model] = os.clock() + 3
+        currentPickupTarget = nil
+        currentPickupAttempts = 0
+        return false
+    end
+
+    if currentPickupAttempts >= Config.ParkMaxAttempts then
+        Stats.Status = "Pickup gave up"
+        plateBackoff[model] = os.clock() + 3
+        currentPickupTarget = nil
+        currentPickupAttempts = 0
+        return false
+    end
+
+    local cleanName = model.Name:gsub("^Cooked_", ""):gsub("^Food_", ""):gsub("^Dish_", "")
+
+    if acquireMove(3) then
+        local root = getRoot()
+        local platePos = target.pos + Vector3.new(0, 2, 0)
+        
+        if not root or (root.Position - platePos).Magnitude > 3 then
+            Stats.Status = string.format("Parking at %s (%d)", cleanName, currentPickupAttempts + 1)
+            teleportBypass(platePos)
+        end
+        
+        task.wait(Config.SettleTime)
+        currentPickupAttempts = currentPickupAttempts + 1
+        Stats.Status = string.format("Grabbing %s (%d/%d)", cleanName, currentPickupAttempts, Config.ParkMaxAttempts)
+
+        pcall(fireproximityprompt, prompt, 0)
+        task.wait(0.3)
+
+        if carryingFood() then
+            Stats.PickedUp = Stats.PickedUp + 1
+            Stats.Status = "Got " .. cleanName
+            currentPickupTarget = nil
+            currentPickupAttempts = 0
+            releaseMove()
+            return true
+        end
+
+        releaseMove()
+
+        if Config.ParkModeEnabled and currentPickupTarget then
+            task.wait(Config.ParkAttemptDelay)
+            return true
+        end
+
+        plateBackoff[model] = os.clock() + 3
+        currentPickupTarget = nil
+        currentPickupAttempts = 0
     end
     return false
 end
 
-local function findServePrompt(plot)
-    local dining = plot:FindFirstChild("DiningPlot1")
-    if not dining then return nil, nil end
+--=====================================================================
+-- PARK MODE SERVE
+--=====================================================================
+local currentServeTarget = nil
+local currentServeAttempts = 0
+local currentServeStart = 0
 
-    local char = LocalPlayer.Character
-    local targetNpcId
-    if char then
-        for _, item in ipairs(char:GetChildren()) do
-            if item:IsA("Accessory") and item:GetAttribute("IsFood") then
-                local val = item:FindFirstChild("TargetNPCId")
-                if val and val.Value ~= "" then
-                    targetNpcId = val.Value
-                    break
+local function findServePrompt(plot, targetNpcId)
+    local dining = plot:FindFirstChild("DiningPlot1")
+    if not dining then return nil end
+
+    if not targetNpcId then
+        local char = player.Character
+        if char then
+            for _, item in ipairs(char:GetChildren()) do
+                if item:IsA("Accessory") and item:GetAttribute("IsFood") then
+                    local val = item:FindFirstChild("TargetNPCId")
+                    if val and val.Value ~= "" then targetNpcId = val.Value break end
+                    local val2 = item:GetAttribute("TargetNPCId")
+                    if val2 and val2 ~= "" then targetNpcId = val2 break end
                 end
             end
         end
     end
 
+    local targetPos = nil
     if targetNpcId then
         local clientNPCs = Workspace:FindFirstChild("ClientNPCs")
         local npcModel = clientNPCs and clientNPCs:FindFirstChild(targetNpcId)
         if npcModel then
-            local npcPos = pivotOf(npcModel)
-            if npcPos then
-                local closestPrompt, closestDist = nil, math.huge
-                for _, node in ipairs(dining:GetDescendants()) do
-                    if node:IsA("ProximityPrompt") and node.Enabled
-                    and (node:GetAttribute("TableAction") == "Serve" or node.ActionText:lower():match("serve")) then
-                        local pPos = pivotOf(node.Parent)
-                        if pPos then
-                            local d = (pPos - npcPos).Magnitude
-                            if d < closestDist then
-                                closestDist = d
-                                closestPrompt = node
-                            end
-                        end
+            targetPos = pivotOf(npcModel)
+        end
+    end
+
+    if targetPos then
+        local closestPrompt, closestDist = nil, math.huge
+        for _, node in ipairs(dining:GetDescendants()) do
+            if node:IsA("ProximityPrompt") and node.Enabled
+            and (node:GetAttribute("TableAction") == "Serve" or node.ActionText:lower():match("serve")) then
+                local pPos = pivotOf(node.Parent)
+                if pPos then
+                    local d = (pPos - targetPos).Magnitude
+                    if d < closestDist then
+                        closestDist = d; closestPrompt = node
                     end
                 end
-                if closestPrompt and closestDist < 15 then
-                    return closestPrompt, closestPrompt.Parent
-                end
             end
+        end
+        if closestPrompt and closestDist < 25 then
+            return { prompt = closestPrompt, pos = pivotOf(closestPrompt.Parent), npcPos = targetPos }
         end
     end
 
     for _, node in ipairs(dining:GetDescendants()) do
         if node:IsA("ProximityPrompt") and node.Enabled
         and (node:GetAttribute("TableAction") == "Serve" or node.ActionText:lower():match("serve")) then
-            return node, node.Parent
+            return { prompt = node, pos = pivotOf(node.Parent) }
         end
     end
-
-    return nil, nil
+    return nil
 end
 
 local function stepServe(plot)
-    if not carryingFood() then return false end
+    if not carryingFood() then
+        currentServeTarget = nil
+        currentServeAttempts = 0
+        return false
+    end
 
-    local prompt, tbl = findServePrompt(plot)
-    if prompt and prompt.Parent then
-        Stats.Status = "Serving food to table..."
-        local pos = pivotOf(prompt.Parent) or pivotOf(tbl)
-        if pos and firePromptAt(prompt, pos) then
-            task.wait(0.25)
-            if not carryingFood() then
-                Stats.Served = Stats.Served + 1
-                Stats.Status = "Food served!"
-                return true
-            end
+    if not currentServeTarget or not currentServeTarget.prompt.Parent then
+        local target = findServePrompt(plot)
+        if not target then
+            Stats.Status = "No serve prompt found"
+            return false
+        end
+        currentServeTarget = target
+        currentServeAttempts = 0
+        currentServeStart = os.clock()
+    end
+
+    local target = currentServeTarget
+    local prompt = target.prompt
+
+    if not prompt.Parent or not prompt.Enabled then
+        currentServeTarget = nil
+        currentServeAttempts = 0
+        return false
+    end
+
+    if os.clock() - currentServeStart > Config.ParkMaxTime then
+        Stats.Status = "Serve timeout"
+        currentServeTarget = nil
+        currentServeAttempts = 0
+        return false
+    end
+
+    if currentServeAttempts >= Config.ParkMaxAttempts then
+        Stats.Status = "Serve gave up"
+        currentServeTarget = nil
+        currentServeAttempts = 0
+        return false
+    end
+
+    local pos = target.pos or pivotOf(prompt.Parent)
+    if not pos then
+        currentServeTarget = nil
+        return false
+    end
+
+    if acquireMove(3) then
+        local root = getRoot()
+        local servePos = pos + Vector3.new(0, 2, 0)
+        
+        if not root or (root.Position - servePos).Magnitude > 3 then
+            Stats.Status = string.format("Parking at customer (%d)", currentServeAttempts + 1)
+            teleportBypass(servePos)
+        end
+        
+        task.wait(Config.SettleTime)
+        currentServeAttempts = currentServeAttempts + 1
+        Stats.Status = string.format("Serving (%d/%d)", currentServeAttempts, Config.ParkMaxAttempts)
+
+        if prompt.Parent and prompt.Enabled then
+            pcall(fireproximityprompt, prompt, 0)
+            task.wait(0.4)
+        end
+
+        if not carryingFood() then
+            Stats.Served = Stats.Served + 1
+            Stats.Status = "Food served!"
+            currentServeTarget = nil
+            currentServeAttempts = 0
+            releaseMove()
+            return true
+        end
+
+        releaseMove()
+
+        if Config.ParkModeEnabled then
+            task.wait(Config.ParkAttemptDelay)
+            return true
         end
     end
-    return true
+    return false
 end
 
 --=====================================================================
--- AUTO DIRTY DISHES (10s WASH HOLD)
+-- DISHES
 --=====================================================================
-
 local function countHeldAttribute(attribute)
     local count = 0
-    local char = LocalPlayer.Character
+    local char = player.Character
     if not char then return count end
     for _, item in ipairs(char:GetChildren()) do
         if item:IsA("Accessory") and item:GetAttribute(attribute) then
@@ -1456,23 +874,17 @@ local function findDirtyPrompts(plot)
     local result = {}
     local dining = plot and plot:FindFirstChild("DiningPlot1")
     if not dining then return result end
-
     for _, prompt in ipairs(dining:QueryDescendants("ProximityPrompt")) do
         if prompt.Parent and prompt.Enabled then
-            local tableAction = tostring(prompt:GetAttribute("TableAction") or "")
-            local actionText  = tostring(prompt.ActionText or ""):lower()
-            local promptName  = tostring(prompt.Name):lower()
-
-            if tableAction == "GetDirty"
-            or actionText:match("dirty") or actionText:match("clear") or actionText:match("dish")
-            or promptName:match("dirty") then
+            local ta = tostring(prompt:GetAttribute("TableAction") or "")
+            local at = tostring(prompt.ActionText or ""):lower()
+            local pn = tostring(prompt.Name):lower()
+            if ta == "GetDirty" or at:match("dirty") or at:match("clear") or at:match("dish") or pn:match("dirty") then
                 table.insert(result, prompt)
             end
         end
     end
-    table.sort(result, function(a, b)
-        return a:GetFullName() < b:GetFullName()
-    end)
+    table.sort(result, function(a, b) return a:GetFullName() < b:GetFullName() end)
     return result
 end
 
@@ -1480,9 +892,8 @@ local function sinkParts(plot)
     local sinkFolder = plot and plot:FindFirstChild("Sink")
     local sink = sinkFolder and sinkFolder:FindFirstChild("Sink")
     local promptPart = sink and sink:FindFirstChild("PromptPart")
-    local putPrompt  = promptPart and promptPart:FindFirstChild("Put")
+    local putPrompt = promptPart and promptPart:FindFirstChild("Put")
     local washPrompt = promptPart and promptPart:FindFirstChild("Wash")
-
     if not putPrompt or not washPrompt then
         if sinkFolder then
             for _, prompt in ipairs(sinkFolder:QueryDescendants("ProximityPrompt")) do
@@ -1491,7 +902,6 @@ local function sinkParts(plot)
             end
         end
     end
-
     return sink, putPrompt, washPrompt
 end
 
@@ -1501,9 +911,7 @@ local function countSinkDishes(plot)
     local count = 0
     if place then
         for _, child in ipairs(place:GetChildren()) do
-            if child.Name:match("^StackedDirty%d+$") then
-                count = count + 1
-            end
+            if child.Name:match("^StackedDirty%d+$") then count = count + 1 end
         end
     end
     return count
@@ -1514,12 +922,10 @@ local function waitForSinkPrompt(plot, promptName, timeout)
     repeat
         local _, putPrompt, washPrompt = sinkParts(plot)
         local prompt = promptName == "Put" and putPrompt or washPrompt
-        if prompt and prompt.Parent and prompt.Enabled then
-            return prompt
-        end
+        if prompt and prompt.Parent and prompt.Enabled then return prompt end
         if os.clock() >= deadline then break end
         task.wait(0.05)
-    until (Library and Library.Unloaded) or not State.DishEnabled
+    until not Config.DishEnabled
     return nil
 end
 
@@ -1541,11 +947,11 @@ local function fireDishPromptLocked(prompt, completeHold)
 
     local target = CFrame.new(position + Vector3.new(0, 2, 0))
     root.CFrame = target
-    task.wait(State.DishSettleTime)
+    task.wait(Config.DishSettle)
 
     local ok
     if completeHold then
-        local holdDuration = State.DishWashHoldDuration or 10
+        local holdDuration = Config.DishWashHold or 10
         if prompt.HoldDuration and prompt.HoldDuration > 0 then
             holdDuration = math.min(prompt.HoldDuration, holdDuration)
         end
@@ -1556,9 +962,7 @@ local function fireDishPromptLocked(prompt, completeHold)
             began = true
             local deadline = os.clock() + holdDuration + 0.05
             while os.clock() < deadline do
-                if (Library and Library.Unloaded) or not State.DishEnabled or not prompt.Parent then
-                    break
-                end
+                if not Config.DishEnabled or not prompt.Parent then break end
                 local currentRoot = getRoot()
                 if currentRoot then currentRoot.CFrame = target end
                 task.wait(0.1)
@@ -1570,11 +974,7 @@ local function fireDishPromptLocked(prompt, completeHold)
     else
         ok = pcall(fireproximityprompt, prompt, 0)
     end
-    if completeHold then
-        task.wait(0.05)
-    else
-        task.wait(0.15)
-    end
+    task.wait(completeHold and 0.05 or 0.15)
     return ok
 end
 
@@ -1600,18 +1000,18 @@ local dishServeYieldUntil = 0
 local dishWashRetryUntil = 0
 
 local function runDishCycle(plot)
-    if dishCycleBusy or not State.DishEnabled then return dishCycleBusy end
+    if dishCycleBusy or not Config.DishEnabled then return dishCycleBusy end
 
     if os.clock() < dishWashRetryUntil then
         Stats.DishState = string.format(
-            "Back at saved position - next dish check in %ds",
+            "Back at saved position — next dish check in %ds",
             math.max(1, math.ceil(dishWashRetryUntil - os.clock())))
         return false
     end
 
-    if State.Enabled and os.clock() < dishServeYieldUntil then
+    if Config.AutoServe and os.clock() < dishServeYieldUntil then
         Stats.DishState = string.format(
-            "Auto Serve priority - dishes resume in %ds",
+            "Auto Serve priority — dishes resume in %ds",
             math.max(1, math.ceil(dishServeYieldUntil - os.clock())))
         return false
     end
@@ -1619,11 +1019,11 @@ local function runDishCycle(plot)
     local dirtyPrompts = findDirtyPrompts(plot)
     local carriedBefore = countHeldAttribute("IsDirty")
     local sinkBefore = countSinkDishes(plot)
-    local batchAt = math.max(1, math.floor(State.DishBatchSize))
+    local batchAt = math.max(1, math.floor(Config.DishBatchSize))
 
     if carriedBefore == 0 and sinkBefore < batchAt and #dirtyPrompts == 0 then
         Stats.DishState = string.format(
-            "Watching for dirty dishes - sink %d/%d", sinkBefore, batchAt)
+            "Watching for dirty dishes — sink %d/%d", sinkBefore, batchAt)
         return false
     end
     if carryingFood() then return false end
@@ -1640,28 +1040,28 @@ local function runDishCycle(plot)
 
     local ok, err = pcall(function()
         if carriedBefore == 0 and sinkBefore >= batchAt then
-            local washPrompt = waitForSinkPrompt(plot, "Wash", State.DishConfirmTime)
+            local washPrompt = waitForSinkPrompt(plot, "Wash", Config.DishConfirm)
             if not washPrompt then
                 Stats.DishState = "Sink has dishes, but Wash is unavailable"
                 return
             end
 
-            local holdTime = math.min(washPrompt.HoldDuration > 0 and washPrompt.HoldDuration or 10, State.DishWashHoldDuration)
+            local holdTime = math.min(washPrompt.HoldDuration > 0 and washPrompt.HoldDuration or 10, Config.DishWashHold)
             Stats.DishState = string.format(
                 "Washing %d sink dish%s (%ds hold)", sinkBefore,
                 sinkBefore == 1 and "" or "s", math.ceil(holdTime))
             local fired = fireDishPromptLocked(washPrompt, true)
             returnedImmediately = restoreAfterDish(origin)
-            dishWashRetryUntil = os.clock() + State.DishServeYield
+            dishWashRetryUntil = os.clock() + Config.DishYield
             dishServeYieldUntil = dishWashRetryUntil
             if fired then
                 Stats.WashCycles = Stats.WashCycles + 1
                 washedCountThisCycle = math.max(1, sinkBefore)
                 Stats.DishState = string.format(
-                    "Washed %d dishes - back at saved position; Auto Serve priority",
+                    "Washed %d dishes — back at saved position; Auto Serve priority",
                     washedCountThisCycle)
             else
-                Stats.DishState = "Wash input finished - returning to serve"
+                Stats.DishState = "Wash input finished — returning to serve"
             end
             return
         end
@@ -1670,7 +1070,7 @@ local function runDishCycle(plot)
         local pickupLimit = #dirtyPrompts
 
         for index = 1, pickupLimit do
-            if (Library and Library.Unloaded) or not State.DishEnabled then break end
+            if not Config.DishEnabled then break end
             local prompt = dirtyPrompts[index]
             local before = countHeldAttribute("IsDirty")
             Stats.DishState = string.format(
@@ -1680,7 +1080,7 @@ local function runDishCycle(plot)
             end
             local after = waitForCountChange(
                 function() return countHeldAttribute("IsDirty") end,
-                before, State.DishConfirmTime)
+                before, Config.DishConfirm)
             if after > before then
                 local added = after - before
                 Stats.DishesPicked = Stats.DishesPicked + added
@@ -1692,7 +1092,7 @@ local function runDishCycle(plot)
             Stats.DishState = string.format("Putting %d dishes in sink", held)
             local stalled = 0
             while held > 0 and stalled < 2 do
-                local putPrompt = waitForSinkPrompt(plot, "Put", State.DishConfirmTime)
+                local putPrompt = waitForSinkPrompt(plot, "Put", Config.DishConfirm)
                 if not putPrompt then
                     Stats.DishState = "Waiting for sink Put prompt"
                     break
@@ -1701,7 +1101,7 @@ local function runDishCycle(plot)
                 fireDishPromptLocked(putPrompt, false)
                 local remaining, changed = waitForCountChange(
                     function() return countHeldAttribute("IsDirty") end,
-                    held, State.DishConfirmTime)
+                    held, Config.DishConfirm)
                 if remaining < held then
                     Stats.DishesSunk = Stats.DishesSunk + (held - remaining)
                     held = remaining
@@ -1720,31 +1120,31 @@ local function runDishCycle(plot)
 
         local sinkAfterPut = countSinkDishes(plot)
         if sinkAfterPut >= batchAt then
-            local washPrompt = waitForSinkPrompt(plot, "Wash", State.DishConfirmTime)
+            local washPrompt = waitForSinkPrompt(plot, "Wash", Config.DishConfirm)
             if not washPrompt then
                 Stats.DishState = "Dishes loaded; waiting for Wash prompt"
                 return
             end
-            local holdTime = math.min(washPrompt.HoldDuration > 0 and washPrompt.HoldDuration or 10, State.DishWashHoldDuration)
+            local holdTime = math.min(washPrompt.HoldDuration > 0 and washPrompt.HoldDuration or 10, Config.DishWashHold)
             Stats.DishState = string.format(
                 "Washing %d sink dish%s (%ds hold)", sinkAfterPut,
                 sinkAfterPut == 1 and "" or "s", math.ceil(holdTime))
             local fired = fireDishPromptLocked(washPrompt, true)
             returnedImmediately = restoreAfterDish(origin)
-            dishWashRetryUntil = os.clock() + State.DishServeYield
+            dishWashRetryUntil = os.clock() + Config.DishYield
             dishServeYieldUntil = dishWashRetryUntil
             if fired then
                 Stats.WashCycles = Stats.WashCycles + 1
                 washedCountThisCycle = math.max(1, sinkAfterPut)
                 Stats.DishState = string.format(
-                    "Washed %d dishes - back at saved position; Auto Serve priority",
+                    "Washed %d dishes — back at saved position; Auto Serve priority",
                     washedCountThisCycle)
             else
-                Stats.DishState = "Wash finished - back at saved position"
+                Stats.DishState = "Wash finished — back at saved position"
             end
         else
             Stats.DishState = string.format(
-                "Loaded sink %d/%d - waiting for full batch",
+                "Loaded sink %d/%d — waiting for full batch",
                 sinkAfterPut, batchAt)
         end
     end)
@@ -1752,7 +1152,7 @@ local function runDishCycle(plot)
     local returned = returnedImmediately or restoreAfterDish(origin)
     if washedCountThisCycle > 0 and returned then
         Stats.DishState = string.format(
-            "Washed %d dishes - back at saved position; Auto Serve priority",
+            "Washed %d dishes — back at saved position; Auto Serve priority",
             washedCountThisCycle)
     end
     releaseMove()
@@ -1765,44 +1165,82 @@ local function runDishCycle(plot)
 end
 
 --=====================================================================
--- TRASH & OTHER MODULES
+-- TRASH
 --=====================================================================
-
 local function restaurantBusy(plot)
-    if not plot then return false end
     if carryingFood() then return true end
-    if State.DishEnabled then
+    if Config.DishEnabled then
         if countHeldAttribute("IsDirty") > 0 then return true end
-        if countSinkDishes(plot) >= State.DishBatchSize then return true end
-        if #findDirtyPrompts(plot) > 0 then return true end
+        if countSinkDishes(plot) >= Config.DishBatchSize then return true end
     end
     return false
 end
 
-local function buildTrashList()
-    local spawner = Workspace:FindFirstChild("GlobalTrashSpawner")
-    if not spawner then return {} end
+local function findTrashSpawner()
+    local names = {"GlobalTrashSpawner", "TrashSpawner", "TrashSpawns", "GlobalTrash", "Trash", "TrashFolder"}
+    for _, name in ipairs(names) do
+        local found = Workspace:FindFirstChild(name)
+        if found then return found end
+    end
+    
+    for _, child in ipairs(Workspace:GetChildren()) do
+        if child:IsA("Folder") then
+            local n = child.Name:lower()
+            if n:find("trash") or n:find("garbage") or n:find("litter") then
+                return child
+            end
+        end
+    end
+    
+    for _, child in ipairs(Workspace:GetChildren()) do
+        if child:IsA("Folder") or child:IsA("Model") then
+            for _, sub in ipairs(child:GetChildren()) do
+                if sub:GetAttribute("RewardAmount") then
+                    return child
+                end
+            end
+        end
+    end
+    
+    return nil
+end
 
+local function buildTrashList()
+    local spawner = findTrashSpawner()
+    if not spawner then
+        Stats.TrashState = "Trash spawner not found"
+        return {}
+    end
+    
     local root = getRoot()
     local here = root and root.Position or Vector3.zero
     local list = {}
-
+    
     for _, model in ipairs(spawner:GetChildren()) do
         local reward = model:GetAttribute("RewardAmount")
+        if not reward then
+            local rv = model:FindFirstChild("RewardAmount") or model:FindFirstChild("Reward")
+            if rv and rv:IsA("ValueBase") then reward = rv.Value end
+        end
+        if not reward then reward = 5 end
+        
         local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
-        local pos    = pivotOf(model)
-        if reward and prompt and pos then
+        local pos = pivotOf(model)
+        
+        if prompt and pos then
             table.insert(list, {
-                model  = model,
-                prompt = prompt,
-                pos    = pos,
-                reward = reward,
-                dist   = (pos - here).Magnitude,
+                model = model, prompt = prompt, pos = pos,
+                reward = reward, dist = (pos - here).Magnitude,
             })
         end
     end
-
-    if State.TrashByValue then
+    
+    if #list == 0 then
+        Stats.TrashState = string.format("No valid items in '%s'", spawner.Name)
+        return {}
+    end
+    
+    if Config.TrashByValue then
         table.sort(list, function(a, b)
             if a.reward == b.reward then return a.dist < b.dist end
             return a.reward > b.reward
@@ -1810,82 +1248,133 @@ local function buildTrashList()
     else
         table.sort(list, function(a, b) return a.dist < b.dist end)
     end
-
     return list
 end
 
 local function sweepTrash(plot)
     local list = buildTrashList()
-    if #list == 0 then
-        Stats.TrashState = "Nothing on the ground"
-        return
-    end
-
+    if #list == 0 then return end
+    
     local total = 0
     for _, entry in ipairs(list) do total = total + entry.reward end
-    Stats.TrashState = string.format("Sweeping %d items (\u{20B1}%d)", #list, total)
+    Stats.TrashState = string.format("Bypass to %d items", #list)
 
-    local root = getRoot()
-    if not root then return end
-    if not acquireMove(5) then return end
-
-    local origin = root.CFrame
+    if not acquireMove(30) then return end
+    local origin = getRoot() and getRoot().Position
     local collected = 0
+    local failed = 0
 
     for index, entry in ipairs(list) do
-        if (Library and Library.Unloaded) or not State.TrashEnabled then break end
-        if State.TrashYield and restaurantBusy(plot) then
-            Stats.TrashState = "Paused - restaurant needs you"
-            break
-        end
+        if not Config.TrashEnabled then break end
+        if Config.TrashYield and restaurantBusy(plot) then break end
+        
         if entry.model.Parent then
-            Stats.TrashState = string.format(
-                "%d/%d  %s  (\u{20B1}%d)",
-                index, #list, entry.model.Name, entry.reward
-            )
-            local root2 = getRoot()
-            if not root2 then break end
-            root2.CFrame = CFrame.new(entry.pos + Vector3.new(0, 2, 0))
-            task.wait(State.SettleTime)
-            if entry.prompt.Parent and entry.prompt.Enabled then
-                pcall(fireproximityprompt, entry.prompt, 0)
-                task.wait(0.15)
+            Stats.TrashState = string.format("Bypass %d/%d  %s", index, #list, entry.model.Name)
+
+            local targetPos = entry.pos + Vector3.new(0, 2, 0)
+            local root = getRoot()
+            if not root then break end
+
+            local prevCollide = {}
+            if Config.WallBypass then
+                for _, part in ipairs(player.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        prevCollide[part] = part.CanCollide
+                        part.CanCollide = false
+                    end
+                end
             end
-            if not entry.model.Parent then
+
+            teleportBypass(targetPos, Config.TrashMicroStuds, Config.TrashMicroDelay, Config.TrashMicroMax)
+
+            task.wait(Config.TrashSettleTime)
+
+            local gotIt = false
+            for attempt = 1, Config.TrashMaxAttempts do
+                if not entry.model.Parent then
+                    gotIt = true
+                    break
+                end
+                
+                if entry.prompt.Parent and entry.prompt.Enabled then
+                    pcall(fireproximityprompt, entry.prompt, 0)
+                    task.wait(0.25)
+                end
+                
+                if not entry.model.Parent then
+                    gotIt = true
+                    break
+                end
+                task.wait(0.12)
+            end
+            
+            if gotIt then
                 collected = collected + 1
                 Stats.Trash = Stats.Trash + 1
                 Stats.TrashCash = Stats.TrashCash + entry.reward
+            else
+                failed = failed + 1
+                Stats.TrashFailed = Stats.TrashFailed + 1
             end
-            task.wait(State.TrashDelay)
+
+            if Config.WallBypass then
+                for part, collide in pairs(prevCollide) do
+                    if part and part.Parent then
+                        pcall(function() part.CanCollide = collide end)
+                    end
+                end
+            end
+            
+            task.wait(Config.TrashDelay)
         end
     end
 
-    local finalRoot = getRoot()
-    if finalRoot and State.ReturnToStart then
-        finalRoot.CFrame = origin
-    end
-    releaseMove()
+    if Config.ReturnToStart and origin then
+        local r = getRoot()
+        if r then
+            local backTarget = origin + Vector3.new(0, 2, 0)
+            local dist = (r.Position - backTarget).Magnitude
+            
+            if dist > 1 then
+                local prevCollide = {}
+                if Config.WallBypass then
+                    for _, part in ipairs(player.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            prevCollide[part] = part.CanCollide
+                            part.CanCollide = false
+                        end
+                    end
+                end
 
-    Stats.TrashState = string.format("Swept %d item%s", collected, collected == 1 and "" or "s")
+                teleportBypass(backTarget, Config.TrashMicroStuds, Config.TrashMicroDelay, Config.TrashMicroMax)
+
+                if Config.WallBypass then
+                    for part, collide in pairs(prevCollide) do
+                        if part and part.Parent then
+                            pcall(function() part.CanCollide = collide end)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    releaseMove()
+    Stats.TrashState = string.format("Collected %d, failed %d", collected, failed)
 end
 
 --=====================================================================
--- INGREDIENT RESTOCK
+-- STOCK
 --=====================================================================
-
 local buyBackoff = {}
 
 local function restockIngredients()
-    local inv = LocalPlayer:FindFirstChild("Ingredients")
-    if not inv then
-        Stats.StockState = "No ingredient folder"
-        return
-    end
-
+    if not BuyIngredient then return end
+    local inv = player:FindFirstChild("Ingredients")
+    if not inv then Stats.StockState = "No ingredients" return end
     local cash = getCash()
     local now = os.clock()
-    local packsBought, ingredientTypes, spent = 0, 0, 0
-    local broke, capped, backedOff, sharedFull = 0, 0, 0, 0
+    local packsBought, spent = 0, 0
 
     local keys = {}
     for key, cfg in pairs(IngredientsConfig) do
@@ -1895,37 +1384,19 @@ local function restockIngredients()
         end
     end
 
-    local sharedTotals = {}
-    local sharedCounts = {}
+    local sharedTotals, sharedCounts = {}, {}
     for _, key in ipairs(keys) do
         local cfg = IngredientsConfig[key]
         local category = cfg.Category
         if SharedIngredientCaps[category] then
             local child = inv:FindFirstChild(key)
-            sharedTotals[category] = (sharedTotals[category] or 0)
-                + (child and tonumber(child.Value) or 0)
+            sharedTotals[category] = (sharedTotals[category] or 0) + (child and tonumber(child.Value) or 0)
             sharedCounts[category] = (sharedCounts[category] or 0) + 1
         end
     end
 
-    table.sort(keys, function(a, b)
-        local aCategory = IngredientsConfig[a].Category
-        local bCategory = IngredientsConfig[b].Category
-        if aCategory == bCategory and SharedIngredientCaps[aCategory] then
-            local aValue = inv:FindFirstChild(a)
-            local bValue = inv:FindFirstChild(b)
-            local aUnits = aValue and tonumber(aValue.Value) or 0
-            local bUnits = bValue and tonumber(bValue.Value) or 0
-            if aUnits ~= bUnits then return aUnits < bUnits end
-        end
-        local aOrder = tonumber(IngredientsConfig[a].LayoutOrder) or math.huge
-        local bOrder = tonumber(IngredientsConfig[b].LayoutOrder) or math.huge
-        return aOrder == bOrder and a < b or aOrder < bOrder
-    end)
-
     for _, key in ipairs(keys) do
-        if (Library and Library.Unloaded) or not State.StockEnabled then break end
-
+        if not Config.StockEnabled then break end
         local cfg = IngredientsConfig[key]
         local child = inv:FindFirstChild(key)
         local units = child and tonumber(child.Value) or 0
@@ -1933,795 +1404,50 @@ local function restockIngredients()
         local yieldAmount = tonumber(cfg.YieldAmount)
         local category = cfg.Category
         local sharedCap = SharedIngredientCaps[category]
-        local cap = sharedCap
-            or tonumber(cfg.StockCap or cfg.MaxStock)
-            or State.StockCap
-        local target = sharedCap
-            and math.min(State.StockTarget,
-                math.floor(sharedCap / math.max(1, sharedCounts[category] or 1)))
-            or math.min(State.StockTarget, cap)
-        local threshold = math.min(State.StockThreshold, target)
-        local waitUntil = buyBackoff[key]
+        local cap = sharedCap or tonumber(cfg.StockCap or cfg.MaxStock) or Config.StockCap
+        local target = sharedCap and math.min(Config.StockTarget,
+            math.floor(sharedCap / math.max(1, sharedCounts[category] or 1)))
+            or math.min(Config.StockTarget, cap)
+        local threshold = math.min(Config.StockThreshold, target)
 
-        if waitUntil and now < waitUntil then
-            backedOff = backedOff + 1
-        elseif units >= cap then
-            capped = capped + 1
-        elseif units < threshold then
+        if (not buyBackoff[key] or now >= buyBackoff[key]) and units < threshold then
             local headroom = math.floor((cap - units) / yieldAmount)
             if sharedCap then
-                headroom = math.min(headroom, math.floor(
-                    (sharedCap - (sharedTotals[category] or 0)) / yieldAmount))
+                headroom = math.min(headroom, math.floor((sharedCap - (sharedTotals[category] or 0)) / yieldAmount))
             end
-            local packs = math.min(
-                math.ceil(math.max(0, target - units) / yieldAmount),
-                headroom)
-            local affordable = math.floor(
-                math.max(0, cash - State.CashReserve) / cost)
+            local packs = math.min(math.ceil(math.max(0, target - units) / yieldAmount), headroom)
+            local affordable = math.floor(math.max(0, cash - Config.CashReserve) / cost)
             packs = math.min(packs, affordable)
 
-            if headroom < 1 and sharedCap then
-                sharedFull = sharedFull + 1
-            elseif affordable < 1 then
-                broke = broke + 1
-                buyBackoff[key] = now + State.BrokeBackoff
-            elseif packs > 0 then
-                local boughtThisIngredient = 0
-
-                for _ = 1, packs do
-                    if (Library and Library.Unloaded) or not State.StockEnabled then break end
-                    local okCall, success, msg = pcall(function()
-                        return BuyIngredient:InvokeServer(key, 1, "Cash")
-                    end)
-                    if not okCall or not success then
-                        buyBackoff[key] = os.clock() + State.BrokeBackoff
-                        Stats.StockState = string.format(
-                            "%s refused: %s", key, tostring(msg or success))
-                        break
-                    end
-
-                    boughtThisIngredient = boughtThisIngredient + 1
+            for _ = 1, packs do
+                if not Config.StockEnabled then break end
+                local okCall, success = pcall(function()
+                    return BuyIngredient:InvokeServer(key, 1, "Cash")
+                end)
+                if okCall and success then
                     packsBought = packsBought + 1
                     spent = spent + cost
                     cash = cash - cost
-                    if sharedCap then
-                        sharedTotals[category] =
-                            (sharedTotals[category] or 0) + yieldAmount
-                    end
                     Stats.StockBought = Stats.StockBought + 1
-                    task.wait(0.18)
-                end
-
-                if boughtThisIngredient > 0 then
-                    ingredientTypes = ingredientTypes + 1
+                    task.wait(0.15)
+                else
+                    buyBackoff[key] = os.clock() + Config.BrokeBackoff
+                    break
                 end
             end
         end
     end
 
     if packsBought > 0 then
-        Stats.StockState = string.format(
-            "Bought %d pack%s across %d ingredient%s for \u{20B1}%d",
-            packsBought, packsBought == 1 and "" or "s",
-            ingredientTypes, ingredientTypes == 1 and "" or "s", spent)
-    elseif broke > 0 then
-        Stats.StockState = string.format("Low cash \u{20B1}%d - holding reserve \u{20B1}%d",
-            cash, State.CashReserve)
-    elseif sharedFull > 0 then
-        Stats.StockState = string.format(
-            "Shared drink storage full (%d/%d)",
-            sharedTotals.Softdrinks or 0,
-            SharedIngredientCaps.Softdrinks)
-    elseif backedOff > 0 then
-        Stats.StockState = string.format(
-            "Waiting to retry %d ingredient%s", backedOff,
-            backedOff == 1 and "" or "s")
-    elseif capped > 0 then
-        Stats.StockState = string.format("Stocked (%d at cap)", capped)
+        Stats.StockState = string.format("Bought %d packs (₱%d)", packsBought, spent)
     else
         Stats.StockState = "All stocked"
     end
 end
 
 --=====================================================================
--- TABLES & FURNITURE
+-- CODES
 --=====================================================================
-
-local tableBackoff = 0
-local tableBuyBusy = false
-local furniturePlaceBusy = false
-local furnitureAttempts = setmetatable({}, { __mode = "k" })
-
-local function wasFurnitureAttempted(slot, category, itemName)
-    local byCategory = furnitureAttempts[slot]
-    return byCategory and byCategory[category] == itemName
-end
-
-local function markFurnitureAttempted(slot, category, itemName)
-    local byCategory = furnitureAttempts[slot]
-    if not byCategory then
-        byCategory = {}
-        furnitureAttempts[slot] = byCategory
-    end
-    byCategory[category] = itemName
-end
-
-local FURNITURE_SYSTEM = {
-    Tables = "Dining",
-    Chairs = "Dining",
-    Stoves = "Kitchen",
-}
-
-local function furnitureOrder(category, itemName)
-    if not itemName then return -1 end
-    local cfg = FurnitureConfig.GetItemConfig(
-        FURNITURE_SYSTEM[category], category, itemName)
-    return cfg and (tonumber(cfg.LayoutOrder) or 0) or -1
-end
-
-local function bestOwned(inventory, category)
-    local bestName, bestOrder
-    for key, count in pairs(inventory) do
-        local cat, item = tostring(key):match("^(%a+)_(.+)$")
-        if cat == category and (tonumber(count) or 0) > 0 then
-            local order = furnitureOrder(category, item)
-            if order >= 0 and (not bestOrder or order > bestOrder) then
-                bestOrder, bestName = order, item
-            end
-        end
-    end
-    return bestName, bestOrder
-end
-
-local function currentFurniture(holder, category)
-    if not holder then return nil, -1 end
-    local placed = holder:GetChildren()[1]
-    if not placed then return nil, -1 end
-
-    local itemName = placed:GetAttribute("OriginalItemName") or placed.Name
-    return itemName, furnitureOrder(category, itemName)
-end
-
-local function unlockedTables()
-    local ok, t = pcall(function() return GetUnlockedTables:InvokeServer() end)
-    return ok and type(t) == "table" and t or nil
-end
-
-local function nextLockedTable(unlocked)
-    local unlockedCount = 0
-    for _, isUnlocked in pairs(unlocked) do
-        if isUnlocked == true then
-            unlockedCount = unlockedCount + 1
-        end
-    end
-
-    local target
-    for i = 7, 12 do
-        local name = "Table" .. i
-        if unlocked[name] ~= true then
-            target = name
-            break
-        end
-    end
-    return target, (unlockedCount + 1) * 20000
-end
-
-local function buyNextTablePass()
-    local unlocked = unlockedTables()
-    if not unlocked then
-        Stats.TableState = "Waiting for live table-slot data"
-        return
-    end
-
-    local target, exactPrice = nextLockedTable(unlocked)
-    if not target then
-        Stats.TableState = "All 12 tables unlocked"
-        return
-    end
-
-    local cash = getCash()
-    if cash < exactPrice then
-        Stats.TableState = string.format(
-            "%s costs \u{20B1}%d - cash \u{20B1}%d (need \u{20B1}%d more)",
-            target, exactPrice, cash, exactPrice - cash)
-        return
-    end
-
-    local okCall, success, msg = pcall(function()
-        return BuyTableEvent:InvokeServer(target)
-    end)
-
-    if okCall and success then
-        Stats.TablesBought = Stats.TablesBought + 1
-        tableBackoff = 0
-        Stats.TableState = string.format(
-            "Unlocked %s for \u{20B1}%d", target, exactPrice)
-    else
-        tableBackoff = os.clock() + 10
-        Stats.TableState = string.format("%s refused: %s", target, tostring(msg))
-    end
-end
-
-local function buyNextTable()
-    if tableBuyBusy or os.clock() < tableBackoff then return end
-    tableBuyBusy = true
-    local ok, err = pcall(buyNextTablePass)
-    tableBuyBusy = false
-    if not ok then
-        tableBackoff = os.clock() + 10
-        Stats.TableState = "Error: " .. tostring(err)
-    end
-end
-
-pcall(function()
-    if executorEnv.KarinderyaTableCashConnection then
-        executorEnv.KarinderyaTableCashConnection:Disconnect()
-    end
-end)
-local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
-local cashValue = leaderstats and leaderstats:FindFirstChild("Cash")
-if cashValue then
-    executorEnv.KarinderyaTableCashConnection =
-        cashValue:GetPropertyChangedSignal("Value"):Connect(function()
-            if State.TableBuyEnabled then
-                task.defer(buyNextTable)
-            end
-        end)
-end
-
-local function addUpgradeTarget(targets, slot, holder, category)
-    if not slot or not holder then return end
-    local currentName, currentOrder = currentFurniture(holder, category)
-    table.insert(targets[category], {
-        Slot = slot,
-        Holder = holder,
-        Category = category,
-        CurrentName = currentName,
-        CurrentOrder = currentOrder,
-    })
-end
-
-local function placeFurniture()
-    if furniturePlaceBusy then
-        Stats.TableState = "Furniture upgrade already running"
-        return
-    end
-
-    furniturePlaceBusy = true
-
-    local okRun, runError = pcall(function()
-        local plot = getPlot()
-        local dining = plot and plot:FindFirstChild("DiningPlot1")
-        local kitchen = plot and plot:FindFirstChild("KitchenPlot1")
-        if not plot or not dining then
-            Stats.TableState = "Furniture plots unavailable"
-            return
-        end
-
-        local okInventory, inventory = pcall(function()
-            return GetFurnitureInventory:InvokeServer()
-        end)
-        if not okInventory or type(inventory) ~= "table" then
-            Stats.TableState = "Furniture inventory unavailable"
-            return
-        end
-
-        local unlocked = unlockedTables()
-        local targets = { Tables = {}, Chairs = {}, Stoves = {} }
-
-        for i = 1, 12 do
-            local slotName = "Table" .. i
-            local isOpen = (i <= 6) or (unlocked and unlocked[slotName] == true)
-            local slot = dining:FindFirstChild(slotName)
-
-            if isOpen and slot then
-                addUpgradeTarget(targets, slot, slot:FindFirstChild("CurrentTable"), "Tables")
-                addUpgradeTarget(targets, slot, slot:FindFirstChild("CurrentChair"), "Chairs")
-            end
-        end
-
-        if kitchen then
-            for i = 1, 4 do
-                local slot = kitchen:FindFirstChild("slot" .. i)
-                if slot then
-                    addUpgradeTarget(targets, slot,
-                        slot:FindFirstChild("CurrentBuilding"), "Stoves")
-                end
-            end
-        end
-
-        local sent = 0
-        local verified = 0
-        local failed = 0
-        local remembered = 0
-        local verifiedByCategory = { Tables = 0, Chairs = 0, Stoves = 0 }
-
-        for _, category in ipairs({ "Tables", "Chairs", "Stoves" }) do
-            table.sort(targets[category], function(a, b)
-                return a.CurrentOrder < b.CurrentOrder
-            end)
-
-            for _, target in ipairs(targets[category]) do
-                if (Library and Library.Unloaded) or not State.TablePlaceEnabled then break end
-
-                local currentName, currentOrder = currentFurniture(
-                    target.Holder, category)
-                local bestName, bestOrder = bestOwned(inventory, category)
-                if bestName and bestOrder > currentOrder
-                and not wasFurnitureAttempted(target.Slot, category, bestName) then
-                    markFurnitureAttempted(target.Slot, category, bestName)
-                    local inventoryKey = category .. "_" .. bestName
-                    inventory[inventoryKey] = math.max(
-                        0, (tonumber(inventory[inventoryKey]) or 0) - 1)
-
-                    if category == "Stoves" then
-                        PlaceFurnitureEvent:FireServer(
-                            target.Slot, category, bestName, "Kitchen")
-                    else
-                        PlaceFurnitureEvent:FireServer(
-                            target.Slot, category, bestName)
-                    end
-
-                    sent = sent + 1
-                    task.wait(0.25)
-
-                    local applied = false
-                    local deadline = os.clock() + 1.25
-                    repeat
-                        local _, placedOrder = currentFurniture(
-                            target.Holder, category)
-                        applied = placedOrder >= bestOrder
-                        if not applied then task.wait(0.05) end
-                    until applied or os.clock() >= deadline
-
-                    if applied then
-                        verified = verified + 1
-                        verifiedByCategory[category] =
-                            verifiedByCategory[category] + 1
-
-                        if currentName then
-                            local returnedKey = category .. "_" .. currentName
-                            inventory[returnedKey] =
-                                (tonumber(inventory[returnedKey]) or 0) + 1
-                        end
-                    else
-                        inventory[inventoryKey] =
-                            (tonumber(inventory[inventoryKey]) or 0) + 1
-                        failed = failed + 1
-                    end
-                elseif bestName and bestOrder > currentOrder then
-                    remembered = remembered + 1
-                end
-            end
-        end
-
-        if sent == 0 then
-            Stats.TableState = remembered > 0
-                and "Watching - current best furniture was already handled"
-                or "Watching - placed furniture matches best items owned"
-            return
-        end
-
-        Stats.Placed = Stats.Placed + verified
-
-        if verified > 0 then
-            Stats.TableState = string.format(
-                "One pass: %d table%s, %d chair%s, %d stove%s upgraded%s",
-                verifiedByCategory.Tables,
-                verifiedByCategory.Tables == 1 and "" or "s",
-                verifiedByCategory.Chairs,
-                verifiedByCategory.Chairs == 1 and "" or "s",
-                verifiedByCategory.Stoves,
-                verifiedByCategory.Stoves == 1 and "" or "s",
-                failed > 0 and string.format(" (%d busy slot%s skipped)",
-                    failed, failed == 1 and "" or "s") or ""
-            )
-        else
-            Stats.TableState = string.format(
-                "%d busy slot%s skipped; run once again when free",
-                failed, failed == 1 and "" or "s")
-        end
-    end)
-
-    furniturePlaceBusy = false
-
-    if not okRun then
-        Stats.TableState = "Furniture error: " .. tostring(runError)
-    end
-end
-
---=====================================================================
--- SHOP, SIGNAGES & CODES
---=====================================================================
-
-local shopBackoff = 0
-local shopBusy = false
-
-local SHOP_CATEGORIES = { "Tables", "Chairs", "Stoves", "Paints", "Materials" }
-local SHOP_LABELS = {
-    Tables = {}, Chairs = {}, Stoves = {}, Paints = {}, Materials = {},
-}
-local SHOP_KEY_BY_LABEL = {
-    Tables = {}, Chairs = {}, Stoves = {}, Paints = {}, Materials = {},
-}
-
-local function formatShopPrice(value)
-    local text = tostring(math.floor(tonumber(value) or 0))
-    local reversed = text:reverse():gsub("(%d%d%d)", "%1,")
-    local formatted = reversed:reverse():gsub("^,", "")
-    return formatted
-end
-
-local function getShopItemConfig(entry)
-    if entry.Category == "Paints" then
-        local cfg = PaintConfig[entry.Key]
-        if cfg then
-            return {
-                Name = cfg.Name,
-                Price = cfg.Cost,
-                LayoutOrder = cfg.LayoutOrder,
-            }
-        end
-    elseif entry.Category == "Materials" then
-        local cfg = MaterialConfig[entry.Key]
-        if cfg then
-            return {
-                Name = cfg.Name,
-                Price = cfg.Cost,
-                LayoutOrder = cfg.LayoutOrder,
-            }
-        end
-    else
-        return FurnitureConfig.GetItemConfig(
-            entry.SystemType, entry.Category, entry.Key)
-    end
-
-    return nil
-end
-
-local function buildShopCatalog()
-    local ok, info = pcall(function() return GetShopInfo:InvokeServer() end)
-    if not ok or type(info) ~= "table" then return false end
-
-    for _, category in ipairs(SHOP_CATEGORIES) do
-        local catalog = {}
-        local list = info[category]
-
-        if type(list) == "table" then
-            for _, entry in ipairs(list) do
-                local cfg = getShopItemConfig(entry)
-                local price = cfg and tonumber(cfg.Price)
-
-                if price and price > 0 then
-                    table.insert(catalog, {
-                        Key = entry.Key,
-                        Name = tostring(cfg.Name or entry.Key),
-                        Price = price,
-                        Order = tonumber(cfg.LayoutOrder) or 0,
-                    })
-                end
-            end
-        end
-
-        table.sort(catalog, function(a, b)
-            if a.Order == b.Order then return a.Price < b.Price end
-            return a.Order > b.Order
-        end)
-
-        table.clear(SHOP_LABELS[category])
-        table.clear(SHOP_KEY_BY_LABEL[category])
-
-        for _, item in ipairs(catalog) do
-            local label = string.format("%s  -  \u{20B1}%s",
-                item.Name, formatShopPrice(item.Price))
-            table.insert(SHOP_LABELS[category], label)
-            SHOP_KEY_BY_LABEL[category][label] = item.Key
-        end
-    end
-
-    return true
-end
-
-local function setShopSelection(category, selectedLabels)
-    local selectedKeys = {}
-
-    for label, enabled in pairs(selectedLabels or {}) do
-        local key = SHOP_KEY_BY_LABEL[category][label]
-        if enabled and key then selectedKeys[key] = true end
-    end
-
-    State.ShopSelected[category] = selectedKeys
-end
-
-buildShopCatalog()
-
-local function shopPass()
-    if shopBusy or os.clock() < shopBackoff then return end
-    shopBusy = true
-
-    local okRun, runError = pcall(function()
-        local info = GetShopInfo:InvokeServer()
-        if type(info) ~= "table" then
-            Stats.ShopState = "Shop unavailable"
-            return
-        end
-
-        local cash = getCash()
-        local bought = 0
-        local spent = 0
-        local selectedCount = 0
-        local selectedInStock = false
-        local blockedByCash = false
-
-        for _, category in ipairs(SHOP_CATEGORIES) do
-            if (Library and Library.Unloaded) or not State.ShopEnabled then break end
-
-            local selected = State.ShopSelected[category] or {}
-            for _ in pairs(selected) do selectedCount = selectedCount + 1 end
-
-            local list = info[category]
-            if type(list) == "table" then
-                for _, entry in ipairs(list) do
-                    if (Library and Library.Unloaded) or not State.ShopEnabled then break end
-
-                    if selected[entry.Key] then
-                        local stock = tonumber(entry.Stock) or 0
-                        local cfg = getShopItemConfig(entry)
-                        local price = cfg and tonumber(cfg.Price)
-
-                        if stock > 0 and price and price > 0 then
-                            selectedInStock = true
-
-                            for copy = 1, stock do
-                                if (Library and Library.Unloaded) or not State.ShopEnabled then break end
-
-                                if (cash - price) < State.CashReserve then
-                                    blockedByCash = true
-                                    break
-                                end
-
-                                local okCall, success, msg = pcall(function()
-                                    return BuyFurniture:InvokeServer(
-                                        entry.SystemType, entry.Category, entry.Key)
-                                end)
-
-                                if not okCall or not success then
-                                    shopBackoff = os.clock() + 2
-                                    Stats.ShopState = string.format(
-                                        "%s refused: %s", entry.Key, tostring(msg or success))
-                                    return
-                                end
-
-                                bought = bought + 1
-                                spent = spent + price
-                                cash = cash - price
-                                Stats.ShopBought = Stats.ShopBought + 1
-                                Stats.ShopSpent = Stats.ShopSpent + price
-
-                                if copy < stock then task.wait(0.05) end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        if bought > 0 then
-            Stats.ShopState = string.format("Bought %d selected item%s for \u{20B1}%s",
-                bought, bought == 1 and "" or "s", formatShopPrice(spent))
-        elseif selectedCount == 0 then
-            Stats.ShopState = "Choose exact furniture, paints or materials below"
-        elseif blockedByCash then
-            Stats.ShopState = "Selected stock found, but cash reserve blocked purchase"
-        elseif not selectedInStock then
-            Stats.ShopState = "Selected items out of stock - watching restocks"
-        end
-    end)
-
-    shopBusy = false
-
-    if not okRun then
-        shopBackoff = os.clock() + 2
-        Stats.ShopState = "Shop error: " .. tostring(runError)
-    end
-end
-
-ShopRestocked.OnClientEvent:Connect(function()
-    if (Library and Library.Unloaded) or not State.ShopEnabled then return end
-    task.spawn(function()
-        task.wait(0.1)
-        pcall(shopPass)
-    end)
-end)
-
---=====================================================================
--- SIGNAGE & CODES & WHACK
---=====================================================================
-
-local SIGNAGE_LABELS = {}
-local SIGNAGE_KEY_BY_LABEL = {}
-local SIGNAGE_CATALOG = {}
-
-for key, cfg in pairs(SignageConfig) do
-    local price = tonumber(cfg.CostCash) or 0
-    if not cfg.IsDefault and cfg.Purchasable ~= false and price > 0 then
-        table.insert(SIGNAGE_CATALOG, {
-            Key = key,
-            Name = tostring(cfg.Name or key),
-            Price = price,
-            CashMultiplier = tonumber(cfg.CashMultiplier) or 1,
-            LuckMultiplier = tonumber(cfg.LuckMultiplier) or 1,
-        })
-    end
-end
-
-table.sort(SIGNAGE_CATALOG, function(a, b)
-    if a.CashMultiplier ~= b.CashMultiplier then
-        return a.CashMultiplier > b.CashMultiplier
-    end
-    if a.LuckMultiplier ~= b.LuckMultiplier then
-        return a.LuckMultiplier > b.LuckMultiplier
-    end
-    return a.Name < b.Name
-end)
-
-for _, item in ipairs(SIGNAGE_CATALOG) do
-    local label = string.format("%s  -  \u{20B1}%s  -  %.1fx cash / %.1fx luck",
-        item.Name, formatShopPrice(item.Price),
-        item.CashMultiplier, item.LuckMultiplier)
-    table.insert(SIGNAGE_LABELS, label)
-    SIGNAGE_KEY_BY_LABEL[label] = item.Key
-end
-
-local function setSignageSelection(selectedLabels)
-    local selected = {}
-    for label, enabled in pairs(selectedLabels or {}) do
-        local key = SIGNAGE_KEY_BY_LABEL[label]
-        if enabled and key then selected[key] = true end
-    end
-    State.SignageSelected = selected
-end
-
-local function signageMultipliers(key)
-    local cfg = SignageConfig[key]
-    return cfg and (tonumber(cfg.CashMultiplier) or 1) or 0,
-        cfg and (tonumber(cfg.LuckMultiplier) or 1) or 0
-end
-
-local function strictlyBetterSignage(candidate, current)
-    local candidateCash, candidateLuck = signageMultipliers(candidate)
-    local currentCash, currentLuck = signageMultipliers(current)
-    return candidateCash > currentCash
-        or (candidateCash == currentCash and candidateLuck > currentLuck)
-end
-
-local function bestOwnedSignage(info)
-    local unlocked = type(info.UnlockedSignages) == "table"
-        and info.UnlockedSignages or {}
-    local current = tostring(info.EquippedSignage or "Wooden")
-    local best = SignageConfig[current] and current or "Wooden"
-
-    local keys = {}
-    for key, cfg in pairs(SignageConfig) do
-        if cfg.IsDefault or unlocked[key] then
-            table.insert(keys, key)
-        end
-    end
-    table.sort(keys)
-
-    for _, key in ipairs(keys) do
-        if strictlyBetterSignage(key, best) then best = key end
-    end
-    return best
-end
-
-local signageBusy = false
-local signageBackoff = {}
-
-local function signagePass(forceBuy, forceEquip)
-    if signageBusy then return end
-    signageBusy = true
-
-    local okRun, runError = pcall(function()
-        local info = GetMyInfoData:InvokeServer()
-        if type(info) ~= "table" then
-            Stats.SignageState = "Signage data unavailable"
-            return
-        end
-
-        local unlocked = type(info.UnlockedSignages) == "table"
-            and info.UnlockedSignages or {}
-        unlocked.Wooden = true
-        info.UnlockedSignages = unlocked
-
-        local shouldBuy = forceBuy or State.SignageBuyEnabled
-        local shouldEquip = forceEquip or State.SignageEquipEnabled
-        local cash = getCash()
-        local bought = 0
-        local spent = 0
-        local selectedCount = 0
-        local waitingCash = false
-
-        if shouldBuy then
-            for _, item in ipairs(SIGNAGE_CATALOG) do
-                if State.SignageSelected[item.Key] then
-                    selectedCount = selectedCount + 1
-                    if not unlocked[item.Key]
-                    and os.clock() >= (signageBackoff[item.Key] or 0) then
-                        if (cash - item.Price) < State.CashReserve then
-                            waitingCash = true
-                        else
-                            local okCall, success, message = pcall(function()
-                                return BuySignage:InvokeServer(item.Key)
-                            end)
-                            if okCall and success then
-                                unlocked[item.Key] = true
-                                info.EquippedSignage = item.Key
-                                cash = cash - item.Price
-                                bought = bought + 1
-                                spent = spent + item.Price
-                                Stats.SignagesBought = Stats.SignagesBought + 1
-                                Stats.SignageSpent = Stats.SignageSpent + item.Price
-                                task.wait(0.15)
-                            else
-                                signageBackoff[item.Key] = os.clock() + 10
-                                Stats.SignageState = string.format(
-                                    "%s purchase refused: %s",
-                                    item.Key, tostring(message or success))
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        if shouldEquip then
-            local current = tostring(info.EquippedSignage or "Wooden")
-            local best = bestOwnedSignage(info)
-            local equipBackoffKey = "equip_" .. best
-            if strictlyBetterSignage(best, current)
-            and os.clock() >= (signageBackoff[equipBackoffKey] or 0) then
-                local okCall, success, message = pcall(function()
-                    return EquipSignage:InvokeServer(best)
-                end)
-                if okCall and success then
-                    info.EquippedSignage = best
-                    Stats.SignageState = string.format(
-                        "Equipped best owned signage: %s", best)
-                else
-                    signageBackoff[equipBackoffKey] = os.clock() + 10
-                    Stats.SignageState = string.format(
-                        "%s equip refused: %s", best,
-                        tostring(message or success))
-                end
-            elseif bought == 0 then
-                local cashMulti, luckMulti = signageMultipliers(current)
-                Stats.SignageState = string.format(
-                    "Best equipped: %s (%.1fx cash / %.1fx luck)",
-                    current, cashMulti, luckMulti)
-            end
-        end
-
-        if bought > 0 then
-            Stats.SignageState = string.format(
-                "Bought %d signage%s for \u{20B1}%s; equipped %s",
-                bought, bought == 1 and "" or "s",
-                formatShopPrice(spent), tostring(info.EquippedSignage))
-        elseif shouldBuy and selectedCount == 0 then
-            Stats.SignageState = "Choose specific cash signages below"
-        elseif waitingCash then
-            Stats.SignageState = string.format(
-                "Waiting for cash while keeping \u{20B1}%s reserve",
-                formatShopPrice(State.CashReserve))
-        end
-    end)
-
-    signageBusy = false
-    if not okRun then
-        Stats.SignageState = "Signage error: " .. tostring(runError)
-    end
-end
-
 local firedCodes = {}
 
 local function activeCodes()
@@ -2736,48 +1462,35 @@ local function activeCodes()
 end
 
 local function redeemAll(force)
+    if not RedeemCode then return 0 end
     local list = activeCodes()
-    if #list == 0 then
-        Stats.CodeState = "No active codes in CodeConfig"
-        return 0
-    end
-
+    if #list == 0 then Stats.CodeState = "No active codes" return 0 end
     local sent = 0
     for index, code in ipairs(list) do
-        if (Library and Library.Unloaded) then break end
         if force or not firedCodes[code] then
-            Stats.CodeState = string.format("Redeeming %d/%d - %s", index, #list, code)
-            local ok = pcall(function()
-                RedeemCode:FireServer(code)
-            end)
+            Stats.CodeState = string.format("Redeeming %d/%d", index, #list)
+            local ok = pcall(function() RedeemCode:FireServer(code) end)
             if ok then
                 firedCodes[code] = true
                 sent = sent + 1
                 Stats.Codes = Stats.Codes + 1
             end
-            task.wait(State.CodeDelay)
+            task.wait(Config.CodeDelay)
         end
     end
-
-    if sent > 0 then
-        Stats.CodeState = string.format("Sent %d code%s (%d active)", sent, sent == 1 and "" or "s", #list)
-    else
-        Stats.CodeState = string.format("All %d active code%s already sent", #list, #list == 1 and "" or "s")
-    end
+    Stats.CodeState = string.format("Sent %d codes", sent)
     return sent
 end
 
+--=====================================================================
+-- WHACK
+--=====================================================================
 local whackFired = setmetatable({}, { __mode = "k" })
 local pendingAck = {}
 
-local NPCRagdolled = Remotes:FindFirstChild("NPCRagdolled", true)
+local NPCRagdolled = safeWait(Remotes, "NPCRagdolled", 5)
 if NPCRagdolled and NPCRagdolled:IsA("RemoteEvent") then
-    local ackConn
-    ackConn = NPCRagdolled.OnClientEvent:Connect(function(npcName)
-        if (Library and Library.Unloaded) then
-            ackConn:Disconnect()
-            return
-        end
+    NPCRagdolled.OnClientEvent:Connect(function(npcName)
         if pendingAck[npcName] then
             pendingAck[npcName] = nil
             Stats.Whacked = Stats.Whacked + 1
@@ -2786,62 +1499,40 @@ if NPCRagdolled and NPCRagdolled:IsA("RemoteEvent") then
 end
 
 local function tryWhack(npcModel)
-    if not State.WhackEnabled then return end
+    if not Config.WhackEnabled then return end
     if not npcModel or not npcModel.Parent then return end
     if npcModel:GetAttribute("IsRunaway") ~= true then return end
-
     local last = whackFired[npcModel]
-    if last and (os.clock() - last) < State.WhackRetry then return end
+    if last and (os.clock() - last) < Config.WhackRetry then return end
     whackFired[npcModel] = os.clock()
-
     local name = npcModel.Name
     pendingAck[name] = true
     Stats.WhackTries = Stats.WhackTries + 1
-
     local target = npcModel:FindFirstChild("HumanoidRootPart") or npcModel.PrimaryPart
-
-    if State.WhackTeleport and target then
-        local root = getRoot()
-        if root and acquireMove(2) then
-            local origin = root.CFrame
-            root.CFrame = target.CFrame * CFrame.new(0, 0, 3)
+    if Config.WhackTeleport and target and HitRunawayEvent then
+        if acquireMove(2) then
+            local origin = getRoot() and getRoot().Position
+            teleportBypass(target.Position + Vector3.new(0, 0, 3))
             task.wait(0.15)
             pcall(function() HitRunawayEvent:FireServer(name) end)
             task.wait(0.15)
-            local back = getRoot()
-            if back and State.ReturnToStart then back.CFrame = origin end
+            if Config.ReturnToStart and origin then teleportBypass(origin) end
             releaseMove()
             return
         end
     end
-
-    pcall(function() HitRunawayEvent:FireServer(name) end)
+    if HitRunawayEvent then
+        pcall(function() HitRunawayEvent:FireServer(name) end)
+    end
 end
 
-local whackFolder, whackFolderConn
-
 task.spawn(function()
-    while task.wait(State.WhackPoll) do
-        if (Library and Library.Unloaded) then
-            if whackFolderConn then whackFolderConn:Disconnect() end
-            break
-        end
-        if State.WhackEnabled then
+    while task.wait(Config.WhackPoll) do
+        if Config.WhackEnabled then
             local folder = Workspace:FindFirstChild("ClientNPCs")
             if folder then
-                if folder ~= whackFolder then
-                    whackFolder = folder
-                    if whackFolderConn then whackFolderConn:Disconnect() end
-                    whackFolderConn = folder.ChildAdded:Connect(function(child)
-                        if child:IsA("Model") and child:GetAttribute("IsRunaway") == true then
-                            task.spawn(tryWhack, child)
-                        end
-                    end)
-                end
                 for _, npc in ipairs(folder:GetChildren()) do
-                    if npc:GetAttribute("IsRunaway") == true then
-                        task.spawn(tryWhack, npc)
-                    end
+                    if npc:GetAttribute("IsRunaway") == true then task.spawn(tryWhack, npc) end
                 end
             end
         end
@@ -2849,389 +1540,1359 @@ task.spawn(function()
 end)
 
 --=====================================================================
--- LOOPS (NATIVE PRIORITY ORDER & CLEAN PIPELINE)
+-- MAIN LOOP
 --=====================================================================
-
 task.spawn(function()
-    while task.wait(State.LoopDelay) do
-        if (Library and Library.Unloaded) then break end
-
-        if State.Enabled or State.DishEnabled then
+    while task.wait(Config.LoopDelay) do
+        if Config.AutoServe or Config.DishEnabled or Config.AutoGrabCooked then
             local plot = getPlot()
-            if not plot then
-                Stats.Status = "No plot owned - claim one first"
-            elseif not getRoot() then
-                Stats.Status = "Waiting for character"
-            else
+            if plot and getRoot() then
                 pcall(function()
-                    -- 1. High Priority: Serve carried food plate to table
                     if carryingFood() then
-                        if State.Enabled then
+                        if Config.AutoServe then 
                             stepServe(plot)
                         else
-                            Stats.DishState = "Waiting for carried food to be served"
-                            Stats.Status = Stats.DishState
+                            Stats.Status = "Carrying food"
                         end
                         return
                     end
 
-                    -- 2. Instant Softdrink Orders: Fulfill directly via server remote
-                    if State.Enabled and State.SoftdrinkEnabled then
-                        if stepFulfillSoftdrinkOrders() then
-                            return
-                        end
+                    if Config.AutoServe and Config.SoftdrinkEnabled then
+                        if stepFulfillSoftdrinkOrders() then return end
                     end
 
-                    -- 3. Take order & seat waiting customer at counter
-                    if State.Enabled then
+                    if Config.AutoServe then
                         stepTakeOrder()
                     end
 
-                    -- 4. Pickup freshly cooked food plate from serve counter
-                    if State.Enabled then
-                        if stepPickupCooked(plot) then
-                            return
-                        end
+                    if Config.AutoServe or Config.AutoGrabCooked then
+                        if stepPickupCooked(plot) then return end
                     end
 
-                    -- 5. Clean dirty dishes
-                    if State.DishEnabled then
+                    if Config.DishEnabled then
                         runDishCycle(plot)
                     end
                 end)
             end
-        else
-            Stats.Status = "Idle"
         end
     end
 end)
 
 task.spawn(function()
-    while task.wait(State.TrashRescan) do
-        if (Library and Library.Unloaded) then break end
-
-        if State.TrashEnabled then
+    while task.wait(Config.TrashRescan) do
+        if Config.TrashEnabled then
             local plot = getPlot()
-            if not getRoot() then
-                Stats.TrashState = "Waiting for character"
-            elseif State.TrashYield and restaurantBusy(plot) then
-                Stats.TrashState = "Waiting - restaurant busy"
-            else
-                local ok, err = pcall(function() sweepTrash(plot) end)
-                if not ok then
-                    Stats.TrashState = "Error: " .. tostring(err)
-                    releaseMove()
-                end
-            end
-        else
-            Stats.TrashState = "Idle"
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(State.ShopInterval) do
-        if (Library and Library.Unloaded) then break end
-        if State.ShopEnabled then
-            if os.clock() >= shopBackoff then
-                local ok, err = pcall(shopPass)
-                if not ok then Stats.ShopState = "Error: " .. tostring(err) end
-            end
-        else
-            Stats.ShopState = "Idle"
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(State.SignageInterval) do
-        if (Library and Library.Unloaded) then break end
-        if State.SignageBuyEnabled or State.SignageEquipEnabled then
-            local ok, err = pcall(signagePass, false, false)
-            if not ok then Stats.SignageState = "Error: " .. tostring(err) end
-        else
-            Stats.SignageState = "Idle"
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(State.TableInterval) do
-        if (Library and Library.Unloaded) then break end
-
-        if State.TableBuyEnabled and os.clock() >= tableBackoff then
-            buyNextTable()
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(State.FurnitureInterval) do
-        if (Library and Library.Unloaded) then break end
-        if State.TablePlaceEnabled and not furniturePlaceBusy then
-            local ok, err = pcall(placeFurniture)
-            if not ok then
-                Stats.TableState = "Furniture watcher error: " .. tostring(err)
+            if getRoot() and not (Config.TrashYield and restaurantBusy(plot)) then
+                pcall(sweepTrash, plot)
             end
         end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(Config.StockInterval) do
+        if Config.StockEnabled then pcall(restockIngredients) end
     end
 end)
 
 task.spawn(function()
     task.wait(4)
-    while not (Library and Library.Unloaded) do
-        if State.CodesEnabled then
-            pcall(function()
-                if redeemAll then redeemAll(false) end
+    while true do
+        if Config.CodesEnabled then pcall(function() redeemAll(false) end) end
+        task.wait(Config.CodeRescan)
+    end
+end)
+
+print("[KHUB] Loops started")
+
+--=====================================================================
+-- UI
+--=====================================================================
+local THEME = {
+    bg       = Color3.fromRGB(8, 6, 14),
+    rail     = Color3.fromRGB(14, 10, 22),
+    card     = Color3.fromRGB(22, 16, 34),
+    accent   = Color3.fromRGB(160, 90, 230),
+    accent2  = Color3.fromRGB(200, 140, 255),
+    gold     = Color3.fromRGB(230, 190, 255),
+    text     = Color3.fromRGB(235, 225, 250),
+    dim      = Color3.fromRGB(150, 130, 180),
+    mute     = Color3.fromRGB(110, 90, 140),
+    stroke   = Color3.fromRGB(110, 60, 170),
+    green    = Color3.fromRGB(80, 220, 130),
+    red      = Color3.fromRGB(255, 90, 110),
+    violet   = Color3.fromRGB(160, 90, 255),
+}
+
+local Parent = (gethui and gethui()) or CoreGui
+pcall(function()
+    for _, name in ipairs({"KHUB_Karinderya", "KHUB_UI", "KHUB_FloatIcon"}) do
+        local old = Parent:FindFirstChild(name)
+        if old then old:Destroy() end
+        local pg = player:FindFirstChild("PlayerGui")
+        if pg then
+            local old2 = pg:FindFirstChild(name)
+            if old2 then old2:Destroy() end
+        end
+    end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_Karinderya"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999999
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then ScreenGui.Parent = player:WaitForChild("PlayerGui") end
+
+print("[KHUB] UI starting")
+
+local function corner(p, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 10)
+    c.Parent = p
+    return c
+end
+local function mkstroke(p, col, th, tr)
+    local s = Instance.new("UIStroke")
+    s.Color = col or THEME.stroke
+    s.Thickness = th or 1.2
+    s.Transparency = tr or 0.35
+    s.Parent = p
+    return s
+end
+
+local HEADER_H = 80
+
+local WinUIScale = Instance.new("UIScale")
+WinUIScale.Parent = ScreenGui
+local function updateScale()
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+    local vx = cam.ViewportSize.X
+    local scale
+    if vx < 500 then scale = math.clamp(vx / 1200, 0.45, 0.7)
+    elseif vx < 900 then scale = math.clamp(vx / 1400, 0.55, 0.75)
+    else scale = math.clamp(vx / 1920, 0.65, 0.85) end
+    WinUIScale.Scale = scale
+end
+pcall(function()
+    Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+end)
+updateScale()
+
+local Win = Instance.new("Frame")
+Win.Name = "Window"
+Win.Size = UDim2.new(0, 660, 0, 520)
+Win.Position = UDim2.new(0.5, -330, 0.5, -260)
+Win.BackgroundColor3 = THEME.bg
+Win.BackgroundTransparency = 0.1
+Win.BorderSizePixel = 0
+Win.ClipsDescendants = true
+Win.Active = false
+Win.Parent = ScreenGui
+corner(Win, 14)
+mkstroke(Win, THEME.accent, 2, 0.28)
+
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 3)
+TopBar.BackgroundColor3 = Color3.new(1, 1, 1)
+TopBar.BorderSizePixel = 0
+TopBar.ZIndex = 25
+TopBar.Parent = Win
+local topG = Instance.new("UIGradient")
+topG.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,    Color3.fromRGB(120, 40, 255)),
+    ColorSequenceKeypoint.new(0.20, Color3.fromRGB(255, 80, 200)),
+    ColorSequenceKeypoint.new(0.40, Color3.fromRGB(255, 200, 120)),
+    ColorSequenceKeypoint.new(0.60, Color3.fromRGB(80, 200, 255)),
+    ColorSequenceKeypoint.new(0.80, Color3.fromRGB(140, 60, 255)),
+    ColorSequenceKeypoint.new(1,    Color3.fromRGB(120, 40, 255)),
+})
+topG.Parent = TopBar
+task.spawn(function()
+    local t = 0
+    while TopBar.Parent do
+        t = t + task.wait(0.03)
+        topG.Offset = Vector2.new(math.sin(t * 0.6) * 1.2, 0)
+    end
+end)
+
+local ParticlesFolder = Instance.new("Folder")
+ParticlesFolder.Parent = Win
+task.spawn(function()
+    for i = 1, 22 do
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.fromOffset(math.random(2, 5), math.random(2, 5))
+        dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+        dot.BackgroundColor3 = THEME.violet
+        dot.BackgroundTransparency = math.random(4, 8) / 10
+        dot.BorderSizePixel = 0
+        dot.ZIndex = 2
+        dot.Parent = ParticlesFolder
+        corner(dot, 99)
+        task.spawn(function()
+            while dot.Parent do
+                local tx = math.random()
+                local ty = math.random()
+                pcall(function()
+                    TweenService:Create(dot, TweenInfo.new(math.random(3, 6), Enum.EasingStyle.Sine), {
+                        Position = UDim2.new(tx, 0, ty, 0),
+                        BackgroundTransparency = math.random(5, 9) / 10,
+                    }):Play()
+                end)
+                task.wait(math.random(3, 6))
+            end
+        end)
+    end
+end)
+
+local WMFrame = Instance.new("Frame")
+WMFrame.Size = UDim2.new(1, 0, 1, 0)
+WMFrame.BackgroundTransparency = 1
+WMFrame.ClipsDescendants = true
+WMFrame.ZIndex = 2
+WMFrame.Parent = Win
+
+local BGWatermark = Instance.new("TextLabel")
+BGWatermark.Size = UDim2.new(1, 0, 1, 0)
+BGWatermark.BackgroundTransparency = 1
+BGWatermark.Text = "KHUB"
+BGWatermark.Font = Enum.Font.GothamBlack
+BGWatermark.TextSize = 150
+BGWatermark.TextColor3 = Color3.new(1,1,1)
+BGWatermark.TextTransparency = 0.82
+BGWatermark.TextXAlignment = Enum.TextXAlignment.Center
+BGWatermark.TextYAlignment = Enum.TextYAlignment.Center
+BGWatermark.ZIndex = 2
+BGWatermark.Parent = WMFrame
+
+local WMStroke = Instance.new("UIStroke")
+WMStroke.Color = THEME.accent
+WMStroke.Thickness = 3
+WMStroke.Transparency = 0.35
+WMStroke.Parent = BGWatermark
+
+local WMGrad = Instance.new("UIGradient")
+WMGrad.Offset = Vector2.new(-1, 0)
+WMGrad.Parent = BGWatermark
+
+task.spawn(function()
+    while BGWatermark.Parent do
+        local base   = Color3.fromRGB(70, 30, 160)
+        local bright = Color3.fromRGB(220, 70, 255)
+        local tip    = Color3.fromRGB(90, 210, 255)
+        WMGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, base),
+            ColorSequenceKeypoint.new(0.32, base),
+            ColorSequenceKeypoint.new(0.5, bright),
+            ColorSequenceKeypoint.new(0.68, tip),
+            ColorSequenceKeypoint.new(1, base),
+        })
+        WMGrad.Offset = Vector2.new(-1.2, 0)
+        TweenService:Create(WMGrad, TweenInfo.new(4.5, Enum.EasingStyle.Linear), {
+            Offset = Vector2.new(1.2, 0)
+        }):Play()
+        task.wait(4.7)
+    end
+end)
+
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, HEADER_H)
+Header.Position = UDim2.new(0, 0, 0, 3)
+Header.BackgroundTransparency = 1
+Header.ZIndex = 10
+Header.Active = true
+Header.Parent = Win
+
+do
+    local dragging, dragStart, startPos
+    Header.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = i.Position
+            startPos = Win.Position
+            i.Changed:Connect(function()
+                if i.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
             end)
         end
-        task.wait(State.CodeRescan or 120)
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            local d = i.Position - dragStart
+            Win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end)
+end
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0, 400, 0, 34)
+Title.Position = UDim2.new(0, 16, 0, 12)
+Title.BackgroundTransparency = 1
+Title.Text = "KHUB  ·  Karinderya"
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 20
+Title.TextColor3 = Color3.new(1,1,1)
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 14
+Title.Parent = Header
+
+local TitleGrad = Instance.new("UIGradient")
+TitleGrad.Offset = Vector2.new(-1.3, 0)
+TitleGrad.Parent = Title
+task.spawn(function()
+    while Title.Parent do
+        local base   = Color3.fromRGB(100, 60, 200)
+        local bright = Color3.fromRGB(240, 110, 255)
+        local tip    = Color3.fromRGB(140, 230, 255)
+        TitleGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0,    base),
+            ColorSequenceKeypoint.new(0.20, base),
+            ColorSequenceKeypoint.new(0.42, bright),
+            ColorSequenceKeypoint.new(0.55, tip),
+            ColorSequenceKeypoint.new(0.68, bright),
+            ColorSequenceKeypoint.new(0.85, base),
+            ColorSequenceKeypoint.new(1,    base),
+        })
+        TitleGrad.Offset = Vector2.new(-1.3, 0)
+        TweenService:Create(TitleGrad, TweenInfo.new(4.5, Enum.EasingStyle.Linear), {
+            Offset = Vector2.new(1.3, 0)
+        }):Play()
+        task.wait(4.7)
+    end
+end)
+
+local Sub = Instance.new("TextLabel")
+Sub.Size = UDim2.new(0, 500, 0, 16)
+Sub.Position = UDim2.new(0, 16, 0, 46)
+Sub.BackgroundTransparency = 1
+Sub.Text = "Bypass Trash  ·  Anti-Kick  ·  Park Mode"
+Sub.Font = Enum.Font.Code
+Sub.TextSize = 11
+Sub.TextColor3 = THEME.mute
+Sub.TextXAlignment = Enum.TextXAlignment.Left
+Sub.ZIndex = 12
+Sub.Parent = Header
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.fromOffset(28, 22)
+MinBtn.Position = UDim2.new(1, -36, 0, 12)
+MinBtn.BackgroundColor3 = THEME.card
+MinBtn.BackgroundTransparency = 0.15
+MinBtn.Text = "–"
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 16
+MinBtn.TextColor3 = THEME.text
+MinBtn.ZIndex = 18
+MinBtn.Parent = Header
+corner(MinBtn, 6)
+mkstroke(MinBtn, THEME.stroke, 1, 0.3)
+
+local Rail = Instance.new("Frame")
+Rail.Size = UDim2.new(0, 165, 1, -HEADER_H - 3)
+Rail.Position = UDim2.new(0, 0, 0, HEADER_H + 3)
+Rail.BackgroundColor3 = THEME.rail
+Rail.BackgroundTransparency = 0.15
+Rail.BorderSizePixel = 0
+Rail.ZIndex = 6
+Rail.ClipsDescendants = true
+Rail.Parent = Win
+
+local railPad = Instance.new("UIPadding")
+railPad.PaddingTop = UDim.new(0, 10)
+railPad.PaddingLeft = UDim.new(0, 6)
+railPad.PaddingRight = UDim.new(0, 6)
+railPad.Parent = Rail
+
+local railLay = Instance.new("UIListLayout")
+railLay.Padding = UDim.new(0, 6)
+railLay.SortOrder = Enum.SortOrder.LayoutOrder
+railLay.Parent = Rail
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(1, -165, 1, -HEADER_H - 3)
+Main.Position = UDim2.new(0, 165, 0, HEADER_H + 3)
+Main.BackgroundTransparency = 1
+Main.ClipsDescendants = true
+Main.ZIndex = 5
+Main.Parent = Win
+
+local Head = Instance.new("Frame")
+Head.Size = UDim2.new(1, 0, 0, 36)
+Head.BackgroundColor3 = THEME.rail
+Head.BackgroundTransparency = 0.15
+Head.BorderSizePixel = 0
+Head.ZIndex = 6
+Head.Parent = Main
+
+local PageTitle = Instance.new("TextLabel")
+PageTitle.Size = UDim2.new(1, -20, 0, 36)
+PageTitle.Position = UDim2.fromOffset(12, 0)
+PageTitle.BackgroundTransparency = 1
+PageTitle.Text = "Welcome"
+PageTitle.Font = Enum.Font.GothamBold
+PageTitle.TextSize = 13
+PageTitle.TextColor3 = THEME.accent2
+PageTitle.TextXAlignment = Enum.TextXAlignment.Left
+PageTitle.ZIndex = 7
+PageTitle.Parent = Head
+
+local ICON_IDS = {
+    Welcome  = "rbxassetid://140466936910510",
+    Main     = "rbxassetid://6023426926",
+    Trash    = "rbxassetid://6034684930",
+    Stock    = "rbxassetid://6035047409",
+    Codes    = "rbxassetid://6031280882",
+    Tables   = "rbxassetid://6031075931",
+    Signages = "rbxassetid://6023564981",
+    Save     = "rbxassetid://6031280882",
+    Credits  = "rbxassetid://6035047409",
+}
+local FALLBACK_COLORS = {
+    Welcome = Color3.fromRGB(210, 170, 255),
+    Main = Color3.fromRGB(255, 100, 100), Trash = Color3.fromRGB(255, 200, 80),
+    Stock = Color3.fromRGB(120, 220, 160), Codes = Color3.fromRGB(120, 180, 255),
+    Tables = Color3.fromRGB(210, 170, 255), Signages = Color3.fromRGB(255, 140, 90),
+    Save = Color3.fromRGB(180, 180, 200), Credits = Color3.fromRGB(255, 200, 255),
+}
+
+local Pages = {}
+local TabButtons = {}
+TabButtons.ActiveId = nil
+
+local function createPage(name)
+    local sf = Instance.new("ScrollingFrame")
+    sf.Name = name .. "Page"
+    sf.Size = UDim2.new(1, -10, 1, -44)
+    sf.Position = UDim2.new(0, 5, 0, 40)
+    sf.BackgroundTransparency = 1
+    sf.BorderSizePixel = 0
+    sf.ScrollBarThickness = 4
+    sf.ScrollBarImageColor3 = THEME.accent
+    sf.CanvasSize = UDim2.new(0, 0, 0, 0)
+    sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    sf.ZIndex = 6
+    sf.Visible = false
+    sf.Parent = Main
+
+    local lay = Instance.new("UIListLayout")
+    lay.Padding = UDim.new(0, 10)
+    lay.SortOrder = Enum.SortOrder.LayoutOrder
+    lay.Parent = sf
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 8)
+    pad.PaddingBottom = UDim.new(0, 16)
+    pad.PaddingLeft = UDim.new(0, 4)
+    pad.PaddingRight = UDim.new(0, 4)
+    pad.Parent = sf
+
+    Pages[name] = sf
+    return sf
+end
+
+local function switchPage(name, title)
+    for k, p in pairs(Pages) do p.Visible = (k == name) end
+    PageTitle.Text = title or name
+    TabButtons.ActiveId = name
+
+    for id, btn in pairs(TabButtons) do
+        if type(id) == "string" and not id:find("_") then
+            local active = (id == name)
+            local iconFrame = TabButtons[id .. "_Frame"]
+            local glow      = TabButtons[id .. "_Glow"]
+            local bar       = TabButtons[id .. "_Bar"]
+            local lbl       = TabButtons[id .. "_Label"]
+            local icon      = TabButtons[id .. "_Icon"]
+            local stroke    = TabButtons[id .. "_Stroke"]
+
+            if active then
+                TweenService:Create(btn, TweenInfo.new(0.2), { BackgroundTransparency = 0.05 }):Play()
+                if iconFrame then TweenService:Create(iconFrame, TweenInfo.new(0.2), { BackgroundTransparency = 0 }):Play() end
+                if glow then TweenService:Create(glow, TweenInfo.new(0.3), { BackgroundTransparency = 0.55, Size = UDim2.fromOffset(34, 34), Position = UDim2.new(0, 3, 0.5, -17) }):Play() end
+                if bar then bar.Visible = true end
+                if lbl then lbl.TextColor3 = THEME.gold end
+                if icon then icon.ImageColor3 = Color3.new(1,1,1) end
+                if stroke then stroke.Color = THEME.gold; stroke.Transparency = 0.15 end
+            else
+                TweenService:Create(btn, TweenInfo.new(0.2), { BackgroundTransparency = 0.25 }):Play()
+                if iconFrame then TweenService:Create(iconFrame, TweenInfo.new(0.2), { BackgroundTransparency = 0.15 }):Play() end
+                if glow then TweenService:Create(glow, TweenInfo.new(0.25), { BackgroundTransparency = 0.85, Size = UDim2.fromOffset(28, 28), Position = UDim2.new(0, 6, 0.5, -14) }):Play() end
+                if bar then bar.Visible = false end
+                if lbl then lbl.TextColor3 = THEME.text end
+                if icon then icon.ImageColor3 = Color3.fromRGB(220, 200, 240) end
+                if stroke then stroke.Color = THEME.accent; stroke.Transparency = 0.45 end
+            end
+        end
+    end
+end
+
+local function createTabButton(id, label, layoutOrder, title)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, 0, 0, 40)
+    b.BackgroundColor3 = THEME.card
+    b.BackgroundTransparency = 0.25
+    b.Text = ""
+    b.AutoButtonColor = false
+    b.LayoutOrder = layoutOrder
+    b.ZIndex = 7
+    b.Parent = Rail
+    corner(b, 8)
+    local btnStroke = mkstroke(b, THEME.accent, 1, 0.45)
+
+    local iconFrame = Instance.new("Frame")
+    iconFrame.Size = UDim2.fromOffset(26, 26)
+    iconFrame.Position = UDim2.new(0, 8, 0.5, -13)
+    iconFrame.BackgroundColor3 = Color3.fromRGB(30, 20, 48)
+    iconFrame.BackgroundTransparency = 0.15
+    iconFrame.BorderSizePixel = 0
+    iconFrame.ZIndex = 9
+    iconFrame.Parent = b
+    corner(iconFrame, 13)
+    mkstroke(iconFrame, THEME.accent, 1.2, 0.2)
+
+    local glow = Instance.new("Frame")
+    glow.Size = UDim2.fromOffset(30, 30)
+    glow.Position = UDim2.new(0, 6, 0.5, -15)
+    glow.BackgroundColor3 = THEME.violet
+    glow.BackgroundTransparency = 0.85
+    glow.BorderSizePixel = 0
+    glow.ZIndex = 8
+    glow.Parent = b
+    corner(glow, 15)
+
+    local fallbackDot = Instance.new("Frame")
+    fallbackDot.Size = UDim2.fromOffset(10, 10)
+    fallbackDot.Position = UDim2.new(0.5, -5, 0.5, -5)
+    fallbackDot.BackgroundColor3 = FALLBACK_COLORS[id] or THEME.gold
+    fallbackDot.BorderSizePixel = 0
+    fallbackDot.Visible = false
+    fallbackDot.ZIndex = 11
+    fallbackDot.Parent = iconFrame
+    corner(fallbackDot, 5)
+
+    local icon = Instance.new("ImageLabel")
+    icon.Size = UDim2.new(1, -6, 1, -6)
+    icon.Position = UDim2.fromOffset(3, 3)
+    icon.BackgroundTransparency = 1
+    icon.Image = ICON_IDS[id] or ICON_IDS.Main
+    icon.ScaleType = Enum.ScaleType.Fit
+    icon.ImageColor3 = Color3.fromRGB(220, 200, 240)
+    icon.ZIndex = 10
+    icon.Parent = iconFrame
+
+    task.spawn(function()
+        task.wait(1)
+        if not icon.IsLoaded then
+            fallbackDot.Visible = true
+            icon.Visible = false
+        end
+    end)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -44, 1, 0)
+    lbl.Position = UDim2.fromOffset(40, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = label
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 12
+    lbl.TextColor3 = THEME.text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 9
+    lbl.Parent = b
+
+    local activeBar = Instance.new("Frame")
+    activeBar.Size = UDim2.new(0, 3, 0.7, 0)
+    activeBar.Position = UDim2.new(0, 0, 0.15, 0)
+    activeBar.BackgroundColor3 = THEME.gold
+    activeBar.BorderSizePixel = 0
+    activeBar.ZIndex = 11
+    activeBar.Visible = false
+    activeBar.Parent = b
+    corner(activeBar, 2)
+
+    b.MouseEnter:Connect(function()
+        TweenService:Create(b, TweenInfo.new(0.15), { BackgroundTransparency = 0.1 }):Play()
+        TweenService:Create(iconFrame, TweenInfo.new(0.15), { BackgroundTransparency = 0 }):Play()
+        TweenService:Create(glow, TweenInfo.new(0.2), { BackgroundTransparency = 0.6, Size = UDim2.fromOffset(36, 36), Position = UDim2.new(0, 3, 0.5, -18) }):Play()
+    end)
+    b.MouseLeave:Connect(function()
+        if TabButtons.ActiveId ~= id then
+            TweenService:Create(b, TweenInfo.new(0.2), { BackgroundTransparency = 0.25 }):Play()
+            TweenService:Create(iconFrame, TweenInfo.new(0.2), { BackgroundTransparency = 0.15 }):Play()
+            TweenService:Create(glow, TweenInfo.new(0.25), { BackgroundTransparency = 0.85, Size = UDim2.fromOffset(30, 30), Position = UDim2.new(0, 6, 0.5, -15) }):Play()
+        end
+    end)
+
+    TabButtons[id] = b
+    TabButtons[id .. "_Icon"]   = icon
+    TabButtons[id .. "_Label"]  = lbl
+    TabButtons[id .. "_Frame"]  = iconFrame
+    TabButtons[id .. "_Glow"]   = glow
+    TabButtons[id .. "_Bar"]    = activeBar
+    TabButtons[id .. "_Stroke"] = btnStroke
+
+    b.MouseButton1Click:Connect(function() switchPage(id, title) end)
+    return b
+end
+
+local function card(parent, titleText)
+    local box = Instance.new("Frame")
+    box.Size = UDim2.new(1, 0, 0, 0)
+    box.AutomaticSize = Enum.AutomaticSize.Y
+    box.BackgroundColor3 = THEME.card
+    box.BackgroundTransparency = 0.18
+    box.BorderSizePixel = 0
+    box.ZIndex = 9
+    box.Parent = parent
+    corner(box, 9)
+    mkstroke(box, THEME.stroke, 1.2, 0.28)
+
+    local lay = Instance.new("UIListLayout")
+    lay.Padding = UDim.new(0, 8)
+    lay.SortOrder = Enum.SortOrder.LayoutOrder
+    lay.Parent = box
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 12)
+    pad.PaddingBottom = UDim.new(0, 12)
+    pad.PaddingLeft = UDim.new(0, 14)
+    pad.PaddingRight = UDim.new(0, 14)
+    pad.Parent = box
+
+    if titleText then
+        local h = Instance.new("TextLabel")
+        h.Size = UDim2.new(1, 0, 0, 22)
+        h.BackgroundTransparency = 1
+        h.Text = titleText
+        h.Font = Enum.Font.GothamBold
+        h.TextSize = 13
+        h.TextColor3 = THEME.gold
+        h.TextXAlignment = Enum.TextXAlignment.Left
+        h.ZIndex = 18
+        h.LayoutOrder = 0
+        h.Parent = box
+    end
+    return box
+end
+
+local function line(parent, text, color)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, 0, 0, 20)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.Font = Enum.Font.Gotham
+    l.TextSize = 11
+    l.TextColor3 = color or THEME.dim
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.TextWrapped = true
+    l.AutomaticSize = Enum.AutomaticSize.Y
+    l.ZIndex = 18
+    l.Parent = parent
+    return l
+end
+
+local function btn(parent, text, callback, color)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, 0, 0, 32)
+    b.BackgroundColor3 = color or Color3.fromRGB(40, 28, 60)
+    b.Text = text
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 12
+    b.TextColor3 = THEME.text
+    b.ZIndex = 17
+    b.Parent = parent
+    corner(b, 7)
+    mkstroke(b, THEME.accent, 1.1, 0.45)
+    b.MouseButton1Click:Connect(function() if callback then pcall(callback) end end)
+    return b
+end
+
+local function toggle(parent, labelText, default, callback)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 28)
+    row.BackgroundTransparency = 1
+    row.ZIndex = 17
+    row.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0.75, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 12
+    lbl.TextColor3 = THEME.text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 18
+    lbl.Parent = row
+
+    local state = default and true or false
+    local sw = Instance.new("TextButton")
+    sw.Size = UDim2.fromOffset(42, 22)
+    sw.Position = UDim2.new(1, -42, 0.5, -11)
+    sw.BackgroundColor3 = state and THEME.violet or Color3.fromRGB(50, 30, 70)
+    sw.Text = ""
+    sw.AutoButtonColor = false
+    sw.ZIndex = 18
+    sw.Parent = row
+    corner(sw, 11)
+    mkstroke(sw, THEME.violet, 1, 0.4)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(16, 16)
+    knob.Position = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
+    knob.BackgroundColor3 = Color3.fromRGB(235, 225, 250)
+    knob.ZIndex = 19
+    knob.Parent = sw
+    corner(knob, 8)
+
+    sw.MouseButton1Click:Connect(function()
+        state = not state
+        sw.BackgroundColor3 = state and THEME.violet or Color3.fromRGB(50, 30, 70)
+        TweenService:Create(knob, TweenInfo.new(0.15, Enum.EasingStyle.Quad),
+            { Position = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8) }):Play()
+        if callback then pcall(callback, state) end
+    end)
+    return sw
+end
+
+local function slider(parent, labelText, min, max, default, callback, isInt)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 42)
+    row.BackgroundTransparency = 1
+    row.ZIndex = 17
+    row.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0.7, 0, 0, 16)
+    lbl.Position = UDim2.new(0, 0, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 11
+    lbl.TextColor3 = THEME.text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 18
+    lbl.Parent = row
+
+    local function fmt(v)
+        if isInt then return tostring(math.floor(v + 0.5)) end
+        return (string.format("%.3f", v):gsub("%.?0+$", ""))
+    end
+
+    local val = Instance.new("TextLabel")
+    val.Size = UDim2.new(0.3, 0, 0, 16)
+    val.Position = UDim2.new(0.7, 0, 0, 0)
+    val.BackgroundTransparency = 1
+    val.Text = fmt(default)
+    val.Font = Enum.Font.Code
+    val.TextSize = 11
+    val.TextColor3 = THEME.gold
+    val.TextXAlignment = Enum.TextXAlignment.Right
+    val.ZIndex = 18
+    val.Parent = row
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, 0, 0, 7)
+    bar.Position = UDim2.new(0, 0, 0, 24)
+    bar.BackgroundColor3 = Color3.fromRGB(45, 30, 65)
+    bar.ZIndex = 18
+    bar.Parent = row
+    corner(bar, 4)
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    fill.BackgroundColor3 = THEME.violet
+    fill.ZIndex = 19
+    fill.Parent = bar
+    corner(fill, 4)
+
+    local dragging = false
+    local function setFromX(x)
+        local rel = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+        local v = min + (max - min) * rel
+        if isInt then v = math.floor(v + 0.5) end
+        fill.Size = UDim2.new(rel, 0, 1, 0)
+        val.Text = fmt(v)
+        if callback then pcall(callback, v) end
+    end
+
+    bar.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; setFromX(i.Position.X)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            setFromX(i.Position.X)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    return bar
+end
+
+local function input(parent, labelText, default, callback, isNumeric)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 46)
+    row.BackgroundTransparency = 1
+    row.ZIndex = 17
+    row.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 0, 16)
+    lbl.Position = UDim2.new(0, 0, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 11
+    lbl.TextColor3 = THEME.text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 18
+    lbl.Parent = row
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(1, 0, 0, 24)
+    box.Position = UDim2.new(0, 0, 0, 20)
+    box.BackgroundColor3 = Color3.fromRGB(18, 12, 28)
+    box.BackgroundTransparency = 0.15
+    box.Text = tostring(default or "")
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 11
+    box.TextColor3 = THEME.gold
+    box.PlaceholderText = "..."
+    box.PlaceholderColor3 = THEME.dim
+    box.ClearTextOnFocus = false
+    box.ZIndex = 18
+    box.Parent = row
+    corner(box, 5)
+    mkstroke(box, THEME.stroke, 1, 0.5)
+
+    box.FocusLost:Connect(function()
+        if callback then
+            if isNumeric then pcall(callback, tonumber(box.Text))
+            else pcall(callback, box.Text) end
+        end
+    end)
+    return box
+end
+
+--=====================================================================
+-- PAGES
+--=====================================================================
+local PageWelcome = createPage("Welcome")
+createTabButton("Welcome", "Welcome", 1, "Welcome & Profile")
+
+card(PageWelcome, "Welcome to KHUB")
+line(PageWelcome, "Karinderya · Full Fixed Edition", THEME.gold)
+line(PageWelcome, "Bypass trash + Park Mode + Restored Dish", THEME.green)
+line(PageWelcome, "Built by Kyiel & Arin", THEME.dim)
+
+local ProfileCard = card(PageWelcome, "Profile")
+local ProfileFrame = Instance.new("Frame")
+ProfileFrame.Size = UDim2.new(1, 0, 0, 100)
+ProfileFrame.BackgroundColor3 = Color3.fromRGB(14, 10, 20)
+ProfileFrame.BackgroundTransparency = 0.2
+ProfileFrame.BorderSizePixel = 0
+ProfileFrame.ZIndex = 10
+ProfileFrame.Parent = ProfileCard
+corner(ProfileFrame, 8)
+mkstroke(ProfileFrame, THEME.stroke, 1, 0.35)
+
+local AvatarImg = Instance.new("ImageLabel")
+AvatarImg.Size = UDim2.fromOffset(72, 72)
+AvatarImg.Position = UDim2.new(0, 12, 0.5, -36)
+AvatarImg.BackgroundColor3 = Color3.fromRGB(40, 28, 60)
+AvatarImg.BackgroundTransparency = 0.2
+AvatarImg.ZIndex = 11
+AvatarImg.Parent = ProfileFrame
+corner(AvatarImg, 36)
+mkstroke(AvatarImg, THEME.accent, 1.5, 0.3)
+
+pcall(function()
+    local content, isReady = Players:GetUserThumbnailAsync(
+        player.UserId,
+        Enum.ThumbnailType.HeadShot,
+        Enum.ThumbnailSize.Size150x150
+    )
+    if isReady then AvatarImg.Image = content end
+end)
+
+local ProfileName = Instance.new("TextLabel")
+ProfileName.Size = UDim2.new(1, -100, 0, 22)
+ProfileName.Position = UDim2.new(0, 96, 0, 18)
+ProfileName.BackgroundTransparency = 1
+ProfileName.Text = "User: " .. player.DisplayName
+ProfileName.Font = Enum.Font.GothamBold
+ProfileName.TextSize = 14
+ProfileName.TextColor3 = THEME.gold
+ProfileName.TextXAlignment = Enum.TextXAlignment.Left
+ProfileName.ZIndex = 11
+ProfileName.Parent = ProfileFrame
+
+local ProfileUser = Instance.new("TextLabel")
+ProfileUser.Size = UDim2.new(1, -100, 0, 18)
+ProfileUser.Position = UDim2.new(0, 96, 0, 42)
+ProfileUser.BackgroundTransparency = 1
+ProfileUser.Text = "@" .. player.Name
+ProfileUser.Font = Enum.Font.Gotham
+ProfileUser.TextSize = 11
+ProfileUser.TextColor3 = THEME.dim
+ProfileUser.TextXAlignment = Enum.TextXAlignment.Left
+ProfileUser.ZIndex = 11
+ProfileUser.Parent = ProfileFrame
+
+local ProfileId = Instance.new("TextLabel")
+ProfileId.Size = UDim2.new(1, -100, 0, 18)
+ProfileId.Position = UDim2.new(0, 96, 0, 62)
+ProfileId.BackgroundTransparency = 1
+ProfileId.Text = "ID: " .. tostring(player.UserId)
+ProfileId.Font = Enum.Font.Code
+ProfileId.TextSize = 11
+ProfileId.TextColor3 = THEME.dim
+ProfileId.TextXAlignment = Enum.TextXAlignment.Left
+ProfileId.ZIndex = 11
+ProfileId.Parent = ProfileFrame
+
+local InfoCard = card(PageWelcome, "Info")
+line(InfoCard, "Toggle UI: RightShift / RightCtrl / K", THEME.text)
+line(InfoCard, "Trash: Bypass + micro-split anti-kick", THEME.green)
+line(InfoCard, "Discord: " .. DISCORD, THEME.dim)
+
+local WelcomeCredits = card(PageWelcome, "Credits")
+btn(WelcomeCredits, "Copy Discord Invite", function()
+    if setclipboard then setclipboard(DISCORD) end
+    print("[KHUB] Discord copied")
+end)
+btn(WelcomeCredits, "Copy UI Info", function()
+    if setclipboard then setclipboard("KHUB Karinderya · Full Fixed · by Kyiel & Arin") end
+    print("[KHUB] Info copied")
+end)
+
+--=====================================================================
+-- MAIN
+--=====================================================================
+local PageMain = createPage("Main")
+createTabButton("Main", "Main", 2, "Main & Park Mode")
+
+local ParkCard = card(PageMain, "⚡ PARK MODE")
+line(ParkCard, "Stay at target until success", THEME.green)
+toggle(ParkCard, "Park Mode Enabled", Config.ParkModeEnabled, function(v) Config.ParkModeEnabled = v end)
+slider(ParkCard, "Max Attempts", 3, 30, Config.ParkMaxAttempts, function(v) Config.ParkMaxAttempts = v end, true)
+slider(ParkCard, "Attempt Delay (sec)", 0.1, 2, Config.ParkAttemptDelay, function(v) Config.ParkAttemptDelay = v end)
+slider(ParkCard, "Max Stay Time (sec)", 5, 60, Config.ParkMaxTime, function(v) Config.ParkMaxTime = v end, true)
+
+local ServeCard = card(PageMain, "Auto Serve Loop")
+toggle(ServeCard, "Auto Serve", Config.AutoServe, function(v) Config.AutoServe = v end)
+toggle(ServeCard, "Auto Grab Cooked", Config.AutoGrabCooked, function(v) Config.AutoGrabCooked = v end)
+toggle(ServeCard, "Auto Give Softdrinks", Config.SoftdrinkEnabled, function(v) Config.SoftdrinkEnabled = v end)
+toggle(ServeCard, "Auto Buy Missing", Config.AutoBuyIngredients, function(v) Config.AutoBuyIngredients = v end)
+toggle(ServeCard, "Auto Reject Bad", Config.AutoReject, function(v) Config.AutoReject = v end)
+slider(ServeCard, "Min Order Value", 0, 850, Config.MinOrderValue, function(v) Config.MinOrderValue = v end, true)
+slider(ServeCard, "Max Runaway %", 0, 100, Config.MaxRunaway, function(v) Config.MaxRunaway = v end, true)
+
+local DishCard = card(PageMain, "Auto Dirty Dishes")
+toggle(DishCard, "Auto Get + Wash", Config.DishEnabled, function(v) Config.DishEnabled = v end)
+slider(DishCard, "Wash Hold (sec)", 1, 30, Config.DishWashHold, function(v) Config.DishWashHold = v end, true)
+slider(DishCard, "Batch Size", 1, 10, Config.DishBatchSize, function(v) Config.DishBatchSize = v end, true)
+slider(DishCard, "Settle Time", 0.05, 1, Config.DishSettle, function(v) Config.DishSettle = v end)
+slider(DishCard, "Confirm Time", 0.5, 5, Config.DishConfirm, function(v) Config.DishConfirm = v end)
+slider(DishCard, "Serve Yield (sec)", 5, 30, Config.DishYield, function(v) Config.DishYield = v end, true)
+
+local WhackCard = card(PageMain, "Auto Whack")
+toggle(WhackCard, "Auto Whack", Config.WhackEnabled, function(v) Config.WhackEnabled = v end)
+toggle(WhackCard, "Teleport to Runaway", Config.WhackTeleport, function(v) Config.WhackTeleport = v end)
+
+local TimingCard = card(PageMain, "Timing")
+slider(TimingCard, "Loop Delay", 0.1, 2, Config.LoopDelay, function(v) Config.LoopDelay = v end)
+slider(TimingCard, "Settle Time", 0.05, 1, Config.SettleTime, function(v) Config.SettleTime = v end)
+toggle(TimingCard, "Return To Start", Config.ReturnToStart, function(v) Config.ReturnToStart = v end)
+
+--=====================================================================
+-- TRASH
+--=====================================================================
+local PageTrash = createPage("Trash")
+createTabButton("Trash", "Trash", 3, "Auto Trash")
+
+local TrashCard = card(PageTrash, "⭐ Auto Trash — BYPASS MODE")
+line(TrashCard, "Fast teleport + micro-split anti-kick", THEME.green)
+toggle(TrashCard, "Auto Collect Trash", Config.TrashEnabled, function(v) Config.TrashEnabled = v end)
+toggle(TrashCard, "Highest Value First", Config.TrashByValue, function(v) Config.TrashByValue = v end)
+toggle(TrashCard, "Yield To Serve", Config.TrashYield, function(v) Config.TrashYield = v end)
+slider(TrashCard, "Delay Between Items", 0.15, 2, Config.TrashDelay, function(v) Config.TrashDelay = v end)
+slider(TrashCard, "Rescan Interval", 2, 30, Config.TrashRescan, function(v) Config.TrashRescan = v end, true)
+slider(TrashCard, "Settle Time", 0.1, 1, Config.TrashSettleTime, function(v) Config.TrashSettleTime = v end)
+slider(TrashCard, "Max Retry Attempts", 1, 10, Config.TrashMaxAttempts, function(v) Config.TrashMaxAttempts = v end, true)
+
+local BypassCard = card(PageTrash, "⚡ Bypass Tuning")
+line(BypassCard, "Smaller micro-studs = safer (anti-kick)", THEME.dim)
+slider(BypassCard, "Micro Studs per Step", 5, 50, Config.TrashMicroStuds, function(v) Config.TrashMicroStuds = v end, true)
+slider(BypassCard, "Micro Delay (sec)", 0.002, 0.05, Config.TrashMicroDelay, function(v) Config.TrashMicroDelay = v end)
+slider(BypassCard, "Max Steps per Hop", 5, 60, Config.TrashMicroMax, function(v) Config.TrashMicroMax = v end, true)
+slider(BypassCard, "Bypass Speed", 100, 2000, Config.BypassSpeed, function(v) Config.BypassSpeed = v end, true)
+slider(BypassCard, "Bypass Float Y", 0, 10, Config.BypassFloatY, function(v) Config.BypassFloatY = v end)
+toggle(BypassCard, "Show Violet Trail", Config.ShowTrailLine, function(v) Config.ShowTrailLine = v end)
+toggle(BypassCard, "Wall Bypass (noclip)", Config.WallBypass, function(v) Config.WallBypass = v end)
+
+btn(TrashCard, "Sweep Once Now", function()
+    task.spawn(function()
+        local was = Config.TrashEnabled
+        Config.TrashEnabled = true
+        sweepTrash(getPlot())
+        Config.TrashEnabled = was
+    end)
+end)
+
+btn(TrashCard, "Debug: Find Trash Spawner", function()
+    local sp = findTrashSpawner()
+    if sp then
+        print("[KHUB DEBUG] Found trash spawner:", sp:GetFullName())
+        print("[KHUB DEBUG] Children count:", #sp:GetChildren())
+        for i, child in ipairs(sp:GetChildren()) do
+            if i > 5 then break end
+            local prompt = child:FindFirstChildWhichIsA("ProximityPrompt", true)
+            local reward = child:GetAttribute("RewardAmount")
+            print(string.format("[KHUB DEBUG]   %s  reward=%s  prompt=%s",
+                child.Name, tostring(reward), tostring(prompt ~= nil)))
+        end
+    else
+        print("[KHUB DEBUG] No trash spawner found!")
+    end
+end, THEME.violet)
+
+--=====================================================================
+-- STOCK
+--=====================================================================
+local PageStock = createPage("Stock")
+createTabButton("Stock", "Stock", 4, "Auto Stock")
+
+local StockCard = card(PageStock, "Auto Buy Ingredients")
+toggle(StockCard, "Auto Buy Ingredients", Config.StockEnabled, function(v) Config.StockEnabled = v end)
+slider(StockCard, "Restock Below", 1, 90, Config.StockThreshold, function(v) Config.StockThreshold = v end, true)
+slider(StockCard, "Fill Up To", 10, 100, Config.StockTarget, function(v) Config.StockTarget = v end, true)
+slider(StockCard, "Stock Cap", 25, 500, Config.StockCap, function(v) Config.StockCap = v end, true)
+slider(StockCard, "Cash Reserve", 0, 100000, Config.CashReserve, function(v) Config.CashReserve = v end, true)
+slider(StockCard, "Check Interval", 2, 30, Config.StockInterval, function(v) Config.StockInterval = v end, true)
+
+btn(StockCard, "Restock Now", function()
+    task.spawn(function()
+        local was = Config.StockEnabled
+        Config.StockEnabled = true
+        restockIngredients()
+        Config.StockEnabled = was
+    end)
+end)
+
+--=====================================================================
+-- CODES
+--=====================================================================
+local PageCodes = createPage("Codes")
+createTabButton("Codes", "Codes", 5, "Auto Codes")
+
+local CodesCard = card(PageCodes, "Auto Redeem Codes")
+toggle(CodesCard, "Auto Redeem", Config.CodesEnabled, function(v) Config.CodesEnabled = v end)
+slider(CodesCard, "Rescan Interval", 30, 600, Config.CodeRescan, function(v) Config.CodeRescan = v end, true)
+slider(CodesCard, "Delay Between", 1, 10, Config.CodeDelay, function(v) Config.CodeDelay = v end)
+btn(CodesCard, "Redeem All Now", function() task.spawn(function() redeemAll(false) end) end)
+btn(CodesCard, "Force Re-Redeem", function() task.spawn(function() redeemAll(true) end) end)
+
+--=====================================================================
+-- TABLES
+--=====================================================================
+local PageTables = createPage("Tables")
+createTabButton("Tables", "Tables", 6, "Tables & Shop")
+
+local TableCard = card(PageTables, "Auto Tables")
+toggle(TableCard, "Auto Buy Table Slots", Config.TableBuyEnabled, function(v) Config.TableBuyEnabled = v end)
+toggle(TableCard, "Auto Place Best Furniture", Config.TablePlaceEnabled, function(v) Config.TablePlaceEnabled = v end)
+
+--=====================================================================
+-- SIGNAGES
+--=====================================================================
+local PageSignages = createPage("Signages")
+createTabButton("Signages", "Signages", 7, "Signages")
+
+local SignageCard = card(PageSignages, "Auto Signage")
+toggle(SignageCard, "Auto Buy Selected", Config.SignageBuyEnabled, function(v) Config.SignageBuyEnabled = v end)
+toggle(SignageCard, "Auto Equip Best Owned", Config.SignageEquipEnabled, function(v) Config.SignageEquipEnabled = v end)
+
+--=====================================================================
+-- SAVE
+--=====================================================================
+local PageSave = createPage("Save")
+createTabButton("Save", "Save", 8, "Config Save")
+
+local CONFIG_FOLDER = "KHUB_Configs"
+local selectedConfig = nil
+local configList = {}
+
+local function ensureFolder()
+    pcall(function()
+        if makefolder and not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+    end)
+end
+
+local function listConfigs()
+    configList = {}
+    pcall(function()
+        if listfiles and isfolder and isfolder(CONFIG_FOLDER) then
+            for _, path in ipairs(listfiles(CONFIG_FOLDER)) do
+                local name = string.match(path, "([^/\\]+)%.json$")
+                if name then table.insert(configList, name) end
+            end
+        end
+    end)
+    table.sort(configList)
+    return configList
+end
+
+local SaveCard = card(PageSave, "Custom Config")
+
+local NameBox = input(SaveCard, "Config Name", "", function(v) end)
+local StatusLbl = line(SaveCard, "Status: Ready", THEME.dim)
+
+btn(SaveCard, "Create / Save Config", function()
+    local name = NameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+    if name == "" then
+        StatusLbl.Text = "Status: Type a name first"
+        StatusLbl.TextColor3 = THEME.red
+        return
+    end
+    ensureFolder()
+    local ok, err = pcall(function()
+        if not writefile then error("writefile not supported") end
+        writefile(CONFIG_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode(Config))
+    end)
+    if ok then
+        selectedConfig = name
+        StatusLbl.Text = "Status: Saved \"" .. name .. "\""
+        StatusLbl.TextColor3 = THEME.green
+        refreshConfigList()
+    else
+        StatusLbl.Text = "Status: Failed — " .. tostring(err)
+        StatusLbl.TextColor3 = THEME.red
+    end
+end)
+
+local ListFrame = Instance.new("ScrollingFrame")
+ListFrame.Size = UDim2.new(1, 0, 0, 90)
+ListFrame.BackgroundColor3 = Color3.fromRGB(14, 10, 20)
+ListFrame.BackgroundTransparency = 0.2
+ListFrame.BorderSizePixel = 0
+ListFrame.ScrollBarThickness = 3
+ListFrame.ScrollBarImageColor3 = THEME.accent
+ListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ListFrame.ZIndex = 11
+ListFrame.Parent = SaveCard
+corner(ListFrame, 6)
+mkstroke(ListFrame, THEME.stroke, 1, 0.4)
+
+local LL = Instance.new("UIListLayout")
+LL.Padding = UDim.new(0, 4)
+LL.Parent = ListFrame
+
+function refreshConfigList()
+    for _, child in ipairs(ListFrame:GetChildren()) do
+        if child:IsA("TextButton") or child:IsA("TextLabel") then child:Destroy() end
+    end
+    listConfigs()
+    if #configList == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Size = UDim2.new(1, -8, 0, 24)
+        empty.BackgroundTransparency = 1
+        empty.Text = "No configs yet"
+        empty.Font = Enum.Font.Gotham
+        empty.TextSize = 11
+        empty.TextColor3 = THEME.dim
+        empty.ZIndex = 12
+        empty.Parent = ListFrame
+    else
+        for i, name in ipairs(configList) do
+            local b = Instance.new("TextButton")
+            b.Size = UDim2.new(1, -8, 0, 26)
+            b.BackgroundColor3 = (selectedConfig == name) and THEME.violet or Color3.fromRGB(30, 22, 42)
+            b.BackgroundTransparency = (selectedConfig == name) and 0.3 or 0.2
+            b.Text = "  " .. name
+            b.Font = Enum.Font.GothamBold
+            b.TextSize = 11
+            b.TextColor3 = (selectedConfig == name) and THEME.gold or THEME.text
+            b.TextXAlignment = Enum.TextXAlignment.Left
+            b.ZIndex = 12
+            b.LayoutOrder = i
+            b.Parent = ListFrame
+            corner(b, 5)
+            b.MouseButton1Click:Connect(function()
+                selectedConfig = name
+                NameBox.Text = name
+                StatusLbl.Text = "Selected: " .. name
+                StatusLbl.TextColor3 = THEME.gold
+                refreshConfigList()
+            end)
+        end
+    end
+    ListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(90, #configList * 30 + 8))
+end
+
+btn(SaveCard, "Load Config", function()
+    local name = selectedConfig or NameBox.Text
+    if not name or name == "" then
+        StatusLbl.Text = "Status: Select a config"
+        StatusLbl.TextColor3 = THEME.red
+        return
+    end
+    local ok, data = pcall(function()
+        if not readfile or not isfile then error("readfile not supported") end
+        local path = CONFIG_FOLDER .. "/" .. name .. ".json"
+        if not isfile(path) then error("File not found") end
+        return HttpService:JSONDecode(readfile(path))
+    end)
+    if ok and type(data) == "table" then
+        for k, v in pairs(data) do
+            if Config[k] ~= nil then Config[k] = v end
+        end
+        StatusLbl.Text = "Status: Loaded \"" .. name .. "\""
+        StatusLbl.TextColor3 = THEME.green
+    else
+        StatusLbl.Text = "Status: Failed"
+        StatusLbl.TextColor3 = THEME.red
+    end
+end)
+
+btn(SaveCard, "Delete Selected", function()
+    local name = selectedConfig
+    if not name or name == "" then
+        StatusLbl.Text = "Status: Select a config"
+        StatusLbl.TextColor3 = THEME.red
+        return
+    end
+    local ok = pcall(function()
+        if not delfile then error("delfile not supported") end
+        delfile(CONFIG_FOLDER .. "/" .. name .. ".json")
+    end)
+    if ok then
+        StatusLbl.Text = "Status: Deleted \"" .. name .. "\""
+        StatusLbl.TextColor3 = THEME.green
+        selectedConfig = nil
+        NameBox.Text = ""
+        refreshConfigList()
+    else
+        StatusLbl.Text = "Status: Delete failed"
+        StatusLbl.TextColor3 = THEME.red
+    end
+end, THEME.red)
+
+btn(SaveCard, "Refresh List", function()
+    refreshConfigList()
+    StatusLbl.Text = "Status: Refreshed"
+    StatusLbl.TextColor3 = THEME.dim
+end)
+
+task.defer(refreshConfigList)
+
+--=====================================================================
+-- CREDITS
+--=====================================================================
+local PageCredits = createPage("Credits")
+createTabButton("Credits", "Credits", 9, "Credits")
+
+local CreditsCard = card(PageCredits, "Kyiel & Arin · KHUB")
+line(CreditsCard, "Full Fixed Edition", THEME.gold)
+line(CreditsCard, "· Bypass Trash (fast + anti-kick)", THEME.violet)
+line(CreditsCard, "· Park Mode serve", THEME.violet)
+line(CreditsCard, "· Restored dish wash", THEME.violet)
+line(CreditsCard, "", THEME.dim)
+line(CreditsCard, "Discord: " .. DISCORD, THEME.dim)
+
+btn(CreditsCard, "Copy Discord Invite", function()
+    if setclipboard then setclipboard(DISCORD) end
+    print("[KHUB] Discord copied")
+end)
+
+--=====================================================================
+-- ORB
+--=====================================================================
+local Orb = Instance.new("ImageButton")
+Orb.Name = "Orb"
+Orb.Size = UDim2.fromOffset(70, 70)
+Orb.Position = UDim2.new(0, 20, 0.5, -35)
+Orb.BackgroundColor3 = THEME.rail
+Orb.Image = LOGO_ID
+Orb.ScaleType = Enum.ScaleType.Fit
+Orb.Visible = false
+Orb.ZIndex = 50
+Orb.Parent = ScreenGui
+corner(Orb, 35)
+mkstroke(Orb, THEME.violet, 2.5, 0.15)
+
+local OrbGlow = Instance.new("Frame")
+OrbGlow.Size = UDim2.new(1, 12, 1, 12)
+OrbGlow.Position = UDim2.new(0, -6, 0, -6)
+OrbGlow.BackgroundColor3 = THEME.violet
+OrbGlow.BackgroundTransparency = 0.75
+OrbGlow.BorderSizePixel = 0
+OrbGlow.ZIndex = 49
+OrbGlow.Parent = Orb
+corner(OrbGlow, 41)
+
+local draggingOrb, dragStartOrb, startPosOrb
+Orb.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        draggingOrb = true; dragStartOrb = input.Position; startPosOrb = Orb.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then draggingOrb = false end
+        end)
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if draggingOrb and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local d = input.Position - dragStartOrb
+        Orb.Position = UDim2.new(startPosOrb.X.Scale, startPosOrb.X.Offset + d.X, startPosOrb.Y.Scale, startPosOrb.Y.Offset + d.Y)
+    end
+end)
+
+local function setVisible(on)
+    Win.Visible = on
+    Orb.Visible = not on
+end
+
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function() setVisible(true) end)
+
+--=====================================================================
+-- KEYBINDS
+--=====================================================================
+UserInputService.InputBegan:Connect(function(i, gp)
+    if gp then return end
+    if i.KeyCode == Enum.KeyCode.RightShift
+       or i.KeyCode == Enum.KeyCode.RightControl
+       or i.KeyCode == Enum.KeyCode.K then
+        setVisible(not Win.Visible)
     end
 end)
 
 --=====================================================================
--- UI BINDINGS (violet KHUB UI)
+-- INIT
 --=====================================================================
+switchPage("Welcome", "Welcome & Profile")
 
-local UI = _G.__KHUB_KARI_UI
-local section, makeToggle, makeSlider, makeButton, makeLabel = UI.section, UI.makeToggle, UI.makeSlider, UI.makeButton, UI.makeLabel
-local pages = UI.pages
-
--- MAIN
-section(pages.Main, "Auto Serve")
-makeToggle(pages.Main, "Auto Serve Loop", false, function(v)
-	State.Enabled = v
-	if UI.statusMain then UI.statusMain.Text = "Status: " .. (v and "Serving..." or "Idle") end
-end)
-makeToggle(pages.Main, "Auto Get Softdrinks", true, function(v) State.SoftdrinkEnabled = v end)
-makeToggle(pages.Main, "Auto Buy Ingredients (on demand)", true, function(v) State.AutoBuy = v end)
-makeToggle(pages.Main, "Reject Orders You Can't Cook", true, function(v) State.AutoReject = v end)
-makeSlider(pages.Main, "Min Order Value", 0, 850, 0, function(v) State.MinOrderValue = v end)
-makeSlider(pages.Main, "Max Runaway Distance", 20, 200, 100, function(v) State.MaxRunaway = v end)
-
-section(pages.Main, "Dirty Dishes")
-makeToggle(pages.Main, "Auto Dirty Dishes", false, function(v) State.DishEnabled = v end)
-makeSlider(pages.Main, "Dish Batch Size", 1, 10, 3, function(v) State.DishBatchSize = v end)
-makeSlider(pages.Main, "Wash Hold Duration", 3, 20, 10, function(v) State.DishWashHoldDuration = v end)
-
-section(pages.Main, "Whack Runaways")
-makeToggle(pages.Main, "Auto Whack", false, function(v) State.WhackEnabled = v end)
-makeToggle(pages.Main, "Whack Teleport", true, function(v) State.WhackTeleport = v end)
-
-section(pages.Main, "Timing")
-makeSlider(pages.Main, "Loop Delay", 0.1, 2, 0.35, function(v) State.LoopDelay = v end)
-makeToggle(pages.Main, "Return To Start", true, function(v) State.ReturnToStart = v end)
-
-local mainStatus = makeLabel(pages.Main, "Serve: Idle | Dish: Idle")
 task.spawn(function()
-	while not Library.Unloaded do
-		task.wait(1)
-		if mainStatus and mainStatus.Parent then
-			mainStatus.Text = string.format("Serve: %s | Dish: %s | Soft: %s",
-				tostring(Stats.Status or "Idle"),
-				tostring(Stats.DishState or "Idle"),
-				tostring(Stats.SoftdrinkState or "Idle"))
-		end
-		if UI.statusMain and UI.statusMain.Parent then
-			UI.statusMain.Text = "Status: " .. tostring(Stats.Status or "Idle")
-		end
-	end
-end)
-
--- TRASH
-section(pages.Trash, "Auto Collect Trash")
-makeToggle(pages.Trash, "Auto Collect Trash", false, function(v) State.TrashEnabled = v end)
-makeToggle(pages.Trash, "Highest Value First", true, function(v) State.TrashByValue = v end)
-makeToggle(pages.Trash, "Yield To Serve Loop", true, function(v) State.TrashYield = v end)
-makeSlider(pages.Trash, "Trash Delay (0.1-1.5s)", 1, 15, 3, function(v) State.TrashDelay = v * 0.1 end)
-makeSlider(pages.Trash, "Rescan Interval", 1, 30, 3, function(v) State.TrashRescan = v end)
-makeButton(pages.Trash, "Sweep Once Now", function()
-	task.spawn(function()
-		local was = State.TrashEnabled
-		State.TrashEnabled = true
-		pcall(function() sweepTrash(getPlot()) end)
-		State.TrashEnabled = was
-	end)
-end)
-local trashStatus = makeLabel(pages.Trash, "Trash: Idle")
-task.spawn(function()
-	while not Library.Unloaded do
-		task.wait(1.2)
-		if trashStatus and trashStatus.Parent then
-			trashStatus.Text = "Trash: " .. tostring(Stats.TrashState or "Idle") .. " | $" .. tostring(Stats.TrashCash or 0)
-		end
-	end
-end)
-
--- STOCK
-section(pages.Stock, "Auto Buy Ingredients")
-makeToggle(pages.Stock, "Auto Buy Ingredients", false, function(v) State.StockEnabled = v end)
-makeSlider(pages.Stock, "Stock Threshold", 0, 100, 20, function(v) State.StockThreshold = v end)
-makeSlider(pages.Stock, "Stock Target", 10, 100, 80, function(v) State.StockTarget = v end)
-makeSlider(pages.Stock, "Cash Reserve", 0, 50000, 5000, function(v) State.CashReserve = v end)
-makeSlider(pages.Stock, "Check Interval", 1, 30, 5, function(v) State.StockInterval = v end)
-makeButton(pages.Stock, "Restock Now", function()
-	task.spawn(function()
-		local was = State.StockEnabled
-		State.StockEnabled = true
-		task.wait(0.5)
-		State.StockEnabled = was
-	end)
-end)
-local stockStatus = makeLabel(pages.Stock, "Stock: Idle")
-task.spawn(function()
-	while not Library.Unloaded do
-		task.wait(1.2)
-		if stockStatus and stockStatus.Parent then
-			stockStatus.Text = "Stock: " .. tostring(Stats.StockState or "Idle") .. " | Bought: " .. tostring(Stats.StockBought or 0)
-		end
-	end
-end)
-
--- CODES
-section(pages.Codes, "Auto Redeem Codes")
-makeToggle(pages.Codes, "Auto Redeem Codes", true, function(v) State.CodesEnabled = v end)
-makeSlider(pages.Codes, "Rescan Interval", 30, 300, 120, function(v) State.CodeRescan = v end)
-makeSlider(pages.Codes, "Delay Between Codes", 1, 10, 3, function(v) State.CodeDelay = v end)
-makeButton(pages.Codes, "Redeem All Now", function()
-	task.spawn(function() pcall(redeemAll, false) end)
-end)
-makeButton(pages.Codes, "Force Re-Redeem All", function()
-	task.spawn(function() pcall(redeemAll, true) end)
-end)
-local codeStatus = makeLabel(pages.Codes, "Codes: Idle")
-task.spawn(function()
-	while not Library.Unloaded do
-		task.wait(1.5)
-		if codeStatus and codeStatus.Parent then
-			codeStatus.Text = "Codes: " .. tostring(Stats.CodeState or "Idle") .. " | Done: " .. tostring(Stats.Codes or 0)
-		end
-	end
-end)
-
--- TABLES
-section(pages.Tables, "Tables & Furniture")
-makeToggle(pages.Tables, "Auto Buy Table Slots", false, function(v)
-	State.TableBuyEnabled = v
-	if v then task.spawn(function() pcall(buyNextTable) end) end
-end)
-makeToggle(pages.Tables, "Auto Place Best Furniture", false, function(v)
-	State.TablePlaceEnabled = v
-	if v then task.spawn(function() pcall(placeFurniture) end) end
-end)
-makeSlider(pages.Tables, "Table Buy Interval", 1, 15, 2, function(v) State.TableInterval = v end)
-makeSlider(pages.Tables, "Furniture Interval", 1, 10, 1, function(v) State.FurnitureInterval = v end)
-makeButton(pages.Tables, "Buy Next Slot Now", function() task.spawn(function() pcall(buyNextTable) end) end)
-makeButton(pages.Tables, "Place Furniture Now", function() task.spawn(function() pcall(placeFurniture) end) end)
-
-section(pages.Tables, "Shop")
-makeToggle(pages.Tables, "Auto Buy Shop", false, function(v) State.ShopEnabled = v end)
-makeSlider(pages.Tables, "Shop Interval", 1, 15, 1, function(v) State.ShopInterval = v end)
-local tableStatus = makeLabel(pages.Tables, "Tables: Idle")
-task.spawn(function()
-	while not Library.Unloaded do
-		task.wait(1.5)
-		if tableStatus and tableStatus.Parent then
-			tableStatus.Text = "Tables: " .. tostring(Stats.TableState or "Idle") .. " | Shop: " .. tostring(Stats.ShopState or "Idle")
-		end
-	end
-end)
-
--- SIGNAGE
-section(pages.Signage, "Signages")
-makeToggle(pages.Signage, "Auto Buy Signages", false, function(v) State.SignageBuyEnabled = v end)
-makeToggle(pages.Signage, "Auto Equip Best Signage", false, function(v) State.SignageEquipEnabled = v end)
-makeSlider(pages.Signage, "Signage Interval", 1, 15, 2, function(v) State.SignageInterval = v end)
-makeButton(pages.Signage, "Buy Selected Now", function()
-	task.spawn(function() pcall(signagePass, true, false) end)
-end)
-makeButton(pages.Signage, "Equip Best Owned Now", function()
-	task.spawn(function() pcall(signagePass, false, true) end)
-end)
-local signStatus = makeLabel(pages.Signage, "Signage: Idle")
-task.spawn(function()
-	while not Library.Unloaded do
-		task.wait(1.5)
-		if signStatus and signStatus.Parent then
-			signStatus.Text = "Signage: " .. tostring(Stats.SignageState or "Idle")
-		end
-	end
-end)
-
--- CREDITS
-section(pages.Credits, "Credits")
-makeLabel(pages.Credits, "Kyiel & Arin - KHUB")
-makeLabel(pages.Credits, "UI by KHUB - No FluentPro")
-makeButton(pages.Credits, "Copy Discord", function()
-	if setclipboard then setclipboard(UI.DISCORD) end
-end)
-makeButton(pages.Credits, "Copy YouTube", function()
-	if setclipboard then setclipboard(UI.YOUTUBE) end
-end)
-
-section(pages.Credits, "Anti Detection")
-makeToggle(pages.Credits, "Anti Detection", false, function(v)
-	AntiState.Enabled = v
-	if v then
-		print("[KHUB] Anti Detection ON")
-	else
-		print("[KHUB] Anti Detection OFF")
-	end
-end)
-makeToggle(pages.Credits, "Anti AFK", false, function(v)
-	AntiState.AntiAFK = v
-end)
-makeToggle(pages.Credits, "Block Local Kick", true, function(v)
-	AntiState.BlockKick = v
-end)
-makeLabel(pages.Credits, "Anti Detection blocks local Kick + optional Anti AFK")
-
-section(pages.Credits, "Menu")
-makeToggle(pages.Credits, "Lock Floating Icon", false, function(v) UI.setOrbLocked(v) end)
-makeButton(pages.Credits, "Unload Script", function()
-	Library.Unloaded = true
-	pcall(function() UI.ScreenGui:Destroy() end)
-	_G.__KHUB_KARI_UI = nil
-end)
-
-print("[KHUB Karinderya] Violet UI + full game logic loaded")
-print("RightShift / K / RightCtrl = Toggle UI")
-
-
-    end) -- pcall
-
-    if not okLoad then
-        warn("[KHUB Karinderya] Game logic error: " .. tostring(errLoad))
-        local UI = _G.__KHUB_KARI_UI
-        if UI and UI.statusMain then
-            UI.statusMain.Text = "Status: Error loading modules - join Karinderya game"
-            UI.statusMain.TextColor3 = Color3.fromRGB(230, 80, 100)
+    while Win.Parent do
+        task.wait(1)
+        if Win.Visible then
+            Sub.Text = string.format(
+                "Speed: %d  ·  Trash: %d  ·  Served: %d  ·  Micro: %d/%dms",
+                Config.BypassSpeed, Stats.Trash, Stats.Served,
+                Config.TrashMicroStuds, math.floor(Config.TrashMicroDelay * 1000))
         end
     end
 end)
 
-
-
--- FORCE_UI_SHOW_VALAX
-task.spawn(function()
-	for _ = 1, 10 do
-		task.wait(0.35)
-		pcall(function()
-			local UI = rawget(_G, "__KHUB_KARI_UI")
-			local sg = UI and UI.ScreenGui
-			if not sg then
-				local pg = player:FindFirstChild("PlayerGui")
-				if pg then sg = pg:FindFirstChild("KHUB_Karinderya") end
-			end
-			if sg then
-				if not sg.Parent then
-					local pg = player:FindFirstChild("PlayerGui")
-					if pg then sg.Parent = pg end
-				end
-				sg.Enabled = true
-				local w = sg:FindFirstChild("Window")
-				if w then w.Visible = true end
-			end
-		end)
-	end
-end)
+print("[KHUB Karinderya] FULL FIXED loaded successfully!")
+print("[KHUB] Press RightShift / K to toggle UI")
