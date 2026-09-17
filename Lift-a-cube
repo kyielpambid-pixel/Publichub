@@ -1,0 +1,1587 @@
+repeat task.wait() until game:IsLoaded()
+print("[KHUB] v5.3 starting...")
+
+local P = game:GetService("Players")
+local TS = game:GetService("TweenService")
+local RS = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local CG = game:GetService("CoreGui")
+local WS = game:GetService("Workspace")
+local HS = game:GetService("HttpService")
+local VU = game:GetService("VirtualUser")
+local VIM = game:GetService("VirtualInputManager")
+local RSvc = game:GetService("ReplicatedStorage")
+local lp = P.LocalPlayer
+
+local LOGO = "rbxassetid://140466936910510"
+local DISCORD = "https://discord.gg/EKPb7BRDH8"
+
+local Remote = nil
+pcall(function()
+    local f = RSvc:FindFirstChild("ffrostflame_bridgenet2@1.0.0")
+    if f then
+        local e = f:FindFirstChild("dataRemoteEvent")
+        if e then Remote = e end
+    end
+end)
+
+local MAPS = {
+    {cube="Wood Cube", lift={{-1.13,3.67,15.71}}, equip={26.69,3.94,44.94}},
+    {cube="Stone Cube", lift={{-1.82,3.67,-74.35},{-33.19,4.04,-117.27}}, equip={27.27,3.94,-45.96}},
+    {cube="Copper Cube", lift={}, equip=nil},
+    {cube="Ice Cube", lift={{0.00,3.67,-253.30},{-33.11,4.04,-297.59}}, equip={28.06,3.94,-224.65}},
+    {cube="Crystal Cube", lift={{-0.53,3.67,-343.35}}, equip={28.82,3.94,-315.86}},
+    {cube="Golden Cube", lift={{-0.21,3.67,-432.33}}, equip={30.33,3.94,-406.65}},
+    {cube="Magma Cube", lift={{-0.78,3.67,-609.99}}, equip={30.06,3.94,-585.16}},
+    {cube="Plasma Cube", lift={{0.11,3.67,-698.65}}, equip={29.07,3.94,-678.41}},
+    {cube="Void Cube", lift={}, equip=nil},
+    {cube="Singularity Cube", lift={{0.70,3.67,-786.77}}, equip={25.98,3.94,-765.81}},
+    {cube="Amethyst Cube", lift={{0.58,3.67,-886.17}}, equip={26.31,3.94,-857.96}},
+    {cube="Solar Cube", lift={{0.79,3.67,-976.04}}, equip={24.18,3.76,-948.89}},
+    {cube="Ember Cube", lift={{0.66,3.67,-1064.82}}, equip={28.85,3.84,-1033.62}},
+    {cube="Prism Cube", lift={{1.31,14.17,-1150.64}}, equip={26.86,3.94,-1126.76}},
+    {cube="Genesis Cube", lift={{2.69,12.44,-1240.91}}, equip={26.18,3.94,-1216.94}},
+}
+
+local ROLLS = {
+    {name="Roll 1", cf={-1.04,3.54,65.86}},
+    {name="Roll 2", cf={-47.02,3.54,-256.08}},
+    {name="Roll 3", cf={47.32,3.54,-437.15}},
+    {name="Roll 4", cf={-45.21,3.54,-976.66}},
+}
+
+local F = {
+    liftOn=false, liftAll=false, mapIndex=1, autoEquip=true, equipped={},
+    remote=true, burst=15, arg=1, padTime=0.15,
+    autoTrain=false, trainClicked=false,
+    rollOn=false, rollAll=false, rollIndex=1, autoBuy=true, rollTime=0.6,
+    goodWords="legendary,mythic,epic,rare,godly,secret,divine,exotic,galactic,universal",
+    tapRate=0.01,
+}
+
+local S = {lifts=0, earned=0, trains=0, start=os.clock()}
+local lastCash = nil
+
+task.spawn(function()
+    while true do
+        local ls = lp:FindFirstChild("leaderstats")
+        if ls then
+            local c = ls:FindFirstChild("Cash") or ls:FindFirstChild("Money") or ls:FindFirstChild("Coins")
+            if c then
+                local ok,v = pcall(function() return c.Value end)
+                if ok and type(v)=="number" then
+                    if lastCash and v>lastCash then S.earned = S.earned + (v-lastCash) end
+                    lastCash = v
+                end
+            end
+        end
+        task.wait(0.25)
+    end
+end)
+
+local FPP = type(fireproximityprompt)=="function" and fireproximityprompt or nil
+
+local function hrp()
+    local c = lp.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function waitHRP(t)
+    local t0 = os.clock()
+    t = t or 10
+    while os.clock()-t0 < t do
+        if hrp() then return true end
+        task.wait(0.2)
+    end
+    return hrp() ~= nil
+end
+
+local function tp(x,y,z)
+    local h = hrp()
+    if not h then return false end
+    h.CFrame = CFrame.new(x,y,z)
+    return true
+end
+
+local function doTopScreenClick()
+    pcall(function()
+        local cam = WS.CurrentCamera
+        if not cam then return end
+        local vp = cam.ViewportSize
+        local cx = math.floor(vp.X * 0.5)
+        local cy = math.floor(vp.Y * 0.02)
+        VIM:SendMouseButtonEvent(cx, cy, 0, true, game, 0)
+        task.wait(0.003)
+        VIM:SendMouseButtonEvent(cx, cy, 0, false, game, 0)
+    end)
+end
+
+local pCache, cTime = {}, 0
+local function refreshCache(force)
+    local n = os.clock()
+    if not force and (n-cTime)<0.5 then return end
+    cTime = n
+    pCache = {}
+    for _,d in ipairs(WS:GetDescendants()) do
+        if d:IsA("ProximityPrompt") then
+            table.insert(pCache, {obj=d, kind="prompt"})
+        elseif d:IsA("ClickDetector") then
+            table.insert(pCache, {obj=d, kind="click"})
+        end
+    end
+end
+
+local function ePos(e)
+    local p = e.obj.Parent
+    if not p then return nil end
+    if p:IsA("BasePart") then return p.Position end
+    if p:IsA("Attachment") and p.Parent and p.Parent:IsA("BasePart") then return p.Parent.Position end
+    if p:IsA("Model") then
+        local ok,pos = pcall(function() return p:GetPivot().Position end)
+        if ok then return pos end
+    end
+    local pt = p:FindFirstChildWhichIsA("BasePart", true)
+    return pt and pt.Position or nil
+end
+
+local function matchAny(e, words)
+    local o = e.obj
+    local t = string.lower(tostring(o.ActionText or "").." "..tostring(o.ObjectText or "").." "..o.Name)
+    for _,w in ipairs(words) do
+        if t:find(w,1,true) then return true end
+    end
+    return false
+end
+
+local function iFire(p)
+    if not p or not p.Parent then return false end
+    return pcall(function()
+        local o = p.HoldDuration
+        if o~=0 then p.HoldDuration=0 end
+        if FPP then FPP(p) else p:InputHoldBegin(); p:InputHoldEnd() end
+        if o~=0 then p.HoldDuration=o end
+    end)
+end
+
+local function iWord(word, range)
+    local h = hrp()
+    if not h then return 0 end
+    refreshCache()
+    local n = 0
+    local r = range or 18
+    for _,e in ipairs(pCache) do
+        if e.kind=="prompt" and matchAny(e,{word}) then
+            local p = ePos(e)
+            if p and (p-h.Position).Magnitude<=r then
+                iFire(e.obj)
+                n = n+1
+            end
+        end
+    end
+    return n
+end
+
+local function iBurst(n, range)
+    local h = hrp()
+    if not h then return 0 end
+    refreshCache()
+    local fired = 0
+    local r = range or 18
+    for _,e in ipairs(pCache) do
+        if e.kind=="prompt" and matchAny(e,{"lift"}) then
+            local p = ePos(e)
+            if p and (p-h.Position).Magnitude<=r then
+                for _=1,n do iFire(e.obj) end
+                fired = fired+n
+            end
+        end
+    end
+    return fired
+end
+
+local function fireSignal(g)
+    if not g or not g.Parent then return false end
+    local fired = false
+    if type(getconnections)=="function" then
+        local ok1,c1 = pcall(getconnections, g.MouseButton1Click)
+        if ok1 and c1 then for _,c in ipairs(c1) do pcall(function() c:Fire() end) end; fired=true end
+        local ok2,c2 = pcall(getconnections, g.Activated)
+        if ok2 and c2 then for _,c in ipairs(c2) do pcall(function() c:Fire() end) end; fired=true end
+    end
+    if not fired and type(firesignal)=="function" then
+        pcall(firesignal, g.MouseButton1Click)
+        pcall(firesignal, g.Activated)
+        fired = true
+    end
+    if not fired then
+        pcall(function() if g.MouseButton1Click then g.MouseButton1Click:Fire(); fired=true end end)
+        pcall(function() if g.Activated then g.Activated:Fire(); fired=true end end)
+    end
+    return fired
+end
+
+local function doScreenTap()
+    pcall(function()
+        VU:CaptureController()
+        VU:ClickButton1(Vector2.new(0, 0))
+    end)
+end
+
+local function findBtns(word)
+    word = string.lower(word or "")
+    local out = {}
+    local pg = lp:FindFirstChildOfClass("PlayerGui")
+    if pg then
+        for _,g in ipairs(pg:GetDescendants()) do
+            if (g:IsA("TextButton") or g:IsA("ImageButton")) and g.Visible then
+                local t = ""
+                if g:IsA("TextButton") then t = g.Text end
+                t = string.lower(tostring(t~="" and t or g.Name))
+                if word=="" or t:find(word,1,true) then table.insert(out, g) end
+            end
+        end
+    end
+    for _,d in ipairs(WS:GetDescendants()) do
+        if (d:IsA("TextButton") or d:IsA("ImageButton")) and d.Visible then
+            local t = ""
+            if d:IsA("TextButton") then t = d.Text end
+            t = string.lower(tostring(t~="" and t or d.Name))
+            if word=="" or t:find(word,1,true) then table.insert(out, d) end
+        end
+    end
+    return out
+end
+
+local function clickTrainOnce()
+    local btns = findBtns("train")
+    for _,g in ipairs(btns) do
+        if g and g.Parent and g.Visible then
+            fireSignal(g)
+        end
+    end
+    if #btns == 0 then
+        doScreenTap()
+    end
+end
+
+local function clickBtns(word)
+    local out = findBtns(word)
+    local hit = false
+    for _,g in ipairs(out) do if fireSignal(g) then hit = true end end
+    return hit
+end
+
+local goodList = {}
+local function rebuildGood()
+    goodList = {}
+    for w in string.gmatch(string.lower(F.goodWords), "[^,%s]+") do
+        table.insert(goodList, w)
+    end
+end
+rebuildGood()
+
+local function scanGood()
+    local pg = lp:FindFirstChildOfClass("PlayerGui")
+    if not pg then return nil end
+    for _,g in ipairs(pg:GetDescendants()) do
+        if g:IsA("TextLabel") and g.Visible and g.Text~="" then
+            local t = string.lower(g.Text)
+            for _,w in ipairs(goodList) do
+                if t:find(w,1,true) then return w end
+            end
+        end
+    end
+    return nil
+end
+
+local function spamPad(pos, dur)
+    if not waitHRP(10) then return false end
+    tp(pos[1], pos[2], pos[3])
+    task.wait(0.05)
+    refreshCache(true)
+    local tEnd = os.clock()+dur
+    while os.clock()<tEnd do
+        if not F.liftOn then return false end
+        local n = iBurst(F.burst)
+        S.lifts = S.lifts+n
+        if F.remote and Remote then
+            for _=1,F.burst do
+                pcall(function() Remote:FireServer({{Function="FinishLift", Args={F.arg}}, "y"}) end)
+            end
+        end
+        RS.Heartbeat:Wait()
+    end
+    return true
+end
+
+local function rollOnce(idx)
+    local r = ROLLS[idx]
+    if not r then return false end
+    if not waitHRP(10) then return false end
+    tp(r.cf[1], r.cf[2], r.cf[3])
+    task.wait(0.1)
+    refreshCache(true)
+    local tEnd = os.clock()+F.rollTime
+    while os.clock()<tEnd do
+        if not F.rollOn then return false end
+        iWord("roll", 16)
+        RS.Heartbeat:Wait()
+    end
+    if F.autoBuy then
+        local g = scanGood()
+        if g then
+            clickBtns("buy")
+            task.wait(0.2)
+        end
+    end
+    clickBtns("next")
+    task.wait(0.05)
+    return true
+end
+
+local T = {
+    bg=Color3.fromRGB(8,6,14), rail=Color3.fromRGB(14,10,22), card=Color3.fromRGB(22,16,34),
+    accent=Color3.fromRGB(160,90,230), accent2=Color3.fromRGB(200,140,255),
+    gold=Color3.fromRGB(230,190,255), text=Color3.fromRGB(235,225,250),
+    dim=Color3.fromRGB(150,130,180), mute=Color3.fromRGB(110,90,140),
+    stroke=Color3.fromRGB(110,60,170), green=Color3.fromRGB(80,220,130),
+    red=Color3.fromRGB(255,90,110), violet=Color3.fromRGB(160,90,255),
+}
+
+local function corner(p,r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0,r or 10)
+    c.Parent = p
+    return c
+end
+
+local function stroke(p,col,th,tr)
+    local s = Instance.new("UIStroke")
+    s.Color = col or T.stroke
+    s.Thickness = th or 1.2
+    s.Transparency = tr or 0.35
+    s.Parent = p
+    return s
+end
+
+local Par = (gethui and gethui()) or CG
+pcall(function()
+    for _,n in ipairs({"KHUB_Karinderya","KHUB_UI","KHUB_FloatIcon"}) do
+        local o = Par:FindFirstChild(n)
+        if o then o:Destroy() end
+        local pg = lp:FindFirstChild("PlayerGui")
+        if pg then local o2 = pg:FindFirstChild(n); if o2 then o2:Destroy() end end
+    end
+end)
+
+local SG = Instance.new("ScreenGui")
+SG.Name = "KHUB_Karinderya"
+SG.ResetOnSpawn = false
+SG.IgnoreGuiInset = true
+SG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+SG.DisplayOrder = 999999
+pcall(function() SG.Parent = CG end)
+if not SG.Parent then SG.Parent = lp:WaitForChild("PlayerGui") end
+print("[KHUB] ScreenGui created")
+
+local HH = 80
+local BW = 660
+local BH = 520
+
+local UScale = Instance.new("UIScale")
+UScale.Parent = SG
+local function updScale()
+    local cam = WS.CurrentCamera
+    if not cam then return end
+    local vx = cam.ViewportSize.X
+    local sc
+    if vx<500 then sc = math.clamp(vx/1200, 0.45, 0.7)
+    elseif vx<900 then sc = math.clamp(vx/1400, 0.55, 0.75)
+    else sc = math.clamp(vx/1920, 0.65, 0.85) end
+    UScale.Scale = sc
+end
+pcall(function() WS.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updScale) end)
+updScale()
+
+local Win = Instance.new("Frame")
+Win.Size = UDim2.new(0,BW,0,BH)
+Win.Position = UDim2.new(0.5,-BW/2,0.5,-BH/2)
+Win.BackgroundColor3 = T.bg
+Win.BackgroundTransparency = 0.1
+Win.BorderSizePixel = 0
+Win.ClipsDescendants = true
+Win.Parent = SG
+corner(Win, 14)
+stroke(Win, T.accent, 2, 0.28)
+
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1,0,0,3)
+TopBar.BackgroundColor3 = Color3.new(1,1,1)
+TopBar.BorderSizePixel = 0
+TopBar.ZIndex = 25
+TopBar.Parent = Win
+local tGrad = Instance.new("UIGradient")
+tGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(120,40,255)),
+    ColorSequenceKeypoint.new(0.20, Color3.fromRGB(255,80,200)),
+    ColorSequenceKeypoint.new(0.40, Color3.fromRGB(255,200,120)),
+    ColorSequenceKeypoint.new(0.60, Color3.fromRGB(80,200,255)),
+    ColorSequenceKeypoint.new(0.80, Color3.fromRGB(140,60,255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(120,40,255)),
+})
+tGrad.Parent = TopBar
+task.spawn(function()
+    local t = 0
+    while TopBar.Parent do
+        t = t + task.wait(0.03)
+        tGrad.Offset = Vector2.new(math.sin(t*0.6)*1.2, 0)
+    end
+end)
+
+local PFolder = Instance.new("Folder")
+PFolder.Parent = Win
+task.spawn(function()
+    for i = 1, 22 do
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.fromOffset(math.random(2,5), math.random(2,5))
+        dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+        dot.BackgroundColor3 = T.violet
+        dot.BackgroundTransparency = math.random(4,8)/10
+        dot.BorderSizePixel = 0
+        dot.ZIndex = 2
+        dot.Parent = PFolder
+        corner(dot, 99)
+        task.spawn(function()
+            while dot.Parent do
+                local tx = math.random()
+                local ty = math.random()
+                pcall(function()
+                    TS:Create(dot, TweenInfo.new(math.random(3,6), Enum.EasingStyle.Sine), {
+                        Position = UDim2.new(tx, 0, ty, 0),
+                        BackgroundTransparency = math.random(5,9)/10,
+                    }):Play()
+                end)
+                task.wait(math.random(3,6))
+            end
+        end)
+    end
+end)
+
+local WMFrame = Instance.new("Frame")
+WMFrame.Size = UDim2.new(1,0,1,0)
+WMFrame.BackgroundTransparency = 1
+WMFrame.ClipsDescendants = true
+WMFrame.ZIndex = 2
+WMFrame.Parent = Win
+
+local BGWatermark = Instance.new("TextLabel")
+BGWatermark.Size = UDim2.new(1,0,1,0)
+BGWatermark.BackgroundTransparency = 1
+BGWatermark.Text = "KHUB"
+BGWatermark.Font = Enum.Font.GothamBlack
+BGWatermark.TextSize = 150
+BGWatermark.TextColor3 = Color3.new(1,1,1)
+BGWatermark.TextTransparency = 0.82
+BGWatermark.TextXAlignment = Enum.TextXAlignment.Center
+BGWatermark.TextYAlignment = Enum.TextYAlignment.Center
+BGWatermark.ZIndex = 2
+BGWatermark.Parent = WMFrame
+
+local WMStroke = Instance.new("UIStroke")
+WMStroke.Color = T.accent
+WMStroke.Thickness = 3
+WMStroke.Transparency = 0.35
+WMStroke.Parent = BGWatermark
+
+local WMGrad = Instance.new("UIGradient")
+WMGrad.Offset = Vector2.new(-1, 0)
+WMGrad.Parent = BGWatermark
+task.spawn(function()
+    while BGWatermark.Parent do
+        local base = Color3.fromRGB(70,30,160)
+        local bright = Color3.fromRGB(220,70,255)
+        local tip = Color3.fromRGB(90,210,255)
+        WMGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, base),
+            ColorSequenceKeypoint.new(0.32, base),
+            ColorSequenceKeypoint.new(0.5, bright),
+            ColorSequenceKeypoint.new(0.68, tip),
+            ColorSequenceKeypoint.new(1, base),
+        })
+        WMGrad.Offset = Vector2.new(-1.2, 0)
+        TS:Create(WMGrad, TweenInfo.new(4.5, Enum.EasingStyle.Linear), { Offset = Vector2.new(1.2, 0) }):Play()
+        task.wait(4.7)
+    end
+end)
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1,0,0,HH)
+Header.Position = UDim2.new(0,0,0,3)
+Header.BackgroundTransparency = 1
+Header.ZIndex = 10
+Header.Active = true
+Header.Parent = Win
+
+do
+    local drag, ds, sp
+    Header.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            drag = true; ds = i.Position; sp = Win.Position
+            i.Changed:Connect(function()
+                if i.UserInputState == Enum.UserInputState.End then drag = false end
+            end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(i)
+        if drag and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            local d = i.Position - ds
+            Win.Position = UDim2.new(sp.X.Scale, sp.X.Offset+d.X, sp.Y.Scale, sp.Y.Offset+d.Y)
+        end
+    end)
+end
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0,400,0,34)
+Title.Position = UDim2.new(0,16,0,12)
+Title.BackgroundTransparency = 1
+Title.Text = "KHUB  ·  Lift a Cube"
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 20
+Title.TextColor3 = Color3.new(1,1,1)
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 14
+Title.Parent = Header
+
+local TitleGrad = Instance.new("UIGradient")
+TitleGrad.Offset = Vector2.new(-1.3, 0)
+TitleGrad.Parent = Title
+task.spawn(function()
+    while Title.Parent do
+        local base = Color3.fromRGB(100,60,200)
+        local bright = Color3.fromRGB(240,110,255)
+        local tip = Color3.fromRGB(140,230,255)
+        TitleGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, base),
+            ColorSequenceKeypoint.new(0.20, base),
+            ColorSequenceKeypoint.new(0.42, bright),
+            ColorSequenceKeypoint.new(0.55, tip),
+            ColorSequenceKeypoint.new(0.68, bright),
+            ColorSequenceKeypoint.new(0.85, base),
+            ColorSequenceKeypoint.new(1, base),
+        })
+        TitleGrad.Offset = Vector2.new(-1.3, 0)
+        TS:Create(TitleGrad, TweenInfo.new(4.5, Enum.EasingStyle.Linear), { Offset = Vector2.new(1.3, 0) }):Play()
+        task.wait(4.7)
+    end
+end)
+
+local Sub = Instance.new("TextLabel")
+Sub.Size = UDim2.new(0,500,0,16)
+Sub.Position = UDim2.new(0,16,0,46)
+Sub.BackgroundTransparency = 1
+Sub.Text = "v5.3  ·  RightShift / K  ·  X = close"
+Sub.Font = Enum.Font.Code
+Sub.TextSize = 11
+Sub.TextColor3 = T.mute
+Sub.TextXAlignment = Enum.TextXAlignment.Left
+Sub.ZIndex = 12
+Sub.Parent = Header
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.fromOffset(28,22)
+CloseBtn.Position = UDim2.new(1,-36,0,12)
+CloseBtn.BackgroundColor3 = T.red
+CloseBtn.Text = "X"
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.TextColor3 = Color3.new(1,1,1)
+CloseBtn.ZIndex = 18
+CloseBtn.Parent = Header
+corner(CloseBtn, 6)
+
+local Rail = Instance.new("ScrollingFrame")
+Rail.Size = UDim2.new(0,165,1,-HH-3)
+Rail.Position = UDim2.new(0,0,0,HH+3)
+Rail.BackgroundColor3 = T.rail
+Rail.BackgroundTransparency = 0.15
+Rail.BorderSizePixel = 0
+Rail.ZIndex = 6
+Rail.ClipsDescendants = true
+Rail.ScrollBarThickness = 4
+Rail.ScrollBarImageColor3 = T.violet
+Rail.CanvasSize = UDim2.new(0,0,0,0)
+Rail.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Rail.Parent = Win
+
+local railP = Instance.new("UIPadding")
+railP.PaddingTop = UDim.new(0,10)
+railP.PaddingBottom = UDim.new(0,10)
+railP.PaddingLeft = UDim.new(0,6)
+railP.PaddingRight = UDim.new(0,6)
+railP.Parent = Rail
+
+local railL = Instance.new("UIListLayout")
+railL.Padding = UDim.new(0,6)
+railL.SortOrder = Enum.SortOrder.LayoutOrder
+railL.Parent = Rail
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(1,-165,1,-HH-3)
+Main.Position = UDim2.new(0,165,0,HH+3)
+Main.BackgroundTransparency = 1
+Main.ClipsDescendants = true
+Main.ZIndex = 5
+Main.Parent = Win
+
+local Head = Instance.new("Frame")
+Head.Size = UDim2.new(1,0,0,36)
+Head.BackgroundColor3 = T.rail
+Head.BackgroundTransparency = 0.15
+Head.BorderSizePixel = 0
+Head.ZIndex = 6
+Head.Parent = Main
+
+local PTitle = Instance.new("TextLabel")
+PTitle.Size = UDim2.new(1,-20,0,36)
+PTitle.Position = UDim2.fromOffset(12,0)
+PTitle.BackgroundTransparency = 1
+PTitle.Text = "Welcome"
+PTitle.Font = Enum.Font.GothamBold
+PTitle.TextSize = 13
+PTitle.TextColor3 = T.accent2
+PTitle.TextXAlignment = Enum.TextXAlignment.Left
+PTitle.ZIndex = 7
+PTitle.Parent = Head
+
+local Pages = {}
+local TB = {}
+TB.Active = nil
+
+local function mkPage(name)
+    local sf = Instance.new("ScrollingFrame")
+    sf.Name = name
+    sf.Size = UDim2.new(1,-10,1,-44)
+    sf.Position = UDim2.new(0,5,0,40)
+    sf.BackgroundTransparency = 1
+    sf.BorderSizePixel = 0
+    sf.ScrollBarThickness = 4
+    sf.ScrollBarImageColor3 = T.accent
+    sf.CanvasSize = UDim2.new(0,0,0,0)
+    sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    sf.ZIndex = 6
+    sf.Visible = false
+    sf.Parent = Main
+    local lay = Instance.new("UIListLayout")
+    lay.Padding = UDim.new(0,10)
+    lay.SortOrder = Enum.SortOrder.LayoutOrder
+    lay.Parent = sf
+    local pd = Instance.new("UIPadding")
+    pd.PaddingTop = UDim.new(0,8)
+    pd.PaddingBottom = UDim.new(0,16)
+    pd.PaddingLeft = UDim.new(0,4)
+    pd.PaddingRight = UDim.new(0,4)
+    pd.Parent = sf
+    Pages[name] = sf
+    return sf
+end
+
+local ICONS = {
+    Welcome="rbxassetid://140466936910510",
+    Main="rbxassetid://6023426926",
+    Stats="rbxassetid://6031075931",
+    Settings="rbxassetid://6031280882",
+    Save="rbxassetid://6031280882",
+    Credits="rbxassetid://6035047409",
+}
+
+local function switchPage(name, title)
+    for k,p in pairs(Pages) do p.Visible = (k==name) end
+    PTitle.Text = title or name
+    TB.Active = name
+    for id,btn in pairs(TB) do
+        if type(id)=="string" and not id:find("_") then
+            local active = (id==name)
+            local iF = TB[id.."_F"]
+            local gl = TB[id.."_G"]
+            local br = TB[id.."_B"]
+            local lb = TB[id.."_L"]
+            if active then
+                TS:Create(btn, TweenInfo.new(0.2), {BackgroundTransparency=0.05}):Play()
+                if iF then TS:Create(iF, TweenInfo.new(0.2), {BackgroundTransparency=0}):Play() end
+                if gl then TS:Create(gl, TweenInfo.new(0.3), {BackgroundTransparency=0.55}):Play() end
+                if br then br.Visible = true end
+                if lb then lb.TextColor3 = T.gold end
+            else
+                TS:Create(btn, TweenInfo.new(0.2), {BackgroundTransparency=0.25}):Play()
+                if iF then TS:Create(iF, TweenInfo.new(0.2), {BackgroundTransparency=0.15}):Play() end
+                if gl then TS:Create(gl, TweenInfo.new(0.25), {BackgroundTransparency=0.85}):Play() end
+                if br then br.Visible = false end
+                if lb then lb.TextColor3 = T.text end
+            end
+        end
+    end
+end
+
+local function mkTab(id, label, order, title)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1,-4,0,40)
+    b.BackgroundColor3 = T.card
+    b.BackgroundTransparency = 0.25
+    b.Text = ""
+    b.AutoButtonColor = false
+    b.LayoutOrder = order
+    b.ZIndex = 7
+    b.Parent = Rail
+    corner(b, 8)
+    stroke(b, T.accent, 1, 0.45)
+    local iF = Instance.new("Frame")
+    iF.Size = UDim2.fromOffset(26,26)
+    iF.Position = UDim2.new(0,8,0.5,-13)
+    iF.BackgroundColor3 = Color3.fromRGB(30,20,48)
+    iF.BackgroundTransparency = 0.15
+    iF.BorderSizePixel = 0
+    iF.ZIndex = 9
+    iF.Parent = b
+    corner(iF, 13)
+    stroke(iF, T.accent, 1.2, 0.2)
+    local gl = Instance.new("Frame")
+    gl.Size = UDim2.fromOffset(30,30)
+    gl.Position = UDim2.new(0,6,0.5,-15)
+    gl.BackgroundColor3 = T.violet
+    gl.BackgroundTransparency = 0.85
+    gl.BorderSizePixel = 0
+    gl.ZIndex = 8
+    gl.Parent = b
+    corner(gl, 15)
+    local icon = Instance.new("ImageLabel")
+    icon.Size = UDim2.new(1,-6,1,-6)
+    icon.Position = UDim2.fromOffset(3,3)
+    icon.BackgroundTransparency = 1
+    icon.Image = ICONS[id] or LOGO
+    icon.ScaleType = Enum.ScaleType.Fit
+    icon.ImageColor3 = Color3.fromRGB(220,200,240)
+    icon.ZIndex = 10
+    icon.Parent = iF
+    local lb = Instance.new("TextLabel")
+    lb.Size = UDim2.new(1,-44,1,0)
+    lb.Position = UDim2.fromOffset(40,0)
+    lb.BackgroundTransparency = 1
+    lb.Text = label
+    lb.Font = Enum.Font.GothamBold
+    lb.TextSize = 12
+    lb.TextColor3 = T.text
+    lb.TextXAlignment = Enum.TextXAlignment.Left
+    lb.ZIndex = 9
+    lb.Parent = b
+    local br = Instance.new("Frame")
+    br.Size = UDim2.new(0,3,0.7,0)
+    br.Position = UDim2.new(0,0,0.15,0)
+    br.BackgroundColor3 = T.gold
+    br.BorderSizePixel = 0
+    br.ZIndex = 11
+    br.Visible = false
+    br.Parent = b
+    corner(br, 2)
+    b.MouseEnter:Connect(function()
+        TS:Create(b, TweenInfo.new(0.15), {BackgroundTransparency=0.1}):Play()
+        TS:Create(iF, TweenInfo.new(0.15), {BackgroundTransparency=0}):Play()
+        TS:Create(gl, TweenInfo.new(0.2), {BackgroundTransparency=0.6, Size = UDim2.fromOffset(36,36), Position = UDim2.new(0,3,0.5,-18)}):Play()
+    end)
+    b.MouseLeave:Connect(function()
+        if TB.Active~=id then
+            TS:Create(b, TweenInfo.new(0.2), {BackgroundTransparency=0.25}):Play()
+            TS:Create(iF, TweenInfo.new(0.2), {BackgroundTransparency=0.15}):Play()
+            TS:Create(gl, TweenInfo.new(0.25), {BackgroundTransparency=0.85, Size = UDim2.fromOffset(30,30), Position = UDim2.new(0,6,0.5,-15)}):Play()
+        end
+    end)
+    TB[id] = b
+    TB[id.."_L"] = lb
+    TB[id.."_F"] = iF
+    TB[id.."_G"] = gl
+    TB[id.."_B"] = br
+    b.MouseButton1Click:Connect(function() switchPage(id, title) end)
+    return b
+end
+
+local function card(p, t)
+    local b = Instance.new("Frame")
+    b.Size = UDim2.new(1,0,0,0)
+    b.AutomaticSize = Enum.AutomaticSize.Y
+    b.BackgroundColor3 = T.card
+    b.BackgroundTransparency = 0.18
+    b.BorderSizePixel = 0
+    b.ZIndex = 9
+    b.Parent = p
+    corner(b, 9)
+    stroke(b, T.stroke, 1.2, 0.28)
+    local lay = Instance.new("UIListLayout")
+    lay.Padding = UDim.new(0,8)
+    lay.SortOrder = Enum.SortOrder.LayoutOrder
+    lay.Parent = b
+    local pd = Instance.new("UIPadding")
+    pd.PaddingTop = UDim.new(0,12)
+    pd.PaddingBottom = UDim.new(0,12)
+    pd.PaddingLeft = UDim.new(0,14)
+    pd.PaddingRight = UDim.new(0,14)
+    pd.Parent = b
+    if t then
+        local h = Instance.new("TextLabel")
+        h.Size = UDim2.new(1,0,0,22)
+        h.BackgroundTransparency = 1
+        h.Text = t
+        h.Font = Enum.Font.GothamBold
+        h.TextSize = 13
+        h.TextColor3 = T.gold
+        h.TextXAlignment = Enum.TextXAlignment.Left
+        h.ZIndex = 18
+        h.LayoutOrder = 0
+        h.Parent = b
+    end
+    return b
+end
+
+local function line(p, t, c)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1,0,0,20)
+    l.BackgroundTransparency = 1
+    l.Text = t
+    l.Font = Enum.Font.Gotham
+    l.TextSize = 11
+    l.TextColor3 = c or T.dim
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.TextWrapped = true
+    l.AutomaticSize = Enum.AutomaticSize.Y
+    l.ZIndex = 18
+    l.Parent = p
+    return l
+end
+
+local function btn(p, txt, cb, c)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1,0,0,32)
+    b.BackgroundColor3 = c or Color3.fromRGB(40,28,60)
+    b.Text = txt
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 12
+    b.TextColor3 = T.text
+    b.ZIndex = 17
+    b.Parent = p
+    corner(b, 7)
+    stroke(b, T.accent, 1.1, 0.45)
+    b.MouseButton1Click:Connect(function() if cb then pcall(cb) end end)
+    return b
+end
+
+local function toggle(p, txt, getter, setter)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1,0,0,32)
+    b.BackgroundColor3 = Color3.fromRGB(40,28,60)
+    b.Text = ""
+    b.ZIndex = 17
+    b.Parent = p
+    corner(b, 7)
+    stroke(b, T.accent, 1.1, 0.45)
+    local lb = Instance.new("TextLabel")
+    lb.Size = UDim2.new(1,-80,1,0)
+    lb.Position = UDim2.fromOffset(12,0)
+    lb.BackgroundTransparency = 1
+    lb.Text = txt
+    lb.Font = Enum.Font.GothamBold
+    lb.TextSize = 12
+    lb.TextColor3 = T.text
+    lb.TextXAlignment = Enum.TextXAlignment.Left
+    lb.ZIndex = 18
+    lb.Parent = b
+    local bg = Instance.new("TextLabel")
+    bg.Size = UDim2.new(0,54,0,20)
+    bg.Position = UDim2.new(1,-64,0.5,-10)
+    bg.BackgroundColor3 = T.red
+    bg.Text = "OFF"
+    bg.Font = Enum.Font.GothamBold
+    bg.TextSize = 11
+    bg.TextColor3 = Color3.new(1,1,1)
+    bg.ZIndex = 18
+    bg.Parent = b
+    corner(bg, 5)
+    local function refresh()
+        local on = getter()
+        bg.Text = on and "ON" or "OFF"
+        bg.BackgroundColor3 = on and T.green or T.red
+    end
+    b.MouseButton1Click:Connect(function() setter(not getter()); refresh() end)
+    refresh()
+    return b, refresh
+end
+
+local function input(p, txt, default, cb)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1,0,0,46)
+    row.BackgroundTransparency = 1
+    row.ZIndex = 17
+    row.Parent = p
+    local lb = Instance.new("TextLabel")
+    lb.Size = UDim2.new(1,0,0,16)
+    lb.BackgroundTransparency = 1
+    lb.Text = txt
+    lb.Font = Enum.Font.Gotham
+    lb.TextSize = 11
+    lb.TextColor3 = T.text
+    lb.TextXAlignment = Enum.TextXAlignment.Left
+    lb.ZIndex = 18
+    lb.Parent = row
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(1,0,0,24)
+    box.Position = UDim2.new(0,0,0,20)
+    box.BackgroundColor3 = Color3.fromRGB(18,12,28)
+    box.BackgroundTransparency = 0.15
+    box.Text = tostring(default or "")
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 11
+    box.TextColor3 = T.gold
+    box.ClearTextOnFocus = false
+    box.ZIndex = 18
+    box.Parent = row
+    corner(box, 5)
+    stroke(box, T.stroke, 1, 0.5)
+    box.FocusLost:Connect(function() if cb then pcall(cb, box.Text) end end)
+    return box
+end
+
+-- ================================================================
+-- DUPLICATE JOYSTICK + JUMP — tunay na joystick, arrow jump
+-- ================================================================
+local joystickTouch = nil
+local joystickStart = nil
+local joystickActive = false
+local JOYSTICK_RADIUS = 60
+local JOYSTICK_ZONE_X = 0.5
+local JOYSTICK_ZONE_Y = 0.55
+
+local joyVisual = nil
+local joyKnob = nil
+local jumpBtn = nil
+
+local function makeJoystickVisual()
+    if joyVisual and joyVisual.Parent then return end
+    joyVisual = Instance.new("Frame")
+    joyVisual.Name = "KHUB_DupeJoystick"
+    joyVisual.Size = UDim2.fromOffset(140, 140)
+    joyVisual.Position = UDim2.new(0, 40, 1, -200)
+    joyVisual.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    joyVisual.BackgroundTransparency = 0.7
+    joyVisual.BorderSizePixel = 0
+    joyVisual.Visible = false
+    joyVisual.ZIndex = 100
+    joyVisual.Parent = SG
+    corner(joyVisual, 70)
+
+    joyKnob = Instance.new("Frame")
+    joyKnob.Size = UDim2.fromOffset(60, 60)
+    joyKnob.Position = UDim2.new(0.5, -30, 0.5, -30)
+    joyKnob.BackgroundColor3 = Color3.fromRGB(180, 180, 180)
+    joyKnob.BackgroundTransparency = 0.25
+    joyKnob.BorderSizePixel = 0
+    joyKnob.ZIndex = 101
+    joyKnob.Parent = joyVisual
+    corner(joyKnob, 30)
+    print("[KHUB] Joystick ready")
+end
+
+local function makeJumpButton()
+    if jumpBtn and jumpBtn.Parent then return end
+    jumpBtn = Instance.new("TextButton")
+    jumpBtn.Name = "KHUB_DupeJump"
+    jumpBtn.Size = UDim2.fromOffset(80, 80)
+    jumpBtn.Position = UDim2.new(1, -130, 1, -180)
+    jumpBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    jumpBtn.BackgroundTransparency = 0.4
+    jumpBtn.Text = "▲"
+    jumpBtn.Font = Enum.Font.GothamBold
+    jumpBtn.TextSize = 30
+    jumpBtn.TextColor3 = Color3.new(1,1,1)
+    jumpBtn.ZIndex = 100
+    jumpBtn.Parent = SG
+    corner(jumpBtn, 40)
+    stroke(jumpBtn, T.green, 2, 0.4)
+    jumpBtn.MouseButton1Click:Connect(function()
+        local char = lp.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end)
+    print("[KHUB] Jump button ready")
+end
+
+UIS.TouchStarted:Connect(function(touch, gameProcessed)
+    if gameProcessed then return end
+    local vp = WS.CurrentCamera and WS.CurrentCamera.ViewportSize or Vector2.new(500, 900)
+    local tx, ty = touch.Position.X, touch.Position.Y
+    if tx <= vp.X * JOYSTICK_ZONE_X and ty >= vp.Y * (1 - JOYSTICK_ZONE_Y) then
+        joystickTouch = touch
+        joystickStart = Vector2.new(tx, ty)
+        joystickActive = true
+        if joyVisual then
+            joyVisual.Position = UDim2.fromOffset(tx - 70, ty - 70)
+            joyVisual.Visible = true
+        end
+    end
+end)
+
+UIS.TouchMoved:Connect(function(touch, gameProcessed)
+    if joystickActive and joystickTouch and touch == joystickTouch then
+        local d = Vector2.new(touch.Position.X, touch.Position.Y) - joystickStart
+        local mag = math.sqrt(d.X*d.X + d.Y*d.Y)
+        if mag > JOYSTICK_RADIUS then
+            d = Vector2.new(d.X/mag*JOYSTICK_RADIUS, d.Y/mag*JOYSTICK_RADIUS)
+        end
+        if joyKnob then
+            joyKnob.Position = UDim2.new(0.5, -30 + d.X, 0.5, -30 + d.Y)
+        end
+        local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            local dir = Vector3.new(d.X / JOYSTICK_RADIUS, 0, d.Y / JOYSTICK_RADIUS)
+            local moveDir = WS.CurrentCamera.CFrame:VectorToWorldSpace(dir)
+            hum:Move(moveDir, false)
+        end
+    end
+end)
+
+UIS.TouchEnded:Connect(function(touch, gameProcessed)
+    if joystickActive and joystickTouch and touch == joystickTouch then
+        joystickActive = false
+        joystickTouch = nil
+        joystickStart = nil
+        if joyKnob then
+            joyKnob.Position = UDim2.new(0.5, -30, 0.5, -30)
+        end
+        if joyVisual then
+            joyVisual.Visible = false
+        end
+        local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum:Move(Vector3.new(0,0,0), false)
+        end
+    end
+end)
+
+local function createDupeControls()
+    makeJoystickVisual()
+    makeJumpButton()
+    print("[KHUB] Dupe controls loaded")
+end
+
+local function removeDupeControls()
+    if joyVisual then joyVisual:Destroy(); joyVisual = nil; joyKnob = nil end
+    if jumpBtn then jumpBtn:Destroy(); jumpBtn = nil end
+    joystickActive = false
+    joystickTouch = nil
+    print("[KHUB] Dupe controls removed")
+end
+
+-- PAGES
+local PWelcome = mkPage("Welcome")
+local PMain = mkPage("Main")
+local PStats = mkPage("Stats")
+local PSettings = mkPage("Settings")
+local PSave = mkPage("Save")
+local PCredits = mkPage("Credits")
+
+mkTab("Welcome", "Welcome", 1, "Welcome")
+mkTab("Main", "Main", 2, "Automation")
+mkTab("Stats", "Stats", 3, "Statistics")
+mkTab("Settings", "Settings", 4, "Settings")
+mkTab("Save", "Save Config", 5, "Save Config")
+mkTab("Credits", "Credits", 6, "Credits")
+
+-- WELCOME
+card(PWelcome, "Welcome to KHUB")
+line(PWelcome, "KHUB · Lift a Cube · v5.3", T.gold)
+line(PWelcome, "Built by Kyiel & Arin", T.dim)
+local SocialCard = card(PWelcome, "Connect")
+btn(SocialCard, "Copy YouTube (@kyielpambid)", function()
+    if setclipboard then setclipboard("https://www.youtube.com/@kyielpambid") end
+end, Color3.fromRGB(180,40,40))
+btn(SocialCard, "Copy Discord", function()
+    if setclipboard then setclipboard(DISCORD) end
+end, Color3.fromRGB(60,80,180))
+
+-- MAIN
+local mainCard = card(PMain, "Automation")
+local _, liftRef = toggle(mainCard, "Auto Lift", function() return F.liftOn end, function(v)
+    F.liftOn = v
+    if v then F.equipped = {}; print("[KHUB] Auto Lift: ON — top screen click") else print("[KHUB] Auto Lift: OFF") end
+    if refreshMapSel then refreshMapSel() end
+end)
+
+btn(mainCard, "STOP Auto Lift", function()
+    F.liftOn = false
+    print("[KHUB] Auto Lift: OFF")
+    if refreshMapSel then refreshMapSel() end
+    if liftRef then liftRef() end
+end, T.red)
+
+toggle(mainCard, "Auto Train (one click only)", function() return F.autoTrain end, function(v)
+    F.autoTrain = v
+    if v then
+        F.trainClicked = false
+        print("[KHUB] Auto Train: ON")
+    else
+        F.trainClicked = false
+        print("[KHUB] Auto Train: OFF")
+    end
+end)
+
+toggle(mainCard, "Auto Equip Once", function() return F.autoEquip end, function(v)
+    F.autoEquip = v
+    F.equipped = {}
+end)
+
+input(mainCard, "Prompt Burst (1-30)", "15", function(v)
+    local n = tonumber(v)
+    if n and n>=1 and n<=30 then F.burst = math.floor(n) end
+end)
+
+input(mainCard, "Top Screen Click Rate (seconds)", "0.01", function(v)
+    local n = tonumber(v)
+    if n and n>=0.005 and n<=1 then F.tapRate = n end
+end)
+
+btn(mainCard, "Load (Show Joystick + Jump)", function()
+    createDupeControls()
+end, T.violet)
+
+btn(mainCard, "Unload (Remove Joystick + Jump)", function()
+    removeDupeControls()
+end, T.red)
+
+local MapCard = card(PMain, "Select Map to Start Auto Lift")
+local mapBtns = {}
+local allMapsBtn
+
+function refreshMapSel()
+    if allMapsBtn then
+        if F.liftAll and F.liftOn then
+            allMapsBtn.BackgroundColor3 = T.green
+            allMapsBtn.Text = "ALL MAPS RUNNING (tap to stop)"
+        else
+            allMapsBtn.BackgroundColor3 = Color3.fromRGB(40,28,60)
+            allMapsBtn.Text = "ALL MAPS 1-15"
+        end
+    end
+    for i,b in ipairs(mapBtns) do
+        local m = MAPS[i]
+        local missing = (#m.lift==0)
+        local sel = (not F.liftAll) and (F.mapIndex==i)
+        local running = sel and F.liftOn
+        if running then b.BackgroundColor3 = T.green
+        elseif sel then b.BackgroundColor3 = T.violet
+        elseif missing then b.BackgroundColor3 = Color3.fromRGB(70,40,45)
+        else b.BackgroundColor3 = Color3.fromRGB(40,28,60) end
+        local mark = ""
+        if running then mark = "  RUNNING"
+        elseif sel then mark = "  SELECTED"
+        elseif missing then mark = "  [no cf]" end
+        b.Text = tostring(i).." · "..m.cube..mark
+    end
+end
+
+allMapsBtn = btn(MapCard, "ALL MAPS 1-15", function()
+    if F.liftAll and F.liftOn then F.liftOn = false; print("[KHUB] Stopped")
+    else F.liftAll = true; F.liftOn = true; F.equipped = {}; print("[KHUB] All maps ON") end
+    refreshMapSel()
+    if liftRef then liftRef() end
+end)
+
+for i,m in ipairs(MAPS) do
+    local b = btn(MapCard, "", function()
+        if #m.lift==0 then print("[KHUB] "..m.cube.." no cf yet") return end
+        if (not F.liftAll) and F.mapIndex==i and F.liftOn then
+            F.liftOn = false; print("[KHUB] Stopped")
+        else
+            F.liftAll = false; F.mapIndex = i; F.equipped = {}; F.liftOn = true
+            print("[KHUB] ON: "..m.cube)
+        end
+        refreshMapSel()
+        if liftRef then liftRef() end
+    end)
+    table.insert(mapBtns, b)
+end
+refreshMapSel()
+
+-- STATS
+local statsCard = card(PStats, "Session Stats")
+local statLifts = line(statsCard, "Lifts: 0", T.gold)
+local statTrains = line(statsCard, "Trains: 0", T.gold)
+local statEarned = line(statsCard, "Cash Earned: $0", T.gold)
+local statTime = line(statsCard, "Session Time: 0m 0s", T.gold)
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        statLifts.Text = "Lifts: " .. S.lifts
+        statTrains.Text = "Trains: " .. S.trains
+        statEarned.Text = "Cash Earned: $" .. S.earned
+        local mins = math.floor((os.clock()-S.start)/60)
+        local secs = math.floor((os.clock()-S.start)%60)
+        statTime.Text = string.format("Session Time: %dm %ds", mins, secs)
+    end
+end)
+
+-- SETTINGS
+local setCard = card(PSettings, "Auto Roll")
+toggle(setCard, "Auto Roll", function() return F.rollOn end, function(v)
+    F.rollOn = v
+    print("[KHUB] Auto Roll: " .. (v and "ON" or "OFF"))
+end)
+
+toggle(setCard, "Auto Buy Good Rolls", function() return F.autoBuy end, function(v) F.autoBuy = v end)
+
+input(setCard, "Seconds Per Roll", "0.6", function(v)
+    local n = tonumber(v)
+    if n and n>=0.2 and n<=10 then F.rollTime = n end
+end)
+
+input(setCard, "Good Keywords", F.goodWords, function(v)
+    if v and v~="" then F.goodWords = v; rebuildGood() end
+end)
+
+-- SAVE
+local CONFIG_FOLDER = "KHUB_Configs"
+local selectedConfig = nil
+local configList = {}
+
+local function ensureFolder()
+    pcall(function() if makefolder and not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end end)
+end
+
+local function listConfigs()
+    configList = {}
+    pcall(function()
+        if listfiles and isfolder and isfolder(CONFIG_FOLDER) then
+            for _, path in ipairs(listfiles(CONFIG_FOLDER)) do
+                local name = string.match(path, "([^/\\]+)%.json$")
+                if name then table.insert(configList, name) end
+            end
+        end
+    end)
+    table.sort(configList)
+    return configList
+end
+
+local SaveCard = card(PSave, "Custom Config")
+local NameBox = input(SaveCard, "Config Name", "", function(v) end)
+local SaveStatus = line(SaveCard, "Status: Ready", T.dim)
+
+btn(SaveCard, "Create / Save Config", function()
+    local name = NameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+    if name == "" then SaveStatus.Text = "Status: Type a name first"; SaveStatus.TextColor3 = T.red; return end
+    ensureFolder()
+    local ok, err = pcall(function()
+        if not writefile then error("writefile not supported") end
+        writefile(CONFIG_FOLDER .. "/" .. name .. ".json",
+            HS:JSONEncode({
+                SavedAt = os.date("%Y-%m-%d %H:%M"),
+                User = lp.Name, Version = "5.3",
+                Settings = {
+                    mapIndex=F.mapIndex, rollIndex=F.rollIndex,
+                    autoEquip=F.autoEquip, autoTrain=F.autoTrain,
+                    remote=F.remote, burst=F.burst,
+                    autoBuy=F.autoBuy, padTime=F.padTime, rollTime=F.rollTime,
+                    goodWords=F.goodWords, tapRate=F.tapRate,
+                },
+            }))
+    end)
+    if ok then
+        selectedConfig = name
+        SaveStatus.Text = "Status: Saved \"" .. name .. "\""
+        SaveStatus.TextColor3 = T.green
+        refreshConfigList()
+    else
+        SaveStatus.Text = "Status: Failed - " .. tostring(err)
+        SaveStatus.TextColor3 = T.red
+    end
+end)
+
+local ListFrame = Instance.new("ScrollingFrame")
+ListFrame.Size = UDim2.new(1,0,0,90)
+ListFrame.BackgroundColor3 = Color3.fromRGB(14,10,20)
+ListFrame.BackgroundTransparency = 0.2
+ListFrame.BorderSizePixel = 0
+ListFrame.ScrollBarThickness = 3
+ListFrame.ScrollBarImageColor3 = T.accent
+ListFrame.CanvasSize = UDim2.new(0,0,0,0)
+ListFrame.ZIndex = 11
+ListFrame.Parent = SaveCard
+corner(ListFrame, 6)
+stroke(ListFrame, T.stroke, 1, 0.4)
+
+local LL = Instance.new("UIListLayout")
+LL.Padding = UDim.new(0,4)
+LL.Parent = ListFrame
+
+function refreshConfigList()
+    for _, child in ipairs(ListFrame:GetChildren()) do
+        if child:IsA("TextButton") or child:IsA("TextLabel") then child:Destroy() end
+    end
+    listConfigs()
+    if #configList == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Size = UDim2.new(1,-8,0,24)
+        empty.BackgroundTransparency = 1
+        empty.Text = "No configs yet"
+        empty.Font = Enum.Font.Gotham
+        empty.TextSize = 11
+        empty.TextColor3 = T.dim
+        empty.ZIndex = 12
+        empty.Parent = ListFrame
+    else
+        for i, name in ipairs(configList) do
+            local b = Instance.new("TextButton")
+            b.Size = UDim2.new(1,-8,0,26)
+            b.BackgroundColor3 = (selectedConfig == name) and T.violet or Color3.fromRGB(30,22,42)
+            b.BackgroundTransparency = (selectedConfig == name) and 0.3 or 0.2
+            b.Text = "  " .. name
+            b.Font = Enum.Font.GothamBold
+            b.TextSize = 11
+            b.TextColor3 = (selectedConfig == name) and T.gold or T.text
+            b.TextXAlignment = Enum.TextXAlignment.Left
+            b.ZIndex = 12
+            b.LayoutOrder = i
+            b.Parent = ListFrame
+            corner(b, 5)
+            b.MouseButton1Click:Connect(function()
+                selectedConfig = name
+                NameBox.Text = name
+                SaveStatus.Text = "Selected: " .. name
+                SaveStatus.TextColor3 = T.gold
+                refreshConfigList()
+            end)
+        end
+    end
+    ListFrame.CanvasSize = UDim2.new(0,0,0,math.max(90, #configList*30+8))
+end
+
+btn(SaveCard, "Load Config", function()
+    local name = selectedConfig or NameBox.Text
+    if not name or name == "" then SaveStatus.Text = "Status: Select a config"; return end
+    local ok, data = pcall(function()
+        if not readfile or not isfile then error("no readfile") end
+        local path = CONFIG_FOLDER .. "/" .. name .. ".json"
+        if not isfile(path) then error("not found") end
+        return HS:JSONDecode(readfile(path))
+    end)
+    if ok and type(data) == "table" and type(data.Settings) == "table" then
+        local s = data.Settings
+        if tonumber(s.mapIndex) then F.mapIndex = math.clamp(math.floor(s.mapIndex), 1, #MAPS) end
+        if tonumber(s.rollIndex) then F.rollIndex = math.clamp(math.floor(s.rollIndex), 1, #ROLLS) end
+        if type(s.autoEquip) == "boolean" then F.autoEquip = s.autoEquip end
+        if type(s.autoTrain) == "boolean" then F.autoTrain = s.autoTrain end
+        if type(s.remote) == "boolean" then F.remote = s.remote end
+        if tonumber(s.burst) then F.burst = math.clamp(math.floor(s.burst), 1, 30) end
+        if type(s.autoBuy) == "boolean" then F.autoBuy = s.autoBuy end
+        if tonumber(s.padTime) then F.padTime = math.clamp(s.padTime, 0.1, 10) end
+        if tonumber(s.rollTime) then F.rollTime = math.clamp(s.rollTime, 0.2, 10) end
+        if type(s.goodWords) == "string" and s.goodWords ~= "" then F.goodWords = s.goodWords end
+        if tonumber(s.tapRate) then F.tapRate = math.clamp(s.tapRate, 0.005, 1) end
+        rebuildGood()
+        F.equipped = {}
+        refreshMapSel()
+        SaveStatus.Text = "Status: Loaded \"" .. name .. "\""
+        SaveStatus.TextColor3 = T.green
+    else
+        SaveStatus.Text = "Status: Failed"; SaveStatus.TextColor3 = T.red
+    end
+end)
+
+btn(SaveCard, "Delete Selected", function()
+    local name = selectedConfig
+    if not name or name == "" then SaveStatus.Text = "Status: Select a config"; return end
+    local ok = pcall(function() if delfile then delfile(CONFIG_FOLDER .. "/" .. name .. ".json") end end)
+    if ok then
+        SaveStatus.Text = "Status: Deleted"; SaveStatus.TextColor3 = T.green
+        selectedConfig = nil; NameBox.Text = ""
+        refreshConfigList()
+    end
+end, T.red)
+
+btn(SaveCard, "Refresh List", function()
+    refreshConfigList()
+    SaveStatus.Text = "Status: Refreshed"
+    SaveStatus.TextColor3 = T.dim
+end)
+
+task.defer(refreshConfigList)
+
+-- CREDITS
+local credCard = card(PCredits, "KHUB")
+line(credCard, "KHUB · Lift a Cube · v5.3", T.gold)
+line(credCard, "Built by Kyiel & Arin", T.dim)
+btn(credCard, "Copy Discord", function()
+    if setclipboard then setclipboard(DISCORD) end
+end)
+
+-- ORB
+local Orb = Instance.new("ImageButton")
+Orb.Size = UDim2.fromOffset(72,72)
+Orb.Position = UDim2.new(0,12,1,-84)
+Orb.BackgroundColor3 = T.rail
+Orb.Image = LOGO
+Orb.ScaleType = Enum.ScaleType.Fit
+Orb.Visible = false
+Orb.ZIndex = 50
+Orb.Parent = SG
+corner(Orb, 36)
+stroke(Orb, T.violet, 3, 0.12)
+
+local dragOrb, dOrbS, oOrbP
+Orb.InputBegan:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+        dragOrb = true; dOrbS = i.Position; oOrbP = Orb.Position
+        i.Changed:Connect(function()
+            if i.UserInputState==Enum.UserInputState.End then dragOrb = false end
+        end)
+    end
+end)
+UIS.InputChanged:Connect(function(i)
+    if dragOrb and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+        local d = i.Position - dOrbS
+        Orb.Position = UDim2.new(oOrbP.X.Scale, oOrbP.X.Offset+d.X, oOrbP.Y.Scale, oOrbP.Y.Offset+d.Y)
+    end
+end)
+
+local function setVis(on)
+    Win.Visible = on
+    Orb.Visible = not on
+end
+
+CloseBtn.MouseButton1Click:Connect(function() setVis(false) end)
+Orb.MouseButton1Click:Connect(function() setVis(true) end)
+
+-- AUTO TRAIN (one click only — galing sa code mo)
+task.spawn(function()
+    while true do
+        if F.autoTrain and not F.trainClicked then
+            clickTrainOnce()
+            F.trainClicked = true
+            S.trains = S.trains + 1
+            print("[KHUB] Train clicked once.")
+        end
+        if not F.autoTrain then
+            F.trainClicked = false
+        end
+        task.wait(0.5)
+    end
+end)
+
+-- AUTO LIFT: screen click — pinakataas ng screen
+task.spawn(function()
+    while true do
+        if F.liftOn then
+            doTopScreenClick()
+            task.wait(F.tapRate)
+        else
+            task.wait(0.1)
+        end
+    end
+end)
+
+-- AUTO LIFT (prompts)
+task.spawn(function()
+    while true do
+        if F.liftOn then
+            if not waitHRP(10) then task.wait(1)
+            elseif F.liftAll then
+                for idx=1,#MAPS do
+                    if not F.liftOn then break end
+                    local m = MAPS[idx]
+                    if #m.lift>0 then
+                        F.mapIndex = idx
+                        refreshMapSel()
+                        if F.autoEquip and m.equip then
+                            tp(m.equip[1], m.equip[2], m.equip[3])
+                            task.wait(0.2)
+                            refreshCache(true)
+                            for _=1,12 do
+                                if iWord("equip", 18)>0 then break end
+                                iWord("equip", 30)
+                                task.wait(0.1)
+                            end
+                        end
+                        for _,pos in ipairs(m.lift) do
+                            if not F.liftOn then break end
+                            spamPad(pos, F.padTime)
+                        end
+                    end
+                end
+            else
+                local m = MAPS[F.mapIndex]
+                if not m or #m.lift==0 then
+                    task.wait(1)
+                else
+                    if F.autoEquip and m.equip and not F.equipped[F.mapIndex] then
+                        tp(m.equip[1], m.equip[2], m.equip[3])
+                        task.wait(0.2)
+                        refreshCache(true)
+                        for _=1,12 do
+                            if iWord("equip", 18)>0 then break end
+                            iWord("equip", 30)
+                            task.wait(0.1)
+                        end
+                        F.equipped[F.mapIndex] = true
+                    end
+                    for _,pos in ipairs(m.lift) do
+                        if not F.liftOn then break end
+                        spamPad(pos, F.padTime)
+                    end
+                end
+            end
+        else
+            task.wait(0.25)
+        end
+    end
+end)
+
+-- AUTO ROLL
+task.spawn(function()
+    while true do
+        if F.rollOn then
+            if waitHRP(10) then
+                if F.rollAll then
+                    for idx=1,#ROLLS do
+                        if not F.rollOn then break end
+                        F.rollIndex = idx
+                        rollOnce(idx)
+                    end
+                else
+                    rollOnce(F.rollIndex)
+                end
+            end
+        else
+            task.wait(0.25)
+        end
+    end
+end)
+
+lp.Idled:Connect(function()
+    pcall(function()
+        VU:CaptureController()
+        VU:ClickButton2(Vector2.new())
+    end)
+end)
+
+UIS.InputBegan:Connect(function(i, gp)
+    if gp then return end
+    if i.KeyCode==Enum.KeyCode.RightShift or i.KeyCode==Enum.KeyCode.RightControl or i.KeyCode==Enum.KeyCode.K then
+        setVis(not Win.Visible)
+    end
+end)
+
+switchPage("Welcome", "Welcome")
+
+print("[KHUB] v5.3 LOADED")
+print("[KHUB] Welcome + Save Config restored")
+print("[KHUB] Load: tunay na joystick + arrow jump (1x jump)")
+print("[KHUB] Auto Train: one click only")
+print("[KHUB] Auto Lift: top screen click")
+print("[KHUB] Toggle: RightShift / K / RightCtrl  |  Close: X")
