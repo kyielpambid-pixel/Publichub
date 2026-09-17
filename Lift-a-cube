@@ -1,5 +1,5 @@
 repeat task.wait() until game:IsLoaded()
-print("[KHUB] v5.3 starting...")
+print("[KHUB] v6.3 starting...")
 
 local P = game:GetService("Players")
 local TS = game:GetService("TweenService")
@@ -9,334 +9,98 @@ local CG = game:GetService("CoreGui")
 local WS = game:GetService("Workspace")
 local HS = game:GetService("HttpService")
 local VU = game:GetService("VirtualUser")
-local VIM = game:GetService("VirtualInputManager")
 local RSvc = game:GetService("ReplicatedStorage")
 local lp = P.LocalPlayer
 
 local LOGO = "rbxassetid://140466936910510"
-local DISCORD = "https://discord.gg/EKPb7BRDH8"
+local DISCORD = "https://discord.gg/rU9FyNEUQ7"
 
-local Remote = nil
+pcall(function() if _G.LiftACubeCleanup then _G.LiftACubeCleanup() end end)
+
+local Bridgenet2, GlobalReplicator, LiftingModule, CubeRollModule
+local Schematics = {}
 pcall(function()
-    local f = RSvc:FindFirstChild("ffrostflame_bridgenet2@1.0.0")
-    if f then
-        local e = f:FindFirstChild("dataRemoteEvent")
-        if e then Remote = e end
+    Bridgenet2 = require(RSvc.Packages.bridgenet2)
+    GlobalReplicator = require(RSvc.Modules.GlobalReplicator)
+    LiftingModule = require(RSvc.Modules.Lifting)
+    CubeRollModule = require(RSvc.Modules.CubeRoll)
+    Schematics.Cubes = require(RSvc.Schematics.Cubes)
+    Schematics.Arms = require(RSvc.Schematics.Arms)
+    Schematics.SpeedUpgrades = require(RSvc.Schematics.SpeedUpgrades)
+    Schematics.Materials = require(RSvc.Schematics.Materials)
+end)
+
+local cleanUserId = tostring(lp.UserId):gsub("-", "")
+local Bridges = {}
+pcall(function()
+    if Bridgenet2 then
+        Bridges.Training = Bridgenet2.ReferenceBridge(cleanUserId .. "_Training")
+        Bridges.Cubes = Bridgenet2.ReferenceBridge(cleanUserId .. "_Cubes")
+        Bridges.Pops = Bridgenet2.ReferenceBridge(cleanUserId .. "_Pops")
+        Bridges.GroupReward = Bridgenet2.ReferenceBridge(cleanUserId .. "_GroupReward")
+        Bridges.AFK = Bridgenet2.ReferenceBridge(cleanUserId .. "_AFK")
     end
 end)
 
-local MAPS = {
-    {cube="Wood Cube", lift={{-1.13,3.67,15.71}}, equip={26.69,3.94,44.94}},
-    {cube="Stone Cube", lift={{-1.82,3.67,-74.35},{-33.19,4.04,-117.27}}, equip={27.27,3.94,-45.96}},
-    {cube="Copper Cube", lift={}, equip=nil},
-    {cube="Ice Cube", lift={{0.00,3.67,-253.30},{-33.11,4.04,-297.59}}, equip={28.06,3.94,-224.65}},
-    {cube="Crystal Cube", lift={{-0.53,3.67,-343.35}}, equip={28.82,3.94,-315.86}},
-    {cube="Golden Cube", lift={{-0.21,3.67,-432.33}}, equip={30.33,3.94,-406.65}},
-    {cube="Magma Cube", lift={{-0.78,3.67,-609.99}}, equip={30.06,3.94,-585.16}},
-    {cube="Plasma Cube", lift={{0.11,3.67,-698.65}}, equip={29.07,3.94,-678.41}},
-    {cube="Void Cube", lift={}, equip=nil},
-    {cube="Singularity Cube", lift={{0.70,3.67,-786.77}}, equip={25.98,3.94,-765.81}},
-    {cube="Amethyst Cube", lift={{0.58,3.67,-886.17}}, equip={26.31,3.94,-857.96}},
-    {cube="Solar Cube", lift={{0.79,3.67,-976.04}}, equip={24.18,3.76,-948.89}},
-    {cube="Ember Cube", lift={{0.66,3.67,-1064.82}}, equip={28.85,3.84,-1033.62}},
-    {cube="Prism Cube", lift={{1.31,14.17,-1150.64}}, equip={26.86,3.94,-1126.76}},
-    {cube="Genesis Cube", lift={{2.69,12.44,-1240.91}}, equip={26.18,3.94,-1216.94}},
-}
-
-local ROLLS = {
-    {name="Roll 1", cf={-1.04,3.54,65.86}},
-    {name="Roll 2", cf={-47.02,3.54,-256.08}},
-    {name="Roll 3", cf={47.32,3.54,-437.15}},
-    {name="Roll 4", cf={-45.21,3.54,-976.66}},
-}
-
-local F = {
-    liftOn=false, liftAll=false, mapIndex=1, autoEquip=true, equipped={},
-    remote=true, burst=15, arg=1, padTime=0.15,
-    autoTrain=false, trainClicked=false,
-    rollOn=false, rollAll=false, rollIndex=1, autoBuy=true, rollTime=0.6,
-    goodWords="legendary,mythic,epic,rare,godly,secret,divine,exotic,galactic,universal",
-    tapRate=0.01,
-}
-
-local S = {lifts=0, earned=0, trains=0, start=os.clock()}
-local lastCash = nil
-
-task.spawn(function()
-    while true do
-        local ls = lp:FindFirstChild("leaderstats")
-        if ls then
-            local c = ls:FindFirstChild("Cash") or ls:FindFirstChild("Money") or ls:FindFirstChild("Coins")
-            if c then
-                local ok,v = pcall(function() return c.Value end)
-                if ok and type(v)=="number" then
-                    if lastCash and v>lastCash then S.earned = S.earned + (v-lastCash) end
-                    lastCash = v
-                end
-            end
-        end
-        task.wait(0.25)
-    end
-end)
-
-local FPP = type(fireproximityprompt)=="function" and fireproximityprompt or nil
-
-local function hrp()
-    local c = lp.Character
-    return c and c:FindFirstChild("HumanoidRootPart")
-end
-
-local function waitHRP(t)
-    local t0 = os.clock()
-    t = t or 10
-    while os.clock()-t0 < t do
-        if hrp() then return true end
-        task.wait(0.2)
-    end
-    return hrp() ~= nil
-end
-
-local function tp(x,y,z)
-    local h = hrp()
-    if not h then return false end
-    h.CFrame = CFrame.new(x,y,z)
-    return true
-end
-
-local function doTopScreenClick()
-    pcall(function()
-        local cam = WS.CurrentCamera
-        if not cam then return end
-        local vp = cam.ViewportSize
-        local cx = math.floor(vp.X * 0.5)
-        local cy = math.floor(vp.Y * 0.02)
-        VIM:SendMouseButtonEvent(cx, cy, 0, true, game, 0)
-        task.wait(0.003)
-        VIM:SendMouseButtonEvent(cx, cy, 0, false, game, 0)
-    end)
-end
-
-local pCache, cTime = {}, 0
-local function refreshCache(force)
-    local n = os.clock()
-    if not force and (n-cTime)<0.5 then return end
-    cTime = n
-    pCache = {}
-    for _,d in ipairs(WS:GetDescendants()) do
-        if d:IsA("ProximityPrompt") then
-            table.insert(pCache, {obj=d, kind="prompt"})
-        elseif d:IsA("ClickDetector") then
-            table.insert(pCache, {obj=d, kind="click"})
-        end
-    end
-end
-
-local function ePos(e)
-    local p = e.obj.Parent
-    if not p then return nil end
-    if p:IsA("BasePart") then return p.Position end
-    if p:IsA("Attachment") and p.Parent and p.Parent:IsA("BasePart") then return p.Parent.Position end
-    if p:IsA("Model") then
-        local ok,pos = pcall(function() return p:GetPivot().Position end)
-        if ok then return pos end
-    end
-    local pt = p:FindFirstChildWhichIsA("BasePart", true)
-    return pt and pt.Position or nil
-end
-
-local function matchAny(e, words)
-    local o = e.obj
-    local t = string.lower(tostring(o.ActionText or "").." "..tostring(o.ObjectText or "").." "..o.Name)
-    for _,w in ipairs(words) do
-        if t:find(w,1,true) then return true end
-    end
-    return false
-end
-
-local function iFire(p)
-    if not p or not p.Parent then return false end
-    return pcall(function()
-        local o = p.HoldDuration
-        if o~=0 then p.HoldDuration=0 end
-        if FPP then FPP(p) else p:InputHoldBegin(); p:InputHoldEnd() end
-        if o~=0 then p.HoldDuration=o end
-    end)
-end
-
-local function iWord(word, range)
-    local h = hrp()
-    if not h then return 0 end
-    refreshCache()
-    local n = 0
-    local r = range or 18
-    for _,e in ipairs(pCache) do
-        if e.kind=="prompt" and matchAny(e,{word}) then
-            local p = ePos(e)
-            if p and (p-h.Position).Magnitude<=r then
-                iFire(e.obj)
-                n = n+1
-            end
-        end
-    end
-    return n
-end
-
-local function iBurst(n, range)
-    local h = hrp()
-    if not h then return 0 end
-    refreshCache()
-    local fired = 0
-    local r = range or 18
-    for _,e in ipairs(pCache) do
-        if e.kind=="prompt" and matchAny(e,{"lift"}) then
-            local p = ePos(e)
-            if p and (p-h.Position).Magnitude<=r then
-                for _=1,n do iFire(e.obj) end
-                fired = fired+n
-            end
-        end
-    end
-    return fired
-end
-
-local function fireSignal(g)
-    if not g or not g.Parent then return false end
-    local fired = false
-    if type(getconnections)=="function" then
-        local ok1,c1 = pcall(getconnections, g.MouseButton1Click)
-        if ok1 and c1 then for _,c in ipairs(c1) do pcall(function() c:Fire() end) end; fired=true end
-        local ok2,c2 = pcall(getconnections, g.Activated)
-        if ok2 and c2 then for _,c in ipairs(c2) do pcall(function() c:Fire() end) end; fired=true end
-    end
-    if not fired and type(firesignal)=="function" then
-        pcall(firesignal, g.MouseButton1Click)
-        pcall(firesignal, g.Activated)
-        fired = true
-    end
-    if not fired then
-        pcall(function() if g.MouseButton1Click then g.MouseButton1Click:Fire(); fired=true end end)
-        pcall(function() if g.Activated then g.Activated:Fire(); fired=true end end)
-    end
-    return fired
-end
-
-local function doScreenTap()
-    pcall(function()
-        VU:CaptureController()
-        VU:ClickButton1(Vector2.new(0, 0))
-    end)
-end
-
-local function findBtns(word)
-    word = string.lower(word or "")
-    local out = {}
-    local pg = lp:FindFirstChildOfClass("PlayerGui")
-    if pg then
-        for _,g in ipairs(pg:GetDescendants()) do
-            if (g:IsA("TextButton") or g:IsA("ImageButton")) and g.Visible then
-                local t = ""
-                if g:IsA("TextButton") then t = g.Text end
-                t = string.lower(tostring(t~="" and t or g.Name))
-                if word=="" or t:find(word,1,true) then table.insert(out, g) end
-            end
-        end
-    end
-    for _,d in ipairs(WS:GetDescendants()) do
-        if (d:IsA("TextButton") or d:IsA("ImageButton")) and d.Visible then
-            local t = ""
-            if d:IsA("TextButton") then t = d.Text end
-            t = string.lower(tostring(t~="" and t or d.Name))
-            if word=="" or t:find(word,1,true) then table.insert(out, d) end
-        end
-    end
-    return out
-end
-
-local function clickTrainOnce()
-    local btns = findBtns("train")
-    for _,g in ipairs(btns) do
-        if g and g.Parent and g.Visible then
-            fireSignal(g)
-        end
-    end
-    if #btns == 0 then
-        doScreenTap()
-    end
-end
-
-local function clickBtns(word)
-    local out = findBtns(word)
-    local hit = false
-    for _,g in ipairs(out) do if fireSignal(g) then hit = true end end
-    return hit
-end
-
-local goodList = {}
-local function rebuildGood()
-    goodList = {}
-    for w in string.gmatch(string.lower(F.goodWords), "[^,%s]+") do
-        table.insert(goodList, w)
-    end
-end
-rebuildGood()
-
-local function scanGood()
-    local pg = lp:FindFirstChildOfClass("PlayerGui")
-    if not pg then return nil end
-    for _,g in ipairs(pg:GetDescendants()) do
-        if g:IsA("TextLabel") and g.Visible and g.Text~="" then
-            local t = string.lower(g.Text)
-            for _,w in ipairs(goodList) do
-                if t:find(w,1,true) then return w end
+local Controllers = nil
+local function getControllers()
+    if Controllers then return Controllers end
+    if getgc then
+        for _, obj in ipairs(getgc(true)) do
+            if type(obj) == "table" and rawget(obj, "name") == "Cubes" and rawget(obj, "controllers") then
+                Controllers = obj.controllers
+                return Controllers
             end
         end
     end
     return nil
 end
+getControllers()
 
-local function spamPad(pos, dur)
-    if not waitHRP(10) then return false end
-    tp(pos[1], pos[2], pos[3])
-    task.wait(0.05)
-    refreshCache(true)
-    local tEnd = os.clock()+dur
-    while os.clock()<tEnd do
-        if not F.liftOn then return false end
-        local n = iBurst(F.burst)
-        S.lifts = S.lifts+n
-        if F.remote and Remote then
-            for _=1,F.burst do
-                pcall(function() Remote:FireServer({{Function="FinishLift", Args={F.arg}}, "y"}) end)
-            end
+local CUBE_NAMES = {
+    "Wood Cube", "Stone Cube", "Copper Cube", "Ice Cube", "Crystal Cube",
+    "Golden Cube", "Magma Cube", "Plasma Cube", "Void Cube", "Singularity Cube",
+    "Amethyst Cube", "Solar Cube", "Ember Cube", "Prism Cube", "Genesis Cube"
+}
+
+local MaterialTierOrder = {
+    "Sand", "Wood", "Grass", "Snow", "Rock", "Metal",
+    "Water", "Brick", "Magma", "Candy", "Tiles", "Illusion"
+}
+
+local Suffixes = {
+    {1e+60, "Nod"}, {1e+57, "Ocd"}, {1e+54, "Spd"}, {1e+51, "Sxd"},
+    {1e+48, "Qid"}, {1e+45, "Qad"}, {1e+42, "Td"}, {1e+39, "Dd"},
+    {1e+36, "Ud"}, {1e+33, "Dc"}, {1e+30, "No"}, {1e+27, "Oc"},
+    {1e+24, "Sp"}, {1e+21, "Sx"}, {1e+18, "Qi"}, {1e+15, "Qa"},
+    {1e+12, "T"}, {1e+9, "B"}, {1e+6, "M"}, {1e+3, "K"}
+}
+
+local function formatNumber(n)
+    local num = tonumber(n)
+    if not num then return tostring(n or "0") end
+    for _, item in ipairs(Suffixes) do
+        if num >= item[1] then
+            return string.format("%.2f%s", num / item[1], item[2])
         end
-        RS.Heartbeat:Wait()
     end
-    return true
+    return tostring(math.floor(num))
 end
 
-local function rollOnce(idx)
-    local r = ROLLS[idx]
-    if not r then return false end
-    if not waitHRP(10) then return false end
-    tp(r.cf[1], r.cf[2], r.cf[3])
-    task.wait(0.1)
-    refreshCache(true)
-    local tEnd = os.clock()+F.rollTime
-    while os.clock()<tEnd do
-        if not F.rollOn then return false end
-        iWord("roll", 16)
-        RS.Heartbeat:Wait()
-    end
-    if F.autoBuy then
-        local g = scanGood()
-        if g then
-            clickBtns("buy")
-            task.wait(0.2)
-        end
-    end
-    clickBtns("next")
-    task.wait(0.05)
-    return true
+local F = {
+    AutoTrain_New=false, AutoCubes=false, AutoArms=false, AutoSpeed=false,
+    AutoPops=false, AutoRoll_New=false, AutoGroupReward=false,
+    Noclip=false, AntiAFK=false,
+    SelectedCube=0,
+    SpeedMode="HYPER",
+    TrainDelay=0.105, CubeDelay=0.05,
+}
+
+local S = {lifts=0, pushups=0, pops=0, start=os.clock()}
+
+local function hrp()
+    local c = lp.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
 end
 
 local T = {
@@ -366,7 +130,7 @@ end
 
 local Par = (gethui and gethui()) or CG
 pcall(function()
-    for _,n in ipairs({"KHUB_Karinderya","KHUB_UI","KHUB_FloatIcon"}) do
+    for _,n in ipairs({"KHUB_Karinderya","KHUB_UI","KHUB_FloatIcon","KHUB_Main"}) do
         local o = Par:FindFirstChild(n)
         if o then o:Destroy() end
         local pg = lp:FindFirstChild("PlayerGui")
@@ -375,7 +139,7 @@ pcall(function()
 end)
 
 local SG = Instance.new("ScreenGui")
-SG.Name = "KHUB_Karinderya"
+SG.Name = "KHUB_Main"
 SG.ResetOnSpawn = false
 SG.IgnoreGuiInset = true
 SG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -487,33 +251,6 @@ BGWatermark.TextYAlignment = Enum.TextYAlignment.Center
 BGWatermark.ZIndex = 2
 BGWatermark.Parent = WMFrame
 
-local WMStroke = Instance.new("UIStroke")
-WMStroke.Color = T.accent
-WMStroke.Thickness = 3
-WMStroke.Transparency = 0.35
-WMStroke.Parent = BGWatermark
-
-local WMGrad = Instance.new("UIGradient")
-WMGrad.Offset = Vector2.new(-1, 0)
-WMGrad.Parent = BGWatermark
-task.spawn(function()
-    while BGWatermark.Parent do
-        local base = Color3.fromRGB(70,30,160)
-        local bright = Color3.fromRGB(220,70,255)
-        local tip = Color3.fromRGB(90,210,255)
-        WMGrad.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, base),
-            ColorSequenceKeypoint.new(0.32, base),
-            ColorSequenceKeypoint.new(0.5, bright),
-            ColorSequenceKeypoint.new(0.68, tip),
-            ColorSequenceKeypoint.new(1, base),
-        })
-        WMGrad.Offset = Vector2.new(-1.2, 0)
-        TS:Create(WMGrad, TweenInfo.new(4.5, Enum.EasingStyle.Linear), { Offset = Vector2.new(1.2, 0) }):Play()
-        task.wait(4.7)
-    end
-end)
-
 local Header = Instance.new("Frame")
 Header.Size = UDim2.new(1,0,0,HH)
 Header.Position = UDim2.new(0,0,0,3)
@@ -579,7 +316,7 @@ local Sub = Instance.new("TextLabel")
 Sub.Size = UDim2.new(0,500,0,16)
 Sub.Position = UDim2.new(0,16,0,46)
 Sub.BackgroundTransparency = 1
-Sub.Text = "v5.3  ·  RightShift / K  ·  X = close"
+Sub.Text = "v6.3  ·  RightShift / K / RightCtrl to toggle  ·  X to close"
 Sub.Font = Enum.Font.Code
 Sub.TextSize = 11
 Sub.TextColor3 = T.mute
@@ -687,11 +424,12 @@ end
 
 local ICONS = {
     Welcome="rbxassetid://140466936910510",
+    Dashboard="rbxassetid://6031075931",
     Main="rbxassetid://6023426926",
-    Stats="rbxassetid://6031075931",
+    Stats="rbxassetid://6035047409",
     Settings="rbxassetid://6031280882",
+    Credits="rbxassetid://140466936910510",
     Save="rbxassetid://6031280882",
-    Credits="rbxassetid://6035047409",
 }
 
 local function switchPage(name, title)
@@ -947,306 +685,364 @@ local function input(p, txt, default, cb)
     return box
 end
 
--- ================================================================
--- DUPLICATE JOYSTICK + JUMP — tunay na joystick, arrow jump
--- ================================================================
-local joystickTouch = nil
-local joystickStart = nil
-local joystickActive = false
-local JOYSTICK_RADIUS = 60
-local JOYSTICK_ZONE_X = 0.5
-local JOYSTICK_ZONE_Y = 0.55
-
-local joyVisual = nil
-local joyKnob = nil
-local jumpBtn = nil
-
-local function makeJoystickVisual()
-    if joyVisual and joyVisual.Parent then return end
-    joyVisual = Instance.new("Frame")
-    joyVisual.Name = "KHUB_DupeJoystick"
-    joyVisual.Size = UDim2.fromOffset(140, 140)
-    joyVisual.Position = UDim2.new(0, 40, 1, -200)
-    joyVisual.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    joyVisual.BackgroundTransparency = 0.7
-    joyVisual.BorderSizePixel = 0
-    joyVisual.Visible = false
-    joyVisual.ZIndex = 100
-    joyVisual.Parent = SG
-    corner(joyVisual, 70)
-
-    joyKnob = Instance.new("Frame")
-    joyKnob.Size = UDim2.fromOffset(60, 60)
-    joyKnob.Position = UDim2.new(0.5, -30, 0.5, -30)
-    joyKnob.BackgroundColor3 = Color3.fromRGB(180, 180, 180)
-    joyKnob.BackgroundTransparency = 0.25
-    joyKnob.BorderSizePixel = 0
-    joyKnob.ZIndex = 101
-    joyKnob.Parent = joyVisual
-    corner(joyKnob, 30)
-    print("[KHUB] Joystick ready")
+local function getStrength() return lp:GetAttribute("Strength") or 0 end
+local function getCash() return lp:GetAttribute("Cash") or 0 end
+local function getEquippedArms() return lp:GetAttribute("EquippedArms") or 0 end
+local function getEquippedMaterial()
+    local ctrl = getControllers()
+    if ctrl and ctrl.Roll and ctrl.Roll.equipped then
+        return tostring(ctrl.Roll.equipped)
+    end
+    return "None"
 end
 
-local function makeJumpButton()
-    if jumpBtn and jumpBtn.Parent then return end
-    jumpBtn = Instance.new("TextButton")
-    jumpBtn.Name = "KHUB_DupeJump"
-    jumpBtn.Size = UDim2.fromOffset(80, 80)
-    jumpBtn.Position = UDim2.new(1, -130, 1, -180)
-    jumpBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    jumpBtn.BackgroundTransparency = 0.4
-    jumpBtn.Text = "▲"
-    jumpBtn.Font = Enum.Font.GothamBold
-    jumpBtn.TextSize = 30
-    jumpBtn.TextColor3 = Color3.new(1,1,1)
-    jumpBtn.ZIndex = 100
-    jumpBtn.Parent = SG
-    corner(jumpBtn, 40)
-    stroke(jumpBtn, T.green, 2, 0.4)
-    jumpBtn.MouseButton1Click:Connect(function()
-        local char = lp.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-    end)
-    print("[KHUB] Jump button ready")
-end
-
-UIS.TouchStarted:Connect(function(touch, gameProcessed)
-    if gameProcessed then return end
-    local vp = WS.CurrentCamera and WS.CurrentCamera.ViewportSize or Vector2.new(500, 900)
-    local tx, ty = touch.Position.X, touch.Position.Y
-    if tx <= vp.X * JOYSTICK_ZONE_X and ty >= vp.Y * (1 - JOYSTICK_ZONE_Y) then
-        joystickTouch = touch
-        joystickStart = Vector2.new(tx, ty)
-        joystickActive = true
-        if joyVisual then
-            joyVisual.Position = UDim2.fromOffset(tx - 70, ty - 70)
-            joyVisual.Visible = true
+local function getBestLiftableCube()
+    local str = getStrength()
+    local cubesFolder = WS:FindFirstChild("World")
+    cubesFolder = cubesFolder and cubesFolder:FindFirstChild("Shared")
+    cubesFolder = cubesFolder and cubesFolder:FindFirstChild("Cubes")
+    if not cubesFolder or not CubeRollModule or not LiftingModule then return 1 end
+    local best = 1
+    for i = 1, 15 do
+        local scale = CubeRollModule.Scale(cubesFolder, i)
+        local mass = CubeRollModule.Mass(i, scale)
+        if LiftingModule.Possible(str, mass) then
+            local minTime = LiftingModule.MinimumTime(str, mass)
+            if minTime <= 1.5 then best = i end
         end
     end
-end)
-
-UIS.TouchMoved:Connect(function(touch, gameProcessed)
-    if joystickActive and joystickTouch and touch == joystickTouch then
-        local d = Vector2.new(touch.Position.X, touch.Position.Y) - joystickStart
-        local mag = math.sqrt(d.X*d.X + d.Y*d.Y)
-        if mag > JOYSTICK_RADIUS then
-            d = Vector2.new(d.X/mag*JOYSTICK_RADIUS, d.Y/mag*JOYSTICK_RADIUS)
-        end
-        if joyKnob then
-            joyKnob.Position = UDim2.new(0.5, -30 + d.X, 0.5, -30 + d.Y)
-        end
-        local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
-        if hum then
-            local dir = Vector3.new(d.X / JOYSTICK_RADIUS, 0, d.Y / JOYSTICK_RADIUS)
-            local moveDir = WS.CurrentCamera.CFrame:VectorToWorldSpace(dir)
-            hum:Move(moveDir, false)
-        end
-    end
-end)
-
-UIS.TouchEnded:Connect(function(touch, gameProcessed)
-    if joystickActive and joystickTouch and touch == joystickTouch then
-        joystickActive = false
-        joystickTouch = nil
-        joystickStart = nil
-        if joyKnob then
-            joyKnob.Position = UDim2.new(0.5, -30, 0.5, -30)
-        end
-        if joyVisual then
-            joyVisual.Visible = false
-        end
-        local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum:Move(Vector3.new(0,0,0), false)
-        end
-    end
-end)
-
-local function createDupeControls()
-    makeJoystickVisual()
-    makeJumpButton()
-    print("[KHUB] Dupe controls loaded")
+    return best
 end
 
-local function removeDupeControls()
-    if joyVisual then joyVisual:Destroy(); joyVisual = nil; joyKnob = nil end
-    if jumpBtn then jumpBtn:Destroy(); jumpBtn = nil end
-    joystickActive = false
-    joystickTouch = nil
-    print("[KHUB] Dupe controls removed")
+local function getTargetCubeIndex()
+    if F.SelectedCube and F.SelectedCube > 0 then
+        return math.clamp(F.SelectedCube, 1, 15)
+    end
+    return getBestLiftableCube()
 end
 
--- PAGES
+local function ensureTrainToolEquipped()
+    local char = lp.Character
+    if not char then return false end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return false end
+    local toolInChar = char:FindFirstChild("Train")
+    if toolInChar then
+        local ctrl = getControllers()
+        if ctrl and ctrl.Training and not ctrl.Training.locked then
+            ctrl.Training:SetLocked(true)
+        end
+        return true
+    end
+    local backpack = lp:FindFirstChildOfClass("Backpack")
+    local toolInBp = backpack and backpack:FindFirstChild("Train")
+    if toolInBp then
+        toolInBp.Parent = char
+        local ctrl = getControllers()
+        if ctrl and ctrl.Training then ctrl.Training:SetLocked(true) end
+        return true
+    end
+    return false
+end
+
+-- PAGES (order matters — Save Config LAST)
 local PWelcome = mkPage("Welcome")
+local PDashboard = mkPage("Dashboard")
 local PMain = mkPage("Main")
 local PStats = mkPage("Stats")
 local PSettings = mkPage("Settings")
-local PSave = mkPage("Save")
 local PCredits = mkPage("Credits")
+local PSave = mkPage("Save")
 
 mkTab("Welcome", "Welcome", 1, "Welcome")
-mkTab("Main", "Main", 2, "Automation")
-mkTab("Stats", "Stats", 3, "Statistics")
-mkTab("Settings", "Settings", 4, "Settings")
-mkTab("Save", "Save Config", 5, "Save Config")
+mkTab("Dashboard", "Dashboard", 2, "Dashboard & Instructions")
+mkTab("Main", "Main", 3, "Automation")
+mkTab("Stats", "Stats", 4, "Statistics")
+mkTab("Settings", "Settings", 5, "Settings")
 mkTab("Credits", "Credits", 6, "Credits")
+mkTab("Save", "Save Config", 7, "Save Config")
 
--- WELCOME
-card(PWelcome, "Welcome to KHUB")
-line(PWelcome, "KHUB · Lift a Cube · v5.3", T.gold)
-line(PWelcome, "Built by Kyiel & Arin", T.dim)
+-- ========== WELCOME PAGE (Profile restored) ==========
+local welcomeProfileCard = card(PWelcome, "Your Profile")
+local ProfileFrame = Instance.new("Frame")
+ProfileFrame.Size = UDim2.new(1, 0, 0, 100)
+ProfileFrame.BackgroundColor3 = Color3.fromRGB(14, 10, 20)
+ProfileFrame.BackgroundTransparency = 0.2
+ProfileFrame.BorderSizePixel = 0
+ProfileFrame.ZIndex = 10
+ProfileFrame.Parent = welcomeProfileCard
+corner(ProfileFrame, 8)
+stroke(ProfileFrame, T.stroke, 1, 0.35)
+
+local AvatarImg = Instance.new("ImageLabel")
+AvatarImg.Size = UDim2.fromOffset(72, 72)
+AvatarImg.Position = UDim2.new(0, 12, 0.5, -36)
+AvatarImg.BackgroundColor3 = Color3.fromRGB(40, 28, 60)
+AvatarImg.BackgroundTransparency = 0.2
+AvatarImg.ZIndex = 11
+AvatarImg.Parent = ProfileFrame
+corner(AvatarImg, 36)
+stroke(AvatarImg, T.accent, 1.5, 0.3)
+
+pcall(function()
+    local content, isReady = P:GetUserThumbnailAsync(
+        lp.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150
+    )
+    if isReady then AvatarImg.Image = content end
+end)
+
+local ProfileName = Instance.new("TextLabel")
+ProfileName.Size = UDim2.new(1, -100, 0, 22)
+ProfileName.Position = UDim2.new(0, 96, 0, 18)
+ProfileName.BackgroundTransparency = 1
+ProfileName.Text = "User: " .. lp.DisplayName
+ProfileName.Font = Enum.Font.GothamBold
+ProfileName.TextSize = 14
+ProfileName.TextColor3 = T.gold
+ProfileName.TextXAlignment = Enum.TextXAlignment.Left
+ProfileName.ZIndex = 11
+ProfileName.Parent = ProfileFrame
+
+local ProfileUser = Instance.new("TextLabel")
+ProfileUser.Size = UDim2.new(1, -100, 0, 18)
+ProfileUser.Position = UDim2.new(0, 96, 0, 42)
+ProfileUser.BackgroundTransparency = 1
+ProfileUser.Text = "@" .. lp.Name
+ProfileUser.Font = Enum.Font.Gotham
+ProfileUser.TextSize = 11
+ProfileUser.TextColor3 = T.dim
+ProfileUser.TextXAlignment = Enum.TextXAlignment.Left
+ProfileUser.ZIndex = 11
+ProfileUser.Parent = ProfileFrame
+
+local ProfileId = Instance.new("TextLabel")
+ProfileId.Size = UDim2.new(1, -100, 0, 18)
+ProfileId.Position = UDim2.new(0, 96, 0, 62)
+ProfileId.BackgroundTransparency = 1
+ProfileId.Text = "ID: " .. tostring(lp.UserId)
+ProfileId.Font = Enum.Font.Code
+ProfileId.TextSize = 11
+ProfileId.TextColor3 = T.dim
+ProfileId.TextXAlignment = Enum.TextXAlignment.Left
+ProfileId.ZIndex = 11
+ProfileId.Parent = ProfileFrame
+
+-- KEYBINDS CARD sa Welcome
+local keyCard = card(PWelcome, "Keybinds")
+line(keyCard, "RightShift  ·  Toggle UI", T.text)
+line(keyCard, "RightCtrl   ·  Toggle UI", T.text)
+line(keyCard, "K           ·  Toggle UI", T.text)
+line(keyCard, "X (header)  ·  Close UI (orb appears)", T.text)
+line(keyCard, "Tap orb     ·  Reopen UI", T.text)
+
 local SocialCard = card(PWelcome, "Connect")
 btn(SocialCard, "Copy YouTube (@kyielpambid)", function()
     if setclipboard then setclipboard("https://www.youtube.com/@kyielpambid") end
 end, Color3.fromRGB(180,40,40))
-btn(SocialCard, "Copy Discord", function()
+btn(SocialCard, "Copy Discord (New)", function()
     if setclipboard then setclipboard(DISCORD) end
 end, Color3.fromRGB(60,80,180))
 
--- MAIN
-local mainCard = card(PMain, "Automation")
-local _, liftRef = toggle(mainCard, "Auto Lift", function() return F.liftOn end, function(v)
-    F.liftOn = v
-    if v then F.equipped = {}; print("[KHUB] Auto Lift: ON — top screen click") else print("[KHUB] Auto Lift: OFF") end
-    if refreshMapSel then refreshMapSel() end
-end)
+-- ========== DASHBOARD PAGE (Instructions in English) ==========
+local dashCard1 = card(PDashboard, "How to Use KHUB")
+line(dashCard1, "Welcome to KHUB — Lift a Cube. This hub automates all main features of the game.", T.text)
+line(dashCard1, "All features are OFF by default. Toggle them ON individually in the Main tab.", T.dim)
+line(dashCard1, "The UI can be moved by dragging the header. Close with X — reopen with the orb.", T.dim)
 
-btn(mainCard, "STOP Auto Lift", function()
-    F.liftOn = false
-    print("[KHUB] Auto Lift: OFF")
-    if refreshMapSel then refreshMapSel() end
-    if liftRef then liftRef() end
-end, T.red)
+local dashCard2 = card(PDashboard, "Keybinds")
+line(dashCard2, "RightShift  →  Toggle UI on/off", T.text)
+line(dashCard2, "RightCtrl   →  Toggle UI on/off", T.text)
+line(dashCard2, "K           →  Toggle UI on/off", T.text)
+line(dashCard2, "X (header)  →  Close UI (floating orb appears)", T.text)
+line(dashCard2, "Tap orb     →  Reopen UI", T.text)
 
-toggle(mainCard, "Auto Train (one click only)", function() return F.autoTrain end, function(v)
-    F.autoTrain = v
-    if v then
-        F.trainClicked = false
-        print("[KHUB] Auto Train: ON")
+local dashCard3 = card(PDashboard, "Feature Instructions")
+line(dashCard3, "Auto Strength (Pushups):", T.gold)
+line(dashCard3, "Equips the Train tool and fires CompletePushup automatically.", T.dim)
+line(dashCard3, "Auto Cube Farm (Instant Cash):", T.gold)
+line(dashCard3, "Teleports to your target cube, lifts it, and finishes instantly.", T.dim)
+line(dashCard3, "Auto Buy Best Arms:", T.gold)
+line(dashCard3, "Automatically buys the highest affordable Arms tier.", T.dim)
+line(dashCard3, "Auto Speed Upgrades:", T.gold)
+line(dashCard3, "Buys every affordable Speed upgrade tier.", T.dim)
+line(dashCard3, "Auto Claim Multiplier Pops:", T.gold)
+line(dashCard3, "Claims any active multiplier pop automatically.", T.dim)
+line(dashCard3, "Auto Roll & Buy Materials:", T.gold)
+line(dashCard3, "Rolls chests and buys the highest-tier missing material.", T.dim)
+line(dashCard3, "Auto Claim Group Reward:", T.gold)
+line(dashCard3, "Claims the group reward once it becomes available.", T.dim)
+line(dashCard3, "Noclip:", T.gold)
+line(dashCard3, "Walk through gates and barriers.", T.dim)
+line(dashCard3, "Anti-AFK:", T.gold)
+line(dashCard3, "Prevents the game from kicking you for idling.", T.dim)
+
+local dashCard4 = card(PDashboard, "Select Cube 1-15")
+line(dashCard4, "Go to Main tab → Select Cube 1-15 section.", T.text)
+line(dashCard4, "Choose AUTO HIGHEST for automatic best cube detection.", T.dim)
+line(dashCard4, "Or tap any of the 15 named cubes to lock your target.", T.dim)
+line(dashCard4, "Use TP To Selected Cube to teleport instantly.", T.dim)
+
+local dashCard5 = card(PDashboard, "Speed Mode")
+line(dashCard5, "Tap the Mode button to cycle: HYPER → TURBO → FAST → NORMAL.", T.text)
+line(dashCard5, "HYPER: TrainDelay = 0.105s, CubeDelay = 0.05s (fastest, 100% server rate)", T.dim)
+line(dashCard5, "TURBO: TrainDelay = 0.15s, CubeDelay = 0.1s", T.dim)
+line(dashCard5, "FAST: TrainDelay = 0.22s, CubeDelay = 0.25s", T.dim)
+line(dashCard5, "NORMAL: TrainDelay = 0.34s, CubeDelay = 0.5s (safest)", T.dim)
+
+-- ========== MAIN PAGE (all features) ==========
+local mainCard = card(PMain, "Automation Features")
+toggle(mainCard, "Auto Strength (Pushups)", function() return F.AutoTrain_New end, function(v)
+    F.AutoTrain_New = v
+    print("[KHUB] Auto Strength: " .. (v and "ON" or "OFF"))
+    if not v then
+        pcall(function()
+            local ctrl = getControllers()
+            if ctrl and ctrl.Training then ctrl.Training:SetLocked(false) end
+            local char = lp.Character
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if humanoid then humanoid:UnequipTools() end
+        end)
     else
-        F.trainClicked = false
-        print("[KHUB] Auto Train: OFF")
+        pcall(function() ensureTrainToolEquipped() end)
     end
 end)
 
-toggle(mainCard, "Auto Equip Once", function() return F.autoEquip end, function(v)
-    F.autoEquip = v
-    F.equipped = {}
+toggle(mainCard, "Auto Cube Farm (Instant Cash)", function() return F.AutoCubes end, function(v)
+    F.AutoCubes = v
+    print("[KHUB] Auto Cubes: " .. (v and "ON" or "OFF"))
 end)
 
-input(mainCard, "Prompt Burst (1-30)", "15", function(v)
-    local n = tonumber(v)
-    if n and n>=1 and n<=30 then F.burst = math.floor(n) end
-end)
+toggle(mainCard, "Auto Buy Best Arms", function() return F.AutoArms end, function(v) F.AutoArms = v end)
+toggle(mainCard, "Auto Speed Upgrades", function() return F.AutoSpeed end, function(v) F.AutoSpeed = v end)
+toggle(mainCard, "Auto Claim Multiplier Pops", function() return F.AutoPops end, function(v) F.AutoPops = v end)
+toggle(mainCard, "Auto Roll & Buy Materials", function() return F.AutoRoll_New end, function(v) F.AutoRoll_New = v end)
+toggle(mainCard, "Auto Claim Group Reward", function() return F.AutoGroupReward end, function(v) F.AutoGroupReward = v end)
+toggle(mainCard, "Noclip (Walk Through Gates)", function() return F.Noclip end, function(v) F.Noclip = v end)
+toggle(mainCard, "Anti-AFK Protection", function() return F.AntiAFK end, function(v) F.AntiAFK = v end)
 
-input(mainCard, "Top Screen Click Rate (seconds)", "0.01", function(v)
-    local n = tonumber(v)
-    if n and n>=0.005 and n<=1 then F.tapRate = n end
-end)
-
-btn(mainCard, "Load (Show Joystick + Jump)", function()
-    createDupeControls()
+local speedCard = card(PMain, "Speed Mode")
+local speedBtn = btn(speedCard, "Mode: HYPER", function()
+    if F.SpeedMode == "HYPER" then F.SpeedMode = "TURBO"
+    elseif F.SpeedMode == "TURBO" then F.SpeedMode = "FAST"
+    elseif F.SpeedMode == "FAST" then F.SpeedMode = "NORMAL"
+    else F.SpeedMode = "HYPER" end
+    if F.SpeedMode == "HYPER" then F.TrainDelay = 0.105; F.CubeDelay = 0.05
+    elseif F.SpeedMode == "TURBO" then F.TrainDelay = 0.15; F.CubeDelay = 0.1
+    elseif F.SpeedMode == "FAST" then F.TrainDelay = 0.22; F.CubeDelay = 0.25
+    else F.TrainDelay = 0.34; F.CubeDelay = 0.5 end
+    speedBtn.Text = "Mode: " .. F.SpeedMode
+    print("[KHUB] Speed Mode: " .. F.SpeedMode)
 end, T.violet)
 
-btn(mainCard, "Unload (Remove Joystick + Jump)", function()
-    removeDupeControls()
-end, T.red)
+local cubeSelectCard = card(PMain, "Select Cube 1-15")
+local cubeBtns = {}
+local autoBtn
+local selectedLabel = line(cubeSelectCard, "Selected: Auto Highest", T.gold)
 
-local MapCard = card(PMain, "Select Map to Start Auto Lift")
-local mapBtns = {}
-local allMapsBtn
-
-function refreshMapSel()
-    if allMapsBtn then
-        if F.liftAll and F.liftOn then
-            allMapsBtn.BackgroundColor3 = T.green
-            allMapsBtn.Text = "ALL MAPS RUNNING (tap to stop)"
+local function refreshCubeSelect()
+    if autoBtn then
+        if F.SelectedCube == 0 then
+            autoBtn.BackgroundColor3 = T.green
+            autoBtn.Text = "AUTO HIGHEST (active)"
         else
-            allMapsBtn.BackgroundColor3 = Color3.fromRGB(40,28,60)
-            allMapsBtn.Text = "ALL MAPS 1-15"
+            autoBtn.BackgroundColor3 = Color3.fromRGB(40,28,60)
+            autoBtn.Text = "AUTO HIGHEST (tap to select)"
         end
     end
-    for i,b in ipairs(mapBtns) do
-        local m = MAPS[i]
-        local missing = (#m.lift==0)
-        local sel = (not F.liftAll) and (F.mapIndex==i)
-        local running = sel and F.liftOn
-        if running then b.BackgroundColor3 = T.green
-        elseif sel then b.BackgroundColor3 = T.violet
-        elseif missing then b.BackgroundColor3 = Color3.fromRGB(70,40,45)
-        else b.BackgroundColor3 = Color3.fromRGB(40,28,60) end
-        local mark = ""
-        if running then mark = "  RUNNING"
-        elseif sel then mark = "  SELECTED"
-        elseif missing then mark = "  [no cf]" end
-        b.Text = tostring(i).." · "..m.cube..mark
+    for i, b in ipairs(cubeBtns) do
+        if F.SelectedCube == i then
+            b.BackgroundColor3 = T.violet
+            b.Text = tostring(i) .. " · " .. CUBE_NAMES[i] .. "  ✓"
+        else
+            b.BackgroundColor3 = Color3.fromRGB(40,28,60)
+            b.Text = tostring(i) .. " · " .. CUBE_NAMES[i]
+        end
+    end
+    if F.SelectedCube == 0 then
+        selectedLabel.Text = "Selected: Auto Highest (#" .. getBestLiftableCube() .. ")"
+    else
+        selectedLabel.Text = "Selected: #" .. F.SelectedCube .. " " .. CUBE_NAMES[F.SelectedCube]
     end
 end
 
-allMapsBtn = btn(MapCard, "ALL MAPS 1-15", function()
-    if F.liftAll and F.liftOn then F.liftOn = false; print("[KHUB] Stopped")
-    else F.liftAll = true; F.liftOn = true; F.equipped = {}; print("[KHUB] All maps ON") end
-    refreshMapSel()
-    if liftRef then liftRef() end
+autoBtn = btn(cubeSelectCard, "AUTO HIGHEST", function()
+    F.SelectedCube = 0
+    refreshCubeSelect()
 end)
 
-for i,m in ipairs(MAPS) do
-    local b = btn(MapCard, "", function()
-        if #m.lift==0 then print("[KHUB] "..m.cube.." no cf yet") return end
-        if (not F.liftAll) and F.mapIndex==i and F.liftOn then
-            F.liftOn = false; print("[KHUB] Stopped")
-        else
-            F.liftAll = false; F.mapIndex = i; F.equipped = {}; F.liftOn = true
-            print("[KHUB] ON: "..m.cube)
-        end
-        refreshMapSel()
-        if liftRef then liftRef() end
+for i = 1, 15 do
+    local b = btn(cubeSelectCard, tostring(i) .. " · " .. CUBE_NAMES[i], function()
+        F.SelectedCube = i
+        refreshCubeSelect()
     end)
-    table.insert(mapBtns, b)
+    table.insert(cubeBtns, b)
 end
-refreshMapSel()
+refreshCubeSelect()
 
--- STATS
+btn(cubeSelectCard, "TP To Selected Cube", function()
+    local idx = getTargetCubeIndex()
+    local cubesFolder = WS:FindFirstChild("World")
+    cubesFolder = cubesFolder and cubesFolder:FindFirstChild("Shared")
+    cubesFolder = cubesFolder and cubesFolder:FindFirstChild("Cubes")
+    local cubePart = cubesFolder and cubesFolder:FindFirstChild(tostring(idx))
+    local h = hrp()
+    if h and cubePart then
+        h.CFrame = cubePart.CFrame + Vector3.new(0,3,2.5)
+        print("[KHUB] Teleported to Cube #" .. idx)
+    end
+end, T.violet)
+
+-- STATS PAGE
 local statsCard = card(PStats, "Session Stats")
+local statStrength = line(statsCard, "Strength: 0", T.gold)
+local statCash = line(statsCard, "Cash: 0", T.gold)
+local statArms = line(statsCard, "Arms Tier: 0", T.gold)
+local statMat = line(statsCard, "Material: None", T.gold)
 local statLifts = line(statsCard, "Lifts: 0", T.gold)
-local statTrains = line(statsCard, "Trains: 0", T.gold)
-local statEarned = line(statsCard, "Cash Earned: $0", T.gold)
+local statPush = line(statsCard, "Pushups: 0", T.gold)
+local statPops = line(statsCard, "Pops Claimed: 0", T.gold)
 local statTime = line(statsCard, "Session Time: 0m 0s", T.gold)
 
 task.spawn(function()
     while true do
         task.wait(0.5)
-        statLifts.Text = "Lifts: " .. S.lifts
-        statTrains.Text = "Trains: " .. S.trains
-        statEarned.Text = "Cash Earned: $" .. S.earned
-        local mins = math.floor((os.clock()-S.start)/60)
-        local secs = math.floor((os.clock()-S.start)%60)
-        statTime.Text = string.format("Session Time: %dm %ds", mins, secs)
+        pcall(function()
+            statStrength.Text = "Strength: " .. formatNumber(getStrength())
+            statCash.Text = "Cash: $" .. formatNumber(getCash())
+            statArms.Text = "Arms Tier: " .. tostring(getEquippedArms())
+            statMat.Text = "Material: " .. tostring(getEquippedMaterial())
+            statLifts.Text = "Lifts: " .. S.lifts
+            statPush.Text = "Pushups: " .. S.pushups
+            statPops.Text = "Pops Claimed: " .. S.pops
+            local mins = math.floor((os.clock()-S.start)/60)
+            local secs = math.floor((os.clock()-S.start)%60)
+            statTime.Text = string.format("Session Time: %dm %ds", mins, secs)
+            refreshCubeSelect()
+        end)
     end
 end)
 
--- SETTINGS
-local setCard = card(PSettings, "Auto Roll")
-toggle(setCard, "Auto Roll", function() return F.rollOn end, function(v)
-    F.rollOn = v
-    print("[KHUB] Auto Roll: " .. (v and "ON" or "OFF"))
-end)
-
-toggle(setCard, "Auto Buy Good Rolls", function() return F.autoBuy end, function(v) F.autoBuy = v end)
-
-input(setCard, "Seconds Per Roll", "0.6", function(v)
+-- SETTINGS PAGE
+local setCard = card(PSettings, "Delays")
+input(setCard, "Train Delay (seconds)", "0.105", function(v)
     local n = tonumber(v)
-    if n and n>=0.2 and n<=10 then F.rollTime = n end
+    if n and n>=0.05 and n<=2 then F.TrainDelay = n end
+end)
+input(setCard, "Cube Delay (seconds)", "0.05", function(v)
+    local n = tonumber(v)
+    if n and n>=0.02 and n<=2 then F.CubeDelay = n end
 end)
 
-input(setCard, "Good Keywords", F.goodWords, function(v)
-    if v and v~="" then F.goodWords = v; rebuildGood() end
+-- CREDITS PAGE
+local credCard = card(PCredits, "KHUB")
+line(credCard, "KHUB · Lift a Cube · v6.3", T.gold)
+line(credCard, "Built by Kyiel & Arin", T.dim)
+line(credCard, "Discord: " .. DISCORD, T.text)
+btn(credCard, "Copy Discord (New)", function()
+    if setclipboard then setclipboard(DISCORD) end
 end)
 
--- SAVE
+-- ========== SAVE CONFIG PAGE (LAST tab always) ==========
 local CONFIG_FOLDER = "KHUB_Configs"
 local selectedConfig = nil
 local configList = {}
@@ -1274,21 +1070,23 @@ local NameBox = input(SaveCard, "Config Name", "", function(v) end)
 local SaveStatus = line(SaveCard, "Status: Ready", T.dim)
 
 btn(SaveCard, "Create / Save Config", function()
-    local name = NameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+    local name = NameBox.Text:gsub("^%s+",""):gsub("%s+$","")
     if name == "" then SaveStatus.Text = "Status: Type a name first"; SaveStatus.TextColor3 = T.red; return end
     ensureFolder()
     local ok, err = pcall(function()
-        if not writefile then error("writefile not supported") end
+        if not writefile then error("no writefile") end
         writefile(CONFIG_FOLDER .. "/" .. name .. ".json",
             HS:JSONEncode({
                 SavedAt = os.date("%Y-%m-%d %H:%M"),
-                User = lp.Name, Version = "5.3",
+                User = lp.Name, Version = "6.3",
                 Settings = {
-                    mapIndex=F.mapIndex, rollIndex=F.rollIndex,
-                    autoEquip=F.autoEquip, autoTrain=F.autoTrain,
-                    remote=F.remote, burst=F.burst,
-                    autoBuy=F.autoBuy, padTime=F.padTime, rollTime=F.rollTime,
-                    goodWords=F.goodWords, tapRate=F.tapRate,
+                    SelectedCube=F.SelectedCube, SpeedMode=F.SpeedMode,
+                    AutoTrain_New=F.AutoTrain_New, AutoCubes=F.AutoCubes,
+                    AutoArms=F.AutoArms, AutoSpeed=F.AutoSpeed,
+                    AutoPops=F.AutoPops, AutoRoll_New=F.AutoRoll_New,
+                    AutoGroupReward=F.AutoGroupReward,
+                    Noclip=F.Noclip, AntiAFK=F.AntiAFK,
+                    TrainDelay=F.TrainDelay, CubeDelay=F.CubeDelay,
                 },
             }))
     end)
@@ -1373,20 +1171,20 @@ btn(SaveCard, "Load Config", function()
     end)
     if ok and type(data) == "table" and type(data.Settings) == "table" then
         local s = data.Settings
-        if tonumber(s.mapIndex) then F.mapIndex = math.clamp(math.floor(s.mapIndex), 1, #MAPS) end
-        if tonumber(s.rollIndex) then F.rollIndex = math.clamp(math.floor(s.rollIndex), 1, #ROLLS) end
-        if type(s.autoEquip) == "boolean" then F.autoEquip = s.autoEquip end
-        if type(s.autoTrain) == "boolean" then F.autoTrain = s.autoTrain end
-        if type(s.remote) == "boolean" then F.remote = s.remote end
-        if tonumber(s.burst) then F.burst = math.clamp(math.floor(s.burst), 1, 30) end
-        if type(s.autoBuy) == "boolean" then F.autoBuy = s.autoBuy end
-        if tonumber(s.padTime) then F.padTime = math.clamp(s.padTime, 0.1, 10) end
-        if tonumber(s.rollTime) then F.rollTime = math.clamp(s.rollTime, 0.2, 10) end
-        if type(s.goodWords) == "string" and s.goodWords ~= "" then F.goodWords = s.goodWords end
-        if tonumber(s.tapRate) then F.tapRate = math.clamp(s.tapRate, 0.005, 1) end
-        rebuildGood()
-        F.equipped = {}
-        refreshMapSel()
+        if tonumber(s.SelectedCube) then F.SelectedCube = math.clamp(math.floor(s.SelectedCube), 0, 15) end
+        if type(s.SpeedMode) == "string" then F.SpeedMode = s.SpeedMode end
+        if type(s.AutoTrain_New) == "boolean" then F.AutoTrain_New = s.AutoTrain_New end
+        if type(s.AutoCubes) == "boolean" then F.AutoCubes = s.AutoCubes end
+        if type(s.AutoArms) == "boolean" then F.AutoArms = s.AutoArms end
+        if type(s.AutoSpeed) == "boolean" then F.AutoSpeed = s.AutoSpeed end
+        if type(s.AutoPops) == "boolean" then F.AutoPops = s.AutoPops end
+        if type(s.AutoRoll_New) == "boolean" then F.AutoRoll_New = s.AutoRoll_New end
+        if type(s.AutoGroupReward) == "boolean" then F.AutoGroupReward = s.AutoGroupReward end
+        if type(s.Noclip) == "boolean" then F.Noclip = s.Noclip end
+        if type(s.AntiAFK) == "boolean" then F.AntiAFK = s.AntiAFK end
+        if tonumber(s.TrainDelay) then F.TrainDelay = s.TrainDelay end
+        if tonumber(s.CubeDelay) then F.CubeDelay = s.CubeDelay end
+        refreshCubeSelect()
         SaveStatus.Text = "Status: Loaded \"" .. name .. "\""
         SaveStatus.TextColor3 = T.green
     else
@@ -1405,21 +1203,7 @@ btn(SaveCard, "Delete Selected", function()
     end
 end, T.red)
 
-btn(SaveCard, "Refresh List", function()
-    refreshConfigList()
-    SaveStatus.Text = "Status: Refreshed"
-    SaveStatus.TextColor3 = T.dim
-end)
-
 task.defer(refreshConfigList)
-
--- CREDITS
-local credCard = card(PCredits, "KHUB")
-line(credCard, "KHUB · Lift a Cube · v5.3", T.gold)
-line(credCard, "Built by Kyiel & Arin", T.dim)
-btn(credCard, "Copy Discord", function()
-    if setclipboard then setclipboard(DISCORD) end
-end)
 
 -- ORB
 local Orb = Instance.new("ImageButton")
@@ -1458,118 +1242,6 @@ end
 CloseBtn.MouseButton1Click:Connect(function() setVis(false) end)
 Orb.MouseButton1Click:Connect(function() setVis(true) end)
 
--- AUTO TRAIN (one click only — galing sa code mo)
-task.spawn(function()
-    while true do
-        if F.autoTrain and not F.trainClicked then
-            clickTrainOnce()
-            F.trainClicked = true
-            S.trains = S.trains + 1
-            print("[KHUB] Train clicked once.")
-        end
-        if not F.autoTrain then
-            F.trainClicked = false
-        end
-        task.wait(0.5)
-    end
-end)
-
--- AUTO LIFT: screen click — pinakataas ng screen
-task.spawn(function()
-    while true do
-        if F.liftOn then
-            doTopScreenClick()
-            task.wait(F.tapRate)
-        else
-            task.wait(0.1)
-        end
-    end
-end)
-
--- AUTO LIFT (prompts)
-task.spawn(function()
-    while true do
-        if F.liftOn then
-            if not waitHRP(10) then task.wait(1)
-            elseif F.liftAll then
-                for idx=1,#MAPS do
-                    if not F.liftOn then break end
-                    local m = MAPS[idx]
-                    if #m.lift>0 then
-                        F.mapIndex = idx
-                        refreshMapSel()
-                        if F.autoEquip and m.equip then
-                            tp(m.equip[1], m.equip[2], m.equip[3])
-                            task.wait(0.2)
-                            refreshCache(true)
-                            for _=1,12 do
-                                if iWord("equip", 18)>0 then break end
-                                iWord("equip", 30)
-                                task.wait(0.1)
-                            end
-                        end
-                        for _,pos in ipairs(m.lift) do
-                            if not F.liftOn then break end
-                            spamPad(pos, F.padTime)
-                        end
-                    end
-                end
-            else
-                local m = MAPS[F.mapIndex]
-                if not m or #m.lift==0 then
-                    task.wait(1)
-                else
-                    if F.autoEquip and m.equip and not F.equipped[F.mapIndex] then
-                        tp(m.equip[1], m.equip[2], m.equip[3])
-                        task.wait(0.2)
-                        refreshCache(true)
-                        for _=1,12 do
-                            if iWord("equip", 18)>0 then break end
-                            iWord("equip", 30)
-                            task.wait(0.1)
-                        end
-                        F.equipped[F.mapIndex] = true
-                    end
-                    for _,pos in ipairs(m.lift) do
-                        if not F.liftOn then break end
-                        spamPad(pos, F.padTime)
-                    end
-                end
-            end
-        else
-            task.wait(0.25)
-        end
-    end
-end)
-
--- AUTO ROLL
-task.spawn(function()
-    while true do
-        if F.rollOn then
-            if waitHRP(10) then
-                if F.rollAll then
-                    for idx=1,#ROLLS do
-                        if not F.rollOn then break end
-                        F.rollIndex = idx
-                        rollOnce(idx)
-                    end
-                else
-                    rollOnce(F.rollIndex)
-                end
-            end
-        else
-            task.wait(0.25)
-        end
-    end
-end)
-
-lp.Idled:Connect(function()
-    pcall(function()
-        VU:CaptureController()
-        VU:ClickButton2(Vector2.new())
-    end)
-end)
-
 UIS.InputBegan:Connect(function(i, gp)
     if gp then return end
     if i.KeyCode==Enum.KeyCode.RightShift or i.KeyCode==Enum.KeyCode.RightControl or i.KeyCode==Enum.KeyCode.K then
@@ -1577,11 +1249,261 @@ UIS.InputBegan:Connect(function(i, gp)
     end
 end)
 
+-- ============================================================
+-- LOOPS (from your code)
+-- ============================================================
+
+task.spawn(function()
+    while true do
+        if F.AutoTrain_New then
+            pcall(function()
+                local equipped = ensureTrainToolEquipped()
+                if equipped and Bridges.Training then
+                    Bridges.Training:Fire({Function = "CompletePushup", Args = {1}})
+                    S.pushups = S.pushups + 1
+                end
+            end)
+        end
+        task.wait(F.TrainDelay)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if F.AutoCubes then
+            pcall(function()
+                local ctrl = getControllers()
+                if not ctrl or not ctrl.Cubes then return end
+                local cubesFolder = WS:FindFirstChild("World")
+                cubesFolder = cubesFolder and cubesFolder:FindFirstChild("Shared")
+                cubesFolder = cubesFolder and cubesFolder:FindFirstChild("Cubes")
+                if not cubesFolder then return end
+                local char = lp.Character
+                local h = char and char:FindFirstChild("HumanoidRootPart")
+                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                if not h or not humanoid or humanoid.Health <= 0 then return end
+                local targetIndex = getTargetCubeIndex()
+                local cubePart = cubesFolder:FindFirstChild(tostring(targetIndex))
+                if not cubePart then return end
+                local currentStr = getStrength()
+                local scale = CubeRollModule.Scale(cubesFolder, targetIndex)
+                local mass = CubeRollModule.Mass(targetIndex, scale)
+                if not LiftingModule.Possible(currentStr, mass) then task.wait(1.5); return end
+                local cashBefore = getCash()
+                if (h.Position - cubePart.Position).Magnitude > 8 then
+                    h.CFrame = cubePart.CFrame + Vector3.new(0,3,2.5)
+                    task.wait(0.08)
+                end
+                humanoid:UnequipTools()
+                ctrl.Cubes:Start(targetIndex, cubePart)
+                local minTime = LiftingModule.MinimumTime(currentStr, mass)
+                local waitDuration = (minTime <= 0) and 0.02 or (minTime + 0.04)
+                task.wait(waitDuration)
+                if ctrl.Cubes.active then
+                    ctrl.Cubes.active.Progress = 1
+                    ctrl.Cubes:_Finish(true)
+                end
+                task.wait(0.03)
+                if getCash() > cashBefore then S.lifts = S.lifts + 1 end
+            end)
+        end
+        task.wait(F.CubeDelay)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if F.AutoArms then
+            pcall(function()
+                local armsFolder = WS:FindFirstChild("World")
+                armsFolder = armsFolder and armsFolder:FindFirstChild("Shared")
+                armsFolder = armsFolder and armsFolder:FindFirstChild("Arms")
+                if not armsFolder then return end
+                local currentArms = getEquippedArms()
+                local currentCash = getCash()
+                local char = lp.Character
+                local h = char and char:FindFirstChild("HumanoidRootPart")
+                if not h then return end
+                for tier = #Schematics.Arms, (currentArms + 1), -1 do
+                    local data = Schematics.Arms[tier]
+                    if data and currentCash >= data.Price then
+                        local pad = armsFolder:FindFirstChild(tostring(tier))
+                        if pad and pad:FindFirstChild("Main") then
+                            local old = h.CFrame
+                            h.CFrame = CFrame.new(pad.Main.Position + Vector3.new(0,3,0))
+                            task.wait(0.35)
+                            h.CFrame = old
+                            break
+                        end
+                    end
+                end
+            end)
+        end
+        task.wait(3.0)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if F.AutoSpeed then
+            pcall(function()
+                local speedFolder = WS:FindFirstChild("World")
+                speedFolder = speedFolder and speedFolder:FindFirstChild("Shared")
+                speedFolder = speedFolder and speedFolder:FindFirstChild("SpeedUpgrades")
+                if not speedFolder then return end
+                local currentCash = getCash()
+                local char = lp.Character
+                local h = char and char:FindFirstChild("HumanoidRootPart")
+                if not h then return end
+                for tier = 1, #Schematics.SpeedUpgrades do
+                    local data = Schematics.SpeedUpgrades[tier]
+                    if data and currentCash >= data.Price then
+                        local pad = speedFolder:FindFirstChild(tostring(tier))
+                        if pad and pad:FindFirstChild("Main") then
+                            local old = h.CFrame
+                            h.CFrame = CFrame.new(pad.Main.Position + Vector3.new(0,3,0))
+                            task.wait(0.3)
+                            h.CFrame = old
+                        end
+                    end
+                end
+            end)
+        end
+        task.wait(4.0)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if F.AutoPops then
+            pcall(function()
+                local ctrl = getControllers()
+                if ctrl and ctrl.Pops and ctrl.Pops.live then
+                    for popId, _ in pairs(ctrl.Pops.live) do
+                        if type(popId) == "number" then
+                            ctrl.Pops:_Claim(popId)
+                            S.pops = S.pops + 1
+                            task.wait(0.05)
+                        end
+                    end
+                end
+            end)
+        end
+        task.wait(0.2)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if F.AutoRoll_New then
+            pcall(function()
+                local ctrl = getControllers()
+                if not ctrl or not ctrl.Roll then return end
+                local currentCash = getCash()
+                local owned = ctrl.Roll.owned or {}
+                local targetMat = nil
+                for i = #MaterialTierOrder, 1, -1 do
+                    local name = MaterialTierOrder[i]
+                    local matData = Schematics.Materials[name]
+                    if matData and not owned[name] and currentCash >= matData.Price then
+                        targetMat = name
+                        break
+                    end
+                end
+                if targetMat then
+                    ctrl.Roll:ForceNext(targetMat)
+                    local chests = ctrl.Roll.chests
+                    if chests then
+                        for _, chestData in pairs(chests) do
+                            if chestData.ready and chestData.point then
+                                local char = lp.Character
+                                local h = char and char:FindFirstChild("HumanoidRootPart")
+                                if h then
+                                    local old = h.CFrame
+                                    h.CFrame = chestData.point.CFrame + Vector3.new(0,3,2)
+                                    task.wait(0.25)
+                                    ctrl.Roll:Play(chestData)
+                                    task.wait(0.7)
+                                    ctrl.Roll:Buy()
+                                    task.wait(0.4)
+                                    h.CFrame = old
+                                    break
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        task.wait(5.0)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if F.AutoGroupReward then
+            pcall(function()
+                local ctrl = getControllers()
+                if ctrl and ctrl.GroupReward and not ctrl.GroupReward:IsClaimed() then
+                    if Bridges.GroupReward then
+                        Bridges.GroupReward:Fire({Function = "RequestClaim", Args = {}})
+                    end
+                end
+            end)
+        end
+        task.wait(20)
+    end
+end)
+
+RS.Stepped:Connect(function()
+    if F.Noclip then
+        pcall(function()
+            local char = lp.Character
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") and part.CanCollide then
+                        part.CanCollide = false
+                    end
+                end
+            end
+            local world = WS:FindFirstChild("World")
+            local client = world and world:FindFirstChild("Client")
+            local barriers = client and (client:FindFirstChild("Barries") or client:FindFirstChild("Barriers"))
+            if barriers then
+                for _, barrier in ipairs(barriers:GetChildren()) do
+                    for _, p in ipairs(barrier:GetDescendants()) do
+                        if p:IsA("BasePart") and p.CanCollide then
+                            p.CanCollide = false
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+pcall(function()
+    lp.Idled:Connect(function()
+        if F.AntiAFK then
+            VU:CaptureController()
+            VU:ClickButton2(Vector2.new())
+            if Bridges.AFK then Bridges.AFK:Fire({Function = "Ping", Args = {}}) end
+        end
+    end)
+end)
+
+_G.LiftACubeCleanup = function()
+    pcall(function()
+        local ctrl = getControllers()
+        if ctrl and ctrl.Training then ctrl.Training:SetLocked(false) end
+    end)
+    if SG then SG:Destroy() end
+end
+
 switchPage("Welcome", "Welcome")
 
-print("[KHUB] v5.3 LOADED")
-print("[KHUB] Welcome + Save Config restored")
-print("[KHUB] Load: tunay na joystick + arrow jump (1x jump)")
-print("[KHUB] Auto Train: one click only")
-print("[KHUB] Auto Lift: top screen click")
+print("[KHUB] v6.3 LOADED")
+print("[KHUB] Welcome Profile ✓ | Dashboard (English instructions) ✓")
+print("[KHUB] Keybinds listed in Welcome + Dashboard ✓")
+print("[KHUB] Save Config is the LAST tab ✓")
 print("[KHUB] Toggle: RightShift / K / RightCtrl  |  Close: X")
