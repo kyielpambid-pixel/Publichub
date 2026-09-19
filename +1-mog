@@ -1,0 +1,2066 @@
+repeat task.wait() until game:IsLoaded()
+
+--=====================================================================
+-- SERVICES
+--=====================================================================
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
+local CoreGui           = game:GetService("CoreGui")
+local Workspace         = game:GetService("Workspace")
+local HttpService       = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser       = game:GetService("VirtualUser")
+local player            = Players.LocalPlayer
+
+local LOGO_ID  = "rbxassetid://140466936910510"
+local DISCORD  = "https://discord.gg/EKPb7BRDH8"
+local YOUTUBE  = "https://www.youtube.com/@kyielpambid"
+local DISCORD_TXT = "discord.gg/EKPb7BRDH8"
+local YOUTUBE_TXT = "youtube.com/@kyielpambid"
+
+print("[KHUB] KHUB edition v5.1 starting...")
+
+--=====================================================================
+-- GAME REMOTES (discovered once, cached, retried until found)
+--=====================================================================
+local ClickRemote   = nil
+local RebirthRemote = nil
+local hasFireTouch  = type(firetouchinterest) == "function"
+
+task.spawn(function()
+    while not ClickRemote do
+        pcall(function()
+            local folder = ReplicatedStorage:WaitForChild("PowerRemotes", 5)
+            if folder then ClickRemote = folder:WaitForChild("ClickPower", 5) end
+        end)
+        if not ClickRemote then task.wait(2) end
+    end
+    print("[KHUB] ClickPower remote found")
+end)
+task.spawn(function()
+    while not RebirthRemote do
+        pcall(function()
+            local folder = ReplicatedStorage:WaitForChild("RebirthRemotes", 5)
+            if folder then RebirthRemote = folder:WaitForChild("DoRebirth", 5) end
+        end)
+        if not RebirthRemote then task.wait(2) end
+    end
+    print("[KHUB] DoRebirth remote found")
+end)
+
+--=====================================================================
+-- FARM STATE + SESSION
+--=====================================================================
+local Farm = {
+    autoClick   = false,
+    clickMode   = "normal",   -- "normal" or "instant"
+    clickBurst  = 8,
+    autoRebirth = false,
+    autoWin     = false,
+}
+local Session = { clicks = 0, rebirths = 0, wins = 0, startedAt = os.clock() }
+local OrbState = { visible = true, locked = false }
+
+--=====================================================================
+-- THEME
+--=====================================================================
+local THEME = {
+    bg       = Color3.fromRGB(5, 7, 18),
+    panel    = Color3.fromRGB(10, 14, 32),
+    card     = Color3.fromRGB(17, 23, 48),
+    card2    = Color3.fromRGB(13, 18, 38),
+    inner    = Color3.fromRGB(10, 14, 30),
+    accent   = Color3.fromRGB(70, 225, 255),
+    accent2  = Color3.fromRGB(175, 110, 255),
+    pink     = Color3.fromRGB(255, 110, 200),
+    gold     = Color3.fromRGB(255, 216, 140),
+    text     = Color3.fromRGB(238, 242, 255),
+    dim      = Color3.fromRGB(150, 160, 205),
+    mute     = Color3.fromRGB(100, 112, 158),
+    stroke   = Color3.fromRGB(80, 120, 210),
+    green    = Color3.fromRGB(95, 235, 165),
+    red      = Color3.fromRGB(255, 100, 120),
+    off      = Color3.fromRGB(38, 44, 80),
+    offKnob  = Color3.fromRGB(150, 160, 200),
+}
+
+local function corner(p, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 10)
+    c.Parent = p
+    return c
+end
+
+local function mkstroke(p, col, th, tr)
+    local s = Instance.new("UIStroke")
+    s.Color = col or THEME.stroke
+    s.Thickness = th or 1.2
+    s.Transparency = tr or 0.35
+    s.Parent = p
+    return s
+end
+
+local function openLink(url)
+    local opened = false
+    pcall(function()
+        if type(openlink) == "function" then
+            openlink(url)
+            opened = true
+        end
+    end)
+    if not opened and setclipboard then
+        setclipboard(url)
+    end
+    return opened
+end
+
+--=====================================================================
+-- CLEANUP + SCREENGUI
+--=====================================================================
+local Parent = (gethui and gethui()) or CoreGui
+pcall(function()
+    for _, name in ipairs({"KHUB_Karinderya", "KHUB_UI", "KHUB_FloatIcon"}) do
+        local old = Parent:FindFirstChild(name)
+        if old then old:Destroy() end
+        local pg = player:FindFirstChild("PlayerGui")
+        if pg then
+            local old2 = pg:FindFirstChild(name)
+            if old2 then old2:Destroy() end
+        end
+    end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_Karinderya"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999999
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then ScreenGui.Parent = player:WaitForChild("PlayerGui") end
+
+--=====================================================================
+-- SPLASH
+--=====================================================================
+local Splash = Instance.new("Frame")
+Splash.Size = UDim2.new(1, 0, 1, 0)
+Splash.BackgroundColor3 = Color3.fromRGB(4, 5, 14)
+Splash.BorderSizePixel = 0
+Splash.ZIndex = 200
+Splash.Parent = ScreenGui
+
+local SpGlow = Instance.new("Frame")
+SpGlow.Size = UDim2.fromOffset(110, 110)
+SpGlow.Position = UDim2.new(0.5, -55, 0.5, -95)
+SpGlow.BackgroundColor3 = THEME.accent2
+SpGlow.BackgroundTransparency = 0.55
+SpGlow.BorderSizePixel = 0
+SpGlow.ZIndex = 200
+SpGlow.Parent = Splash
+corner(SpGlow, 55)
+
+local SpLogo = Instance.new("ImageLabel")
+SpLogo.Size = UDim2.fromOffset(110, 110)
+SpLogo.Position = UDim2.new(0.5, -55, 0.5, -95)
+SpLogo.BackgroundTransparency = 1
+SpLogo.Image = LOGO_ID
+SpLogo.ScaleType = Enum.ScaleType.Fit
+SpLogo.ZIndex = 201
+SpLogo.Parent = Splash
+
+local SpTitle = Instance.new("TextLabel")
+SpTitle.Size = UDim2.new(1, 0, 0, 60)
+SpTitle.Position = UDim2.new(0, 0, 0.5, 10)
+SpTitle.BackgroundTransparency = 1
+SpTitle.Text = "KHUB"
+SpTitle.Font = Enum.Font.GothamBlack
+SpTitle.TextSize = 54
+SpTitle.TextColor3 = Color3.new(1, 1, 1)
+SpTitle.ZIndex = 201
+SpTitle.Parent = Splash
+
+local SpGrad = Instance.new("UIGradient")
+SpGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, THEME.accent),
+    ColorSequenceKeypoint.new(0.40, Color3.new(1, 1, 1)),
+    ColorSequenceKeypoint.new(0.65, THEME.accent2),
+    ColorSequenceKeypoint.new(1.00, THEME.gold),
+})
+SpGrad.Offset = Vector2.new(-1.3, 0)
+SpGrad.Parent = SpTitle
+
+local SpBy = Instance.new("TextLabel")
+SpBy.Size = UDim2.new(1, 0, 0, 26)
+SpBy.Position = UDim2.new(0, 0, 0.5, 68)
+SpBy.BackgroundTransparency = 1
+SpBy.Text = "by Kyiel Pambid"
+SpBy.Font = Enum.Font.GothamBold
+SpBy.TextSize = 18
+SpBy.TextColor3 = THEME.dim
+SpBy.ZIndex = 201
+SpBy.Parent = Splash
+
+local SpEdit = Instance.new("TextLabel")
+SpEdit.Size = UDim2.new(1, 0, 0, 20)
+SpEdit.Position = UDim2.new(0, 0, 0.5, 94)
+SpEdit.BackgroundTransparency = 1
+SpEdit.Text = "KHUB edition"
+SpEdit.Font = Enum.Font.Code
+SpEdit.TextSize = 13
+SpEdit.TextColor3 = THEME.accent
+SpEdit.ZIndex = 201
+SpEdit.Parent = Splash
+
+task.spawn(function()
+    task.spawn(function()
+        while SpGlow.Parent do
+            TweenService:Create(SpGlow, TweenInfo.new(0.7, Enum.EasingStyle.Sine), { BackgroundTransparency = 0.3, Size = UDim2.fromOffset(122, 122), Position = UDim2.new(0.5, -61, 0.5, -101) }):Play()
+            task.wait(0.7)
+            TweenService:Create(SpGlow, TweenInfo.new(0.7, Enum.EasingStyle.Sine), { BackgroundTransparency = 0.6, Size = UDim2.fromOffset(110, 110), Position = UDim2.new(0.5, -55, 0.5, -95) }):Play()
+            task.wait(0.7)
+        end
+    end)
+    task.spawn(function()
+        while SpGrad.Parent do
+            SpGrad.Offset = Vector2.new(-1.3, 0)
+            TweenService:Create(SpGrad, TweenInfo.new(1.4, Enum.EasingStyle.Linear), { Offset = Vector2.new(1.3, 0) }):Play()
+            task.wait(1.5)
+        end
+    end)
+    task.wait(1.8)
+    pcall(function() TweenService:Create(Splash, TweenInfo.new(0.5, Enum.EasingStyle.Quad), { BackgroundTransparency = 1 }):Play() end)
+    pcall(function() TweenService:Create(SpLogo, TweenInfo.new(0.4), { ImageTransparency = 1 }):Play() end)
+    pcall(function() TweenService:Create(SpGlow, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play() end)
+    pcall(function() TweenService:Create(SpTitle, TweenInfo.new(0.4), { TextTransparency = 1 }):Play() end)
+    pcall(function() TweenService:Create(SpBy, TweenInfo.new(0.4), { TextTransparency = 1 }):Play() end)
+    pcall(function() TweenService:Create(SpEdit, TweenInfo.new(0.4), { TextTransparency = 1 }):Play() end)
+    task.wait(0.55)
+    pcall(function() Splash:Destroy() end)
+end)
+task.delay(4, function()
+    if Splash and Splash.Parent then pcall(function() Splash:Destroy() end) end
+end)
+
+--=====================================================================
+-- WINDOW
+--=====================================================================
+local HEADER_H = 96
+local RAIL_W   = 200
+local BASE_W   = 940
+local BASE_H   = 700
+
+local WinUIScale = Instance.new("UIScale")
+WinUIScale.Parent = ScreenGui
+
+local function updateScale()
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+    local vx = cam.ViewportSize.X
+    local vy = cam.ViewportSize.Y
+    local scale
+    if vx < 500 then scale = math.clamp(math.min(vx / 1000, vy / 760), 0.4, 0.62)
+    elseif vx < 900 then scale = math.clamp(math.min(vx / 1200, vy / 860), 0.48, 0.72)
+    else scale = math.clamp(math.min(vx / 1650, vy / 940), 0.6, 0.95) end
+    WinUIScale.Scale = scale
+end
+pcall(function()
+    Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+end)
+updateScale()
+
+local Win = Instance.new("Frame")
+Win.Name = "Window"
+Win.Size = UDim2.new(0, BASE_W, 0, BASE_H)
+Win.Position = UDim2.new(0.5, -BASE_W/2, 0.5, -BASE_H/2)
+Win.BackgroundColor3 = THEME.bg
+Win.BackgroundTransparency = 0.03
+Win.BorderSizePixel = 0
+Win.ClipsDescendants = true
+Win.Active = false
+Win.Visible = true
+Win.Parent = ScreenGui
+corner(Win, 20)
+mkstroke(Win, THEME.accent2, 2, 0.3)
+
+local winStroke = Win:FindFirstChildOfClass("UIStroke")
+local winStrokeGrad = Instance.new("UIGradient")
+winStrokeGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, THEME.accent),
+    ColorSequenceKeypoint.new(0.25, THEME.accent2),
+    ColorSequenceKeypoint.new(0.50, THEME.pink),
+    ColorSequenceKeypoint.new(0.75, THEME.gold),
+    ColorSequenceKeypoint.new(1.00, THEME.accent),
+})
+winStrokeGrad.Parent = winStroke
+
+task.delay(1.5, function()
+    Win.Size = UDim2.new(0, BASE_W * 0.82, 0, BASE_H * 0.82)
+    Win.Position = UDim2.new(0.5, -BASE_W*0.41, 0.5, -BASE_H*0.41)
+    TweenService:Create(Win, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, BASE_W, 0, BASE_H),
+        Position = UDim2.new(0.5, -BASE_W/2, 0.5, -BASE_H/2),
+    }):Play()
+end)
+
+--=====================================================================
+-- AURORA + GLASS VEIL
+--=====================================================================
+local Aurora = Instance.new("Frame")
+Aurora.Size = UDim2.new(1, 0, 1, 0)
+Aurora.BackgroundTransparency = 1
+Aurora.ClipsDescendants = true
+Aurora.ZIndex = 1
+Aurora.Parent = Win
+
+local blobColors = {
+    Color3.fromRGB(50, 40, 170),
+    Color3.fromRGB(20, 95, 175),
+    Color3.fromRGB(115, 45, 165),
+    Color3.fromRGB(30, 65, 195),
+    Color3.fromRGB(90, 30, 150),
+}
+for i = 1, 5 do
+    local blob = Instance.new("Frame")
+    blob.Size = UDim2.fromOffset(math.random(300, 460), math.random(300, 460))
+    blob.Position = UDim2.new(math.random(0, 88)/100, 0, math.random(0, 88)/100, 0)
+    blob.BackgroundColor3 = blobColors[i]
+    blob.BackgroundTransparency = 0.78
+    blob.BorderSizePixel = 0
+    blob.ZIndex = 1
+    blob.Parent = Aurora
+    corner(blob, 999)
+    task.spawn(function()
+        while blob.Parent do
+            local dur = math.random(8, 13)
+            TweenService:Create(blob, TweenInfo.new(dur, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+                Position = UDim2.new(math.random(0, 82)/100, 0, math.random(0, 82)/100, 0),
+            }):Play()
+            task.wait(dur)
+        end
+    end)
+end
+
+task.spawn(function()
+    for i = 1, 44 do
+        local s = Instance.new("Frame")
+        s.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
+        s.Position = UDim2.new(math.random(), 0, math.random(), 0)
+        s.BackgroundColor3 = Color3.new(1, 1, 1)
+        s.BackgroundTransparency = math.random(3, 7) / 10
+        s.BorderSizePixel = 0
+        s.ZIndex = 2
+        s.Parent = Aurora
+        corner(s, 99)
+        task.spawn(function()
+            while s.Parent do
+                TweenService:Create(s, TweenInfo.new(math.random(8, 18)/10, Enum.EasingStyle.Sine), {
+                    BackgroundTransparency = math.random(2, 9)/10,
+                }):Play()
+                task.wait(math.random(8, 18)/10)
+            end
+        end)
+    end
+end)
+
+local Veil = Instance.new("Frame")
+Veil.Size = UDim2.new(1, 0, 1, 0)
+Veil.BackgroundColor3 = THEME.bg
+Veil.BackgroundTransparency = 0.42
+Veil.BorderSizePixel = 0
+Veil.ZIndex = 3
+Veil.Parent = Win
+
+--=====================================================================
+-- TOP SHIMMER
+--=====================================================================
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 3)
+TopBar.BackgroundColor3 = Color3.new(1, 1, 1)
+TopBar.BorderSizePixel = 0
+TopBar.ZIndex = 25
+TopBar.Parent = Win
+local topG = Instance.new("UIGradient")
+topG.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, THEME.accent),
+    ColorSequenceKeypoint.new(0.25, THEME.accent2),
+    ColorSequenceKeypoint.new(0.50, THEME.pink),
+    ColorSequenceKeypoint.new(0.75, THEME.gold),
+    ColorSequenceKeypoint.new(1.00, THEME.accent),
+})
+topG.Parent = TopBar
+task.spawn(function()
+    local t = 0
+    while TopBar.Parent do
+        t = t + task.wait(0.03)
+        topG.Offset = Vector2.new(math.sin(t * 0.7) * 1.4, 0)
+    end
+end)
+
+--=====================================================================
+-- HEADER
+--=====================================================================
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, HEADER_H)
+Header.Position = UDim2.new(0, 0, 0, 3)
+Header.BackgroundColor3 = THEME.panel
+Header.BackgroundTransparency = 0.35
+Header.BorderSizePixel = 0
+Header.ZIndex = 10
+Header.Active = true
+Header.Parent = Win
+
+do
+    local dragging, dragStart, startPos
+    Header.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = i.Position
+            startPos = Win.Position
+            i.Changed:Connect(function()
+                if i.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            local d = i.Position - dragStart
+            Win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end)
+end
+
+local LogoHolder = Instance.new("Frame")
+LogoHolder.Size = UDim2.fromOffset(64, 64)
+LogoHolder.Position = UDim2.fromOffset(22, 15)
+LogoHolder.BackgroundTransparency = 1
+LogoHolder.ZIndex = 14
+LogoHolder.Parent = Header
+
+local LogoRing = Instance.new("Frame")
+LogoRing.Size = UDim2.fromOffset(64, 64)
+LogoRing.BackgroundColor3 = Color3.new(1, 1, 1)
+LogoRing.BackgroundTransparency = 0.3
+LogoRing.BorderSizePixel = 0
+LogoRing.ZIndex = 13
+LogoRing.Parent = LogoHolder
+corner(LogoRing, 32)
+
+local logoRingGrad = Instance.new("UIGradient")
+logoRingGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, THEME.accent),
+    ColorSequenceKeypoint.new(0.25, THEME.accent2),
+    ColorSequenceKeypoint.new(0.50, THEME.pink),
+    ColorSequenceKeypoint.new(0.75, THEME.gold),
+    ColorSequenceKeypoint.new(1.00, THEME.accent),
+})
+logoRingGrad.Parent = LogoRing
+
+local LogoGlow = Instance.new("Frame")
+LogoGlow.Size = UDim2.fromOffset(64, 64)
+LogoGlow.BackgroundColor3 = THEME.accent2
+LogoGlow.BackgroundTransparency = 0.72
+LogoGlow.BorderSizePixel = 0
+LogoGlow.ZIndex = 12
+LogoGlow.Parent = LogoHolder
+corner(LogoGlow, 32)
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.fromOffset(54, 54)
+Logo.Position = UDim2.fromOffset(5, 5)
+Logo.BackgroundTransparency = 1
+Logo.Image = LOGO_ID
+Logo.ScaleType = Enum.ScaleType.Fit
+Logo.ZIndex = 15
+Logo.Parent = LogoHolder
+corner(Logo, 27)
+
+task.spawn(function()
+    while LogoGlow.Parent do
+        TweenService:Create(LogoGlow, TweenInfo.new(1.1, Enum.EasingStyle.Sine), { BackgroundTransparency = 0.35, Size = UDim2.fromOffset(72, 72), Position = UDim2.fromOffset(-4, -4) }):Play()
+        task.wait(1.1)
+        TweenService:Create(LogoGlow, TweenInfo.new(1.1, Enum.EasingStyle.Sine), { BackgroundTransparency = 0.75, Size = UDim2.fromOffset(64, 64), Position = UDim2.fromOffset(0, 0) }):Play()
+        task.wait(1.1)
+    end
+end)
+
+-- header beam: white light passes logo -> title, reverses back, loops
+local HeaderBeam = Instance.new("Frame")
+HeaderBeam.Size = UDim2.fromOffset(26, 70)
+HeaderBeam.Position = UDim2.fromOffset(10, 12)
+HeaderBeam.BackgroundColor3 = Color3.new(1, 1, 1)
+HeaderBeam.BackgroundTransparency = 0.55
+HeaderBeam.BorderSizePixel = 0
+HeaderBeam.ZIndex = 17
+HeaderBeam.Parent = Header
+corner(HeaderBeam, 13)
+
+local beamGrad = Instance.new("UIGradient")
+beamGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 255, 255)),
+    ColorSequenceKeypoint.new(0.50, Color3.fromRGB(220, 240, 255)),
+    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 255, 255)),
+})
+beamGrad.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0.00, 1),
+    NumberSequenceKeypoint.new(0.35, 0.15),
+    NumberSequenceKeypoint.new(0.65, 0.15),
+    NumberSequenceKeypoint.new(1.00, 1),
+})
+beamGrad.Parent = HeaderBeam
+
+task.spawn(function()
+    local X_START = 10
+    local X_END   = 460
+    while HeaderBeam.Parent do
+        local t1 = TweenService:Create(HeaderBeam, TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+            Position = UDim2.fromOffset(X_END, 12),
+        })
+        t1:Play()
+        t1.Completed:Wait()
+        if not HeaderBeam.Parent then break end
+        local t2 = TweenService:Create(HeaderBeam, TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+            Position = UDim2.fromOffset(X_START, 12),
+        })
+        t2:Play()
+        t2.Completed:Wait()
+        task.wait(0.25)
+    end
+end)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0, 340, 0, 40)
+Title.Position = UDim2.fromOffset(100, 17)
+Title.BackgroundTransparency = 1
+Title.Text = "KHUB"
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 32
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 14
+Title.Parent = Header
+
+local TitleGrad = Instance.new("UIGradient")
+TitleGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(120, 190, 255)),
+    ColorSequenceKeypoint.new(0.45, Color3.new(1, 1, 1)),
+    ColorSequenceKeypoint.new(0.60, Color3.fromRGB(205, 235, 255)),
+    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(180, 130, 255)),
+})
+TitleGrad.Offset = Vector2.new(-1.3, 0)
+TitleGrad.Parent = Title
+
+local Sub = Instance.new("TextLabel")
+Sub.Size = UDim2.new(0, 460, 0, 18)
+Sub.Position = UDim2.fromOffset(102, 58)
+Sub.BackgroundTransparency = 1
+Sub.Text = "by Kyiel Pambid  ·  KHUB edition  ·  RightShift / K to toggle"
+Sub.Font = Enum.Font.Code
+Sub.TextSize = 12
+Sub.TextColor3 = THEME.mute
+Sub.TextXAlignment = Enum.TextXAlignment.Left
+Sub.ZIndex = 12
+Sub.Parent = Header
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.fromOffset(34, 28)
+MinBtn.Position = UDim2.new(1, -86, 0, 18)
+MinBtn.BackgroundColor3 = THEME.card
+MinBtn.BackgroundTransparency = 0.1
+MinBtn.Text = "–"
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 18
+MinBtn.TextColor3 = THEME.text
+MinBtn.ZIndex = 18
+MinBtn.Parent = Header
+corner(MinBtn, 8)
+mkstroke(MinBtn, THEME.stroke, 1, 0.3)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.fromOffset(34, 28)
+CloseBtn.Position = UDim2.new(1, -46, 0, 18)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(66, 22, 36)
+CloseBtn.BackgroundTransparency = 0.1
+CloseBtn.Text = "X"
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.TextColor3 = THEME.red
+CloseBtn.ZIndex = 18
+CloseBtn.Parent = Header
+corner(CloseBtn, 8)
+mkstroke(CloseBtn, THEME.red, 1, 0.4)
+
+local Divider = Instance.new("Frame")
+Divider.Size = UDim2.new(1, -24, 0, 1)
+Divider.Position = UDim2.new(0, 12, 0, HEADER_H - 1)
+Divider.BackgroundColor3 = Color3.new(1, 1, 1)
+Divider.BackgroundTransparency = 0.5
+Divider.BorderSizePixel = 0
+Divider.ZIndex = 11
+Divider.Parent = Win
+local divGrad = Instance.new("UIGradient")
+divGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,   THEME.accent2),
+    ColorSequenceKeypoint.new(0.5, THEME.accent),
+    ColorSequenceKeypoint.new(1,   THEME.accent2),
+})
+divGrad.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0, 0.7),
+    NumberSequenceKeypoint.new(0.5, 0.1),
+    NumberSequenceKeypoint.new(1, 0.7),
+})
+divGrad.Parent = Divider
+
+--=====================================================================
+-- SIDEBAR
+--=====================================================================
+local Rail = Instance.new("ScrollingFrame")
+Rail.Name = "Rail"
+Rail.Size = UDim2.new(0, RAIL_W, 1, -HEADER_H - 5)
+Rail.Position = UDim2.new(0, 0, 0, HEADER_H + 5)
+Rail.BackgroundColor3 = THEME.panel
+Rail.BackgroundTransparency = 0.12
+Rail.BorderSizePixel = 0
+Rail.ZIndex = 6
+Rail.ClipsDescendants = true
+Rail.ScrollBarThickness = 3
+Rail.ScrollBarImageColor3 = THEME.accent2
+Rail.ScrollBarImageTransparency = 0.6
+Rail.CanvasSize = UDim2.new(0, 0, 0, 0)
+Rail.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Rail.ScrollingDirection = Enum.ScrollingDirection.Y
+Rail.ScrollingEnabled = true
+Rail.Active = true
+Rail.Parent = Win
+
+local railPad = Instance.new("UIPadding")
+railPad.PaddingTop = UDim.new(0, 14)
+railPad.PaddingBottom = UDim.new(0, 14)
+railPad.PaddingLeft = UDim.new(0, 10)
+railPad.PaddingRight = UDim.new(0, 10)
+railPad.Parent = Rail
+
+local railLay = Instance.new("UIListLayout")
+railLay.Padding = UDim.new(0, 10)
+railLay.SortOrder = Enum.SortOrder.LayoutOrder
+railLay.Parent = Rail
+
+--=====================================================================
+-- MAIN CONTENT
+--=====================================================================
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(1, -RAIL_W, 1, -HEADER_H - 5)
+Main.Position = UDim2.new(0, RAIL_W, 0, HEADER_H + 5)
+Main.BackgroundTransparency = 1
+Main.ClipsDescendants = true
+Main.ZIndex = 5
+Main.Parent = Win
+
+local PageTitle = Instance.new("TextLabel")
+PageTitle.Size = UDim2.new(1, -34, 0, 34)
+PageTitle.Position = UDim2.fromOffset(22, 10)
+PageTitle.BackgroundTransparency = 1
+PageTitle.Text = "Welcome"
+PageTitle.Font = Enum.Font.GothamBold
+PageTitle.TextSize = 19
+PageTitle.TextColor3 = THEME.text
+PageTitle.TextXAlignment = Enum.TextXAlignment.Left
+PageTitle.ZIndex = 7
+PageTitle.Parent = Main
+
+local PageSub = Instance.new("TextLabel")
+PageSub.Size = UDim2.new(1, -34, 0, 18)
+PageSub.Position = UDim2.fromOffset(22, 44)
+PageSub.BackgroundTransparency = 1
+PageSub.Text = ""
+PageSub.Font = Enum.Font.Gotham
+PageSub.TextSize = 12
+PageSub.TextColor3 = THEME.mute
+PageSub.TextXAlignment = Enum.TextXAlignment.Left
+PageSub.ZIndex = 7
+PageSub.Parent = Main
+
+local PageDivider = Instance.new("Frame")
+PageDivider.Size = UDim2.new(1, -34, 0, 1)
+PageDivider.Position = UDim2.new(0, 22, 0, 70)
+PageDivider.BackgroundColor3 = THEME.stroke
+PageDivider.BackgroundTransparency = 0.55
+PageDivider.BorderSizePixel = 0
+PageDivider.ZIndex = 7
+PageDivider.Parent = Main
+
+--=====================================================================
+-- PAGE SYSTEM · every tab gets the same effect package, no exceptions
+--=====================================================================
+local Pages = {}
+local TabButtons = {}
+TabButtons.ActiveId = nil
+
+local function createPage(name)
+    local sf = Instance.new("ScrollingFrame")
+    sf.Name = name .. "Page"
+    sf.Size = UDim2.new(1, -34, 1, -90)
+    sf.Position = UDim2.new(0, 22, 0, 80)
+    sf.BackgroundTransparency = 1
+    sf.BorderSizePixel = 0
+    sf.ScrollBarThickness = 3
+    sf.ScrollBarImageColor3 = THEME.accent
+    sf.CanvasSize = UDim2.new(0, 0, 0, 0)
+    sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    sf.ZIndex = 6
+    sf.Visible = false
+    sf.Parent = Main
+
+    local lay = Instance.new("UIListLayout")
+    lay.Padding = UDim.new(0, 14)
+    lay.SortOrder = Enum.SortOrder.LayoutOrder
+    lay.Parent = sf
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 6)
+    pad.PaddingBottom = UDim.new(0, 18)
+    pad.Parent = sf
+
+    Pages[name] = sf
+    return sf
+end
+
+local function switchPage(name, title, subtitle)
+    for k, p in pairs(Pages) do p.Visible = (k == name) end
+    PageTitle.Text = title or name
+    PageSub.Text = subtitle or ""
+    TabButtons.ActiveId = name
+
+    local page = Pages[name]
+    if page then
+        local idx = 0
+        for _, child in ipairs(page:GetChildren()) do
+            if child:IsA("Frame") then
+                idx = idx + 1
+                local fp = child.Position
+                local fbt = child.BackgroundTransparency
+                child.Position = UDim2.new(fp.X.Scale, fp.X.Offset, fp.Y.Scale, fp.Y.Offset + 18)
+                child.BackgroundTransparency = 0.6
+                task.delay((idx - 1) * 0.055, function()
+                    if not child.Parent then return end
+                    TweenService:Create(child, TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                        Position = fp,
+                        BackgroundTransparency = fbt,
+                    }):Play()
+                end)
+            end
+        end
+    end
+
+    for id, btnRef in pairs(TabButtons) do
+        if type(id) == "string" and not id:find("_") then
+            local active = (id == name)
+            local iconFrame = TabButtons[id .. "_Frame"]
+            local glow      = TabButtons[id .. "_Glow"]
+            local bar       = TabButtons[id .. "_Bar"]
+            local lbl       = TabButtons[id .. "_Label"]
+            local icon      = TabButtons[id .. "_Icon"]
+            local stroke    = TabButtons[id .. "_Stroke"]
+            local pop       = TabButtons[id .. "_Pop"]
+            local tabCol    = TabButtons[id .. "_Color"]
+            if active then
+                TweenService:Create(btnRef, TweenInfo.new(0.22), { BackgroundTransparency = 0.05 }):Play()
+                if iconFrame then TweenService:Create(iconFrame, TweenInfo.new(0.22), { BackgroundColor3 = tabCol, BackgroundTransparency = 0 }):Play() end
+                if glow then TweenService:Create(glow, TweenInfo.new(0.3), { BackgroundTransparency = 0.45, Size = UDim2.fromOffset(40, 40), Position = UDim2.new(0, 5, 0.5, -20) }):Play() end
+                -- bar: force-set full width first so a stuck tween can never hide it
+                if bar then
+                    bar.Visible = true
+                    bar.Size = UDim2.new(0, 4, 0.62, 0)
+                    TweenService:Create(bar, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                        Size = UDim2.new(0, 4, 0.62, 0),
+                    }):Play()
+                end
+                if lbl then lbl.TextColor3 = THEME.gold end
+                if icon then icon.ImageColor3 = Color3.new(1, 1, 1) end
+                if stroke then stroke.Color = tabCol; stroke.Transparency = 0.1; stroke.Thickness = 2 end
+                if pop then
+                    pop.Scale = 0.55
+                    TweenService:Create(pop, TweenInfo.new(0.38, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+                end
+            else
+                TweenService:Create(btnRef, TweenInfo.new(0.22), { BackgroundTransparency = 0.3 }):Play()
+                if iconFrame then TweenService:Create(iconFrame, TweenInfo.new(0.22), { BackgroundColor3 = Color3.fromRGB(24, 30, 60), BackgroundTransparency = 0.15 }):Play() end
+                if glow then TweenService:Create(glow, TweenInfo.new(0.25), { BackgroundTransparency = 0.88, Size = UDim2.fromOffset(30, 30), Position = UDim2.new(0, 9, 0.5, -15) }):Play() end
+                if bar then
+                    bar.Visible = false
+                    bar.Size = UDim2.new(0, 0, 0.62, 0)
+                end
+                if lbl then lbl.TextColor3 = THEME.dim end
+                if icon then icon.ImageColor3 = Color3.fromRGB(200, 215, 250) end
+                if stroke then stroke.Color = THEME.stroke; stroke.Transparency = 0.45; stroke.Thickness = 1.2 end
+            end
+        end
+    end
+end
+
+local function ripple(b, inputPos)
+    local rel = Vector2.new(inputPos.X - b.AbsolutePosition.X, inputPos.Y - b.AbsolutePosition.Y)
+    local circle = Instance.new("Frame")
+    circle.AnchorPoint = Vector2.new(0.5, 0.5)
+    circle.Position = UDim2.new(0, rel.X, 0, rel.Y)
+    circle.Size = UDim2.fromOffset(8, 8)
+    circle.BackgroundColor3 = Color3.new(1, 1, 1)
+    circle.BackgroundTransparency = 0.5
+    circle.BorderSizePixel = 0
+    circle.ZIndex = b.ZIndex + 3
+    circle.Parent = b
+    corner(circle, 99)
+    local target = math.max(b.AbsoluteSize.X, b.AbsoluteSize.Y) * 2.2
+    TweenService:Create(circle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = UDim2.fromOffset(target, target),
+        BackgroundTransparency = 1,
+    }):Play()
+    task.delay(0.5, function()
+        if circle.Parent then circle:Destroy() end
+    end)
+end
+
+--=====================================================================
+-- TAB ICONS · one builder for every tab, effect package included
+--=====================================================================
+local TAB_ICONS = {
+    Welcome = "rbxassetid://6023426926",   -- home grid
+    Farm    = "rbxassetid://6034684930",   -- bolt
+    Save    = "rbxassetid://6031280882",   -- save/config
+}
+
+local TAB_COLORS = {
+    Welcome = THEME.accent,
+    Farm    = THEME.green,
+    Save    = THEME.gold,
+}
+
+local function createTabButton(id, label, layoutOrder, title, subtitle)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -4, 0, 50)
+    b.BackgroundColor3 = THEME.card
+    b.BackgroundTransparency = 0.3
+    b.Text = ""
+    b.AutoButtonColor = false
+    b.ClipsDescendants = true
+    b.LayoutOrder = layoutOrder
+    b.ZIndex = 7
+    b.Parent = Rail
+    corner(b, 13)
+    local btnStroke = mkstroke(b, THEME.stroke, 1, 0.45)
+
+    local glow = Instance.new("Frame")
+    glow.Size = UDim2.fromOffset(30, 30)
+    glow.Position = UDim2.new(0, 9, 0.5, -15)
+    glow.BackgroundColor3 = TAB_COLORS[id] or THEME.accent2
+    glow.BackgroundTransparency = 0.88
+    glow.BorderSizePixel = 0
+    glow.ZIndex = 8
+    glow.Parent = b
+    corner(glow, 15)
+
+    local iconFrame = Instance.new("Frame")
+    iconFrame.Size = UDim2.fromOffset(32, 32)
+    iconFrame.Position = UDim2.new(0, 12, 0.5, -16)
+    iconFrame.BackgroundColor3 = Color3.fromRGB(24, 30, 60)
+    iconFrame.BackgroundTransparency = 0.15
+    iconFrame.BorderSizePixel = 0
+    iconFrame.ZIndex = 9
+    iconFrame.Parent = b
+    corner(iconFrame, 16)
+    mkstroke(iconFrame, TAB_COLORS[id] or THEME.accent2, 1.2, 0.25)
+
+    local pop = Instance.new("UIScale")
+    pop.Scale = 1
+    pop.Parent = iconFrame
+
+    local icon = Instance.new("ImageLabel")
+    icon.Size = UDim2.new(1, -8, 1, -8)
+    icon.Position = UDim2.fromOffset(4, 4)
+    icon.BackgroundTransparency = 1
+    icon.Image = TAB_ICONS[id] or LOGO_ID
+    icon.ScaleType = Enum.ScaleType.Fit
+    icon.ImageColor3 = Color3.fromRGB(200, 215, 250)
+    icon.ZIndex = 10
+    icon.Parent = iconFrame
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -58, 1, 0)
+    lbl.Position = UDim2.fromOffset(54, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = label
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 14
+    lbl.TextColor3 = THEME.dim
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 9
+    lbl.Parent = b
+
+    local activeBar = Instance.new("Frame")
+    activeBar.Size = UDim2.new(0, 0, 0.62, 0)
+    activeBar.Position = UDim2.new(0, 0, 0.19, 0)
+    activeBar.BackgroundColor3 = TAB_COLORS[id] or THEME.accent
+    activeBar.BorderSizePixel = 0
+    activeBar.ZIndex = 11
+    activeBar.Visible = false
+    activeBar.Parent = b
+    corner(activeBar, 2)
+    local barGrad = Instance.new("UIGradient")
+    barGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.00, (TAB_COLORS[id] or THEME.accent)),
+        ColorSequenceKeypoint.new(0.50, Color3.new(1, 1, 1)),
+        ColorSequenceKeypoint.new(1.00, (TAB_COLORS[id] or THEME.accent)),
+    })
+    barGrad.Offset = Vector2.new(-1, 0)
+    barGrad.Parent = activeBar
+
+    b.MouseEnter:Connect(function()
+        TweenService:Create(b, TweenInfo.new(0.15), { BackgroundTransparency = 0.1 }):Play()
+        TweenService:Create(iconFrame, TweenInfo.new(0.15), { BackgroundTransparency = 0 }):Play()
+        TweenService:Create(glow, TweenInfo.new(0.2), { BackgroundTransparency = 0.5, Size = UDim2.fromOffset(42, 42), Position = UDim2.new(0, 5, 0.5, -21) }):Play()
+        TweenService:Create(btnStroke, TweenInfo.new(0.15), { Transparency = 0.1, Color = TAB_COLORS[id] or THEME.accent }):Play()
+    end)
+    b.MouseLeave:Connect(function()
+        if TabButtons.ActiveId ~= id then
+            TweenService:Create(b, TweenInfo.new(0.2), { BackgroundTransparency = 0.3 }):Play()
+            TweenService:Create(iconFrame, TweenInfo.new(0.2), { BackgroundTransparency = 0.15 }):Play()
+            TweenService:Create(glow, TweenInfo.new(0.25), { BackgroundTransparency = 0.88, Size = UDim2.fromOffset(30, 30), Position = UDim2.new(0, 9, 0.5, -15) }):Play()
+            TweenService:Create(btnStroke, TweenInfo.new(0.2), { Transparency = 0.45, Color = THEME.stroke }):Play()
+        end
+    end)
+
+    b.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            ripple(b, input.Position)
+        end
+    end)
+
+    TabButtons[id] = b
+    TabButtons[id .. "_Icon"]    = icon
+    TabButtons[id .. "_Label"]   = lbl
+    TabButtons[id .. "_Frame"]   = iconFrame
+    TabButtons[id .. "_Glow"]    = glow
+    TabButtons[id .. "_Bar"]     = activeBar
+    TabButtons[id .. "_BarGrad"] = barGrad
+    TabButtons[id .. "_Stroke"]  = btnStroke
+    TabButtons[id .. "_Pop"]     = pop
+    TabButtons[id .. "_Color"]   = TAB_COLORS[id] or THEME.accent
+
+    b.MouseButton1Click:Connect(function()
+        switchPage(id, title, subtitle)
+    end)
+    return b
+end
+
+--=====================================================================
+-- WIDGETS
+--=====================================================================
+local function card(parent, titleText)
+    local box = Instance.new("Frame")
+    box.Size = UDim2.new(1, 0, 0, 0)
+    box.AutomaticSize = Enum.AutomaticSize.Y
+    box.BackgroundColor3 = THEME.card
+    box.BackgroundTransparency = 0.08
+    box.BorderSizePixel = 0
+    box.ZIndex = 9
+    box.Parent = parent
+    corner(box, 14)
+    local st = mkstroke(box, THEME.stroke, 1.2, 0.35)
+
+    box.MouseEnter:Connect(function()
+        TweenService:Create(st, TweenInfo.new(0.2), { Color = THEME.accent, Transparency = 0.1 }):Play()
+    end)
+    box.MouseLeave:Connect(function()
+        TweenService:Create(st, TweenInfo.new(0.3), { Color = THEME.stroke, Transparency = 0.35 }):Play()
+    end)
+
+    local lay = Instance.new("UIListLayout")
+    lay.Padding = UDim.new(0, 10)
+    lay.SortOrder = Enum.SortOrder.LayoutOrder
+    lay.Parent = box
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 16)
+    pad.PaddingBottom = UDim.new(0, 16)
+    pad.PaddingLeft = UDim.new(0, 18)
+    pad.PaddingRight = UDim.new(0, 18)
+    pad.Parent = box
+
+    if titleText then
+        local h = Instance.new("TextLabel")
+        h.Size = UDim2.new(1, 0, 0, 24)
+        h.BackgroundTransparency = 1
+        h.Text = titleText
+        h.Font = Enum.Font.GothamBold
+        h.TextSize = 15
+        h.TextColor3 = THEME.gold
+        h.TextXAlignment = Enum.TextXAlignment.Left
+        h.ZIndex = 18
+        h.LayoutOrder = 0
+        h.Parent = box
+        local ug = Instance.new("UIGradient")
+        ug.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, THEME.accent),
+            ColorSequenceKeypoint.new(1, THEME.gold),
+        })
+        ug.Parent = h
+    end
+    return box
+end
+
+local function line(parent, text, color)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, 0, 0, 20)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.Font = Enum.Font.Gotham
+    l.TextSize = 13
+    l.TextColor3 = color or THEME.dim
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.TextWrapped = true
+    l.AutomaticSize = Enum.AutomaticSize.Y
+    l.ZIndex = 18
+    l.Parent = parent
+    return l
+end
+
+local function linkLine(parent, text)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, 0, 0, 24)
+    l.BackgroundColor3 = THEME.inner
+    l.BackgroundTransparency = 0.1
+    l.Text = "  " .. text
+    l.Font = Enum.Font.Code
+    l.TextSize = 13
+    l.TextColor3 = THEME.accent
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.TextTruncate = Enum.TextTruncate.AtEnd
+    l.ZIndex = 18
+    l.Parent = parent
+    corner(l, 7)
+    return l
+end
+
+local function btn(parent, text, callback, color)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, 0, 0, 42)
+    b.BackgroundColor3 = color or Color3.fromRGB(34, 44, 84)
+    b.Text = text
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 13
+    b.TextColor3 = THEME.text
+    b.AutoButtonColor = false
+    b.ClipsDescendants = true
+    b.ZIndex = 17
+    b.Parent = parent
+    corner(b, 10)
+    local st = mkstroke(b, THEME.accent, 1.1, 0.5)
+
+    local shine = Instance.new("Frame")
+    shine.Size = UDim2.new(0, 60, 1, 0)
+    shine.Position = UDim2.new(0, -70, 0, 0)
+    shine.BackgroundColor3 = Color3.new(1, 1, 1)
+    shine.BackgroundTransparency = 0.82
+    shine.BorderSizePixel = 0
+    shine.ZIndex = 18
+    shine.Parent = b
+    corner(shine, 10)
+
+    b.MouseEnter:Connect(function()
+        TweenService:Create(b, TweenInfo.new(0.15), { BackgroundTransparency = 0.05 }):Play()
+        TweenService:Create(st, TweenInfo.new(0.15), { Transparency = 0.1 }):Play()
+        shine.Position = UDim2.new(0, -70, 0, 0)
+        TweenService:Create(shine, TweenInfo.new(0.45, Enum.EasingStyle.Quad), {
+            Position = UDim2.new(1, 10, 0, 0),
+        }):Play()
+    end)
+    b.MouseLeave:Connect(function()
+        TweenService:Create(b, TweenInfo.new(0.2), { BackgroundTransparency = 0 }):Play()
+        TweenService:Create(st, TweenInfo.new(0.2), { Transparency = 0.5 }):Play()
+    end)
+    b.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            ripple(b, input.Position)
+        end
+    end)
+    b.MouseButton1Click:Connect(function() if callback then pcall(callback) end end)
+    return b
+end
+
+local function toggle(parent, labelText, getState, setState)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, 0, 0, 44)
+    b.BackgroundColor3 = Color3.fromRGB(30, 38, 74)
+    b.Text = ""
+    b.ZIndex = 17
+    b.Parent = parent
+    corner(b, 11)
+    local st = mkstroke(b, THEME.stroke, 1.1, 0.5)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -100, 1, 0)
+    lbl.Position = UDim2.fromOffset(14, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 13
+    lbl.TextColor3 = THEME.text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 18
+    lbl.Parent = b
+
+    local pill = Instance.new("Frame")
+    pill.Size = UDim2.fromOffset(60, 28)
+    pill.Position = UDim2.new(1, -74, 0.5, -14)
+    pill.BackgroundColor3 = THEME.off
+    pill.BorderSizePixel = 0
+    pill.ZIndex = 18
+    pill.Parent = b
+    corner(pill, 14)
+    local pillStroke = mkstroke(pill, THEME.stroke, 1, 0.4)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(22, 22)
+    knob.Position = UDim2.new(0, 3, 0.5, -11)
+    knob.BackgroundColor3 = THEME.offKnob
+    knob.BorderSizePixel = 0
+    knob.ZIndex = 19
+    knob.Parent = pill
+    corner(knob, 11)
+
+    local function refresh()
+        local on = getState()
+        if on then
+            TweenService:Create(pill, TweenInfo.new(0.22), { BackgroundColor3 = THEME.accent }):Play()
+            TweenService:Create(pillStroke, TweenInfo.new(0.22), { Color = THEME.accent2, Transparency = 0.05, Thickness = 2 }):Play()
+            TweenService:Create(knob, TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Position = UDim2.new(1, -25, 0.5, -11),
+                BackgroundColor3 = Color3.new(1, 1, 1),
+            }):Play()
+        else
+            TweenService:Create(pill, TweenInfo.new(0.22), { BackgroundColor3 = THEME.off }):Play()
+            TweenService:Create(pillStroke, TweenInfo.new(0.22), { Color = THEME.stroke, Transparency = 0.4, Thickness = 1 }):Play()
+            TweenService:Create(knob, TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Position = UDim2.new(0, 3, 0.5, -11),
+                BackgroundColor3 = THEME.offKnob,
+            }):Play()
+        end
+    end
+
+    b.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            ripple(b, input.Position)
+        end
+    end)
+    b.MouseButton1Click:Connect(function()
+        setState(not getState())
+        refresh()
+    end)
+    refresh()
+    return b, refresh
+end
+
+local function input(parent, labelText, default, callback)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 56)
+    row.BackgroundTransparency = 1
+    row.ZIndex = 17
+    row.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 0, 18)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 12
+    lbl.TextColor3 = THEME.text
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 18
+    lbl.Parent = row
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(1, 0, 0, 30)
+    box.Position = UDim2.new(0, 0, 0, 24)
+    box.BackgroundColor3 = THEME.inner
+    box.BackgroundTransparency = 0.1
+    box.Text = tostring(default or "")
+    box.Font = Enum.Font.Code
+    box.TextSize = 13
+    box.TextColor3 = THEME.gold
+    box.PlaceholderText = "..."
+    box.PlaceholderColor3 = THEME.mute
+    box.ClearTextOnFocus = false
+    box.ZIndex = 18
+    box.Parent = row
+    corner(box, 8)
+    local st = mkstroke(box, THEME.stroke, 1, 0.5)
+    box.Focused:Connect(function()
+        TweenService:Create(st, TweenInfo.new(0.15), { Color = THEME.accent, Transparency = 0.05 }):Play()
+    end)
+    box.FocusLost:Connect(function()
+        TweenService:Create(st, TweenInfo.new(0.2), { Color = THEME.stroke, Transparency = 0.5 }):Play()
+        if callback then pcall(callback, box.Text) end
+    end)
+    return box
+end
+
+--=====================================================================
+-- FEATURE FIRE FUNCTIONS
+--=====================================================================
+local function fireClick()
+    if not ClickRemote then return false end
+    local ok = pcall(function() ClickRemote:FireServer() end)
+    if ok then Session.clicks = Session.clicks + 1 end
+    return ok
+end
+
+local function fireRebirth()
+    if not RebirthRemote then return false end
+    local ok = pcall(function() RebirthRemote:FireServer() end)
+    if ok then Session.rebirths = Session.rebirths + 1 end
+    return ok
+end
+
+local function fireWin()
+    local character = player.Character
+    if not character then return false end
+    local root = character:FindFirstChild("HumanoidRootPart")
+    local winPads = Workspace:FindFirstChild("WinPads")
+    local normal = winPads and winPads:FindFirstChild("Normal")
+    local pad = normal and normal:FindFirstChild("15")
+    local hitbox = pad and pad:FindFirstChild("Hitbox")
+    if not root or not hitbox then return false end
+    if hasFireTouch then
+        local ok = pcall(function()
+            firetouchinterest(root, hitbox, 0)
+            task.wait()
+            firetouchinterest(root, hitbox, 1)
+        end)
+        if ok then Session.wins = Session.wins + 1 end
+        return ok
+    else
+        local ok = pcall(function()
+            root.CFrame = hitbox.CFrame + Vector3.new(0, 3, 0)
+        end)
+        if ok then Session.wins = Session.wins + 1 end
+        return ok
+    end
+end
+
+--=====================================================================
+-- TAB 1: WELCOME (always first)
+--=====================================================================
+local PageWelcome = createPage("Welcome")
+createTabButton("Welcome", "Welcome", 1, "Welcome", "KHUB edition · by Kyiel Pambid")
+
+local Hero = Instance.new("Frame")
+Hero.Size = UDim2.new(1, 0, 0, 146)
+Hero.BackgroundColor3 = THEME.card2
+Hero.BackgroundTransparency = 0.1
+Hero.BorderSizePixel = 0
+Hero.ZIndex = 9
+Hero.LayoutOrder = 1
+Hero.Parent = PageWelcome
+corner(Hero, 16)
+mkstroke(Hero, THEME.accent2, 1.4, 0.3)
+
+local HeroText = Instance.new("TextLabel")
+HeroText.Size = UDim2.new(1, -36, 0, 60)
+HeroText.Position = UDim2.fromOffset(24, 18)
+HeroText.BackgroundTransparency = 1
+HeroText.Text = "KHUB"
+HeroText.Font = Enum.Font.GothamBlack
+HeroText.TextSize = 58
+HeroText.TextColor3 = Color3.new(1, 1, 1)
+HeroText.TextXAlignment = Enum.TextXAlignment.Left
+HeroText.ZIndex = 12
+HeroText.Parent = Hero
+
+local HeroGrad = Instance.new("UIGradient")
+HeroGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, THEME.accent),
+    ColorSequenceKeypoint.new(0.35, Color3.new(1, 1, 1)),
+    ColorSequenceKeypoint.new(0.60, THEME.accent2),
+    ColorSequenceKeypoint.new(1.00, THEME.gold),
+})
+HeroGrad.Offset = Vector2.new(-1.4, 0)
+HeroGrad.Parent = HeroText
+
+local HeroBy = Instance.new("TextLabel")
+HeroBy.Size = UDim2.new(1, -36, 0, 22)
+HeroBy.Position = UDim2.fromOffset(26, 82)
+HeroBy.BackgroundTransparency = 1
+HeroBy.Text = "by Kyiel Pambid"
+HeroBy.Font = Enum.Font.GothamBold
+HeroBy.TextSize = 17
+HeroBy.TextColor3 = THEME.gold
+HeroBy.TextXAlignment = Enum.TextXAlignment.Left
+HeroBy.ZIndex = 12
+HeroBy.Parent = Hero
+
+local HeroType = Instance.new("TextLabel")
+HeroType.Size = UDim2.new(1, -36, 0, 18)
+HeroType.Position = UDim2.fromOffset(26, 110)
+HeroType.BackgroundTransparency = 1
+HeroType.Text = ""
+HeroType.Font = Enum.Font.Code
+HeroType.TextSize = 12
+HeroType.TextColor3 = THEME.dim
+HeroType.TextXAlignment = Enum.TextXAlignment.Left
+HeroType.ZIndex = 12
+HeroType.Parent = Hero
+
+task.spawn(function()
+    local phrases = {
+        "KHUB edition · join the discord for more scripts :3",
+        "subscribe on youtube for new releases",
+        "farm tab live · click, rebirth, win",
+    }
+    while HeroType.Parent do
+        for _, phrase in ipairs(phrases) do
+            if not HeroType.Parent then break end
+            HeroType.Text = ""
+            for i = 1, #phrase do
+                if not HeroType.Parent then break end
+                HeroType.Text = string.sub(phrase, 1, i)
+                task.wait(0.028)
+            end
+            task.wait(1.8)
+            for i = #phrase, 1, -1 do
+                if not HeroType.Parent then break end
+                HeroType.Text = string.sub(phrase, 1, i)
+                task.wait(0.012)
+            end
+            task.wait(0.2)
+        end
+    end
+end)
+
+local ProfileCard = card(PageWelcome, "Player")
+ProfileCard.LayoutOrder = 2
+
+local PF = Instance.new("Frame")
+PF.Size = UDim2.new(1, 0, 0, 116)
+PF.BackgroundColor3 = THEME.inner
+PF.BackgroundTransparency = 0.1
+PF.BorderSizePixel = 0
+PF.ZIndex = 10
+PF.Parent = ProfileCard
+corner(PF, 10)
+mkstroke(PF, THEME.stroke, 1, 0.35)
+
+local RingSize = 88
+local Ring = Instance.new("Frame")
+Ring.Size = UDim2.fromOffset(RingSize, RingSize)
+Ring.Position = UDim2.new(0, 18, 0.5, -RingSize/2)
+Ring.BackgroundColor3 = Color3.new(1, 1, 1)
+Ring.BackgroundTransparency = 0.22
+Ring.BorderSizePixel = 0
+Ring.ZIndex = 11
+Ring.Parent = PF
+corner(Ring, RingSize/2)
+
+local ringGrad = Instance.new("UIGradient")
+ringGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, THEME.accent),
+    ColorSequenceKeypoint.new(0.33, THEME.accent2),
+    ColorSequenceKeypoint.new(0.66, THEME.pink),
+    ColorSequenceKeypoint.new(1.00, THEME.accent),
+})
+ringGrad.Parent = Ring
+
+local Avatar = Instance.new("ImageLabel")
+Avatar.Size = UDim2.fromOffset(76, 76)
+Avatar.Position = UDim2.new(0, 24, 0.5, -38)
+Avatar.BackgroundColor3 = Color3.fromRGB(30, 38, 70)
+Avatar.BackgroundTransparency = 0.05
+Avatar.ZIndex = 12
+Avatar.Parent = PF
+corner(Avatar, 38)
+mkstroke(Avatar, THEME.accent, 1.5, 0.3)
+
+pcall(function()
+    local content, isReady = Players:GetUserThumbnailAsync(
+        player.UserId,
+        Enum.ThumbnailType.HeadShot,
+        Enum.ThumbnailSize.Size150x150
+    )
+    if isReady then Avatar.Image = content end
+end)
+
+local function profRow(y, txt, col, font, size)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, -144, 0, 22)
+    l.Position = UDim2.new(0, 126, 0, y)
+    l.BackgroundTransparency = 1
+    l.Text = txt
+    l.Font = font or Enum.Font.GothamBold
+    l.TextSize = size or 14
+    l.TextColor3 = col or THEME.text
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.ZIndex = 12
+    l.Parent = PF
+    return l
+end
+profRow(22, "hey, " .. player.DisplayName .. " :)", THEME.gold, Enum.Font.GothamBold, 18)
+profRow(50, "@" .. player.Name, THEME.dim, Enum.Font.Gotham, 13)
+profRow(72, "user id · " .. tostring(player.UserId), THEME.mute, Enum.Font.Code, 12)
+
+local SocialCard = card(PageWelcome, "Join & Subscribe")
+SocialCard.LayoutOrder = 3
+line(SocialCard, "join the discord for more scripts, subscribe on youtube for new releases :3", THEME.dim)
+linkLine(SocialCard, DISCORD_TXT)
+linkLine(SocialCard, YOUTUBE_TXT)
+
+local SocialStatus = line(SocialCard, "tap a button below", THEME.mute)
+
+btn(SocialCard, "💬  JOIN DISCORD FOR MORE SCRIPTS", function()
+    local opened = openLink(DISCORD)
+    SocialStatus.Text = opened and "opening discord..." or "discord link copied · paste it in your browser"
+    SocialStatus.TextColor3 = THEME.green
+end, Color3.fromRGB(45, 70, 160))
+
+btn(SocialCard, "▶️  SUBSCRIBE ON YOUTUBE · @kyielpambid", function()
+    local opened = openLink(YOUTUBE)
+    SocialStatus.Text = opened and "opening youtube..." or "youtube link copied · paste it in your browser"
+    SocialStatus.TextColor3 = THEME.green
+end, Color3.fromRGB(150, 40, 50))
+
+local SettingsCard = card(PageWelcome, "Floating Icon")
+SettingsCard.LayoutOrder = 4
+line(SettingsCard, "the big floating icon · left middle of your screen", THEME.dim)
+
+local refreshOrbVisual
+
+toggle(SettingsCard, "Lock Icon Position (no dragging)", function() return OrbState.locked end, function(v)
+    OrbState.locked = v
+end)
+
+toggle(SettingsCard, "Show Floating Icon", function() return OrbState.visible end, function(v)
+    OrbState.visible = v
+    if refreshOrbVisual then refreshOrbVisual() end
+end)
+
+--=====================================================================
+-- TAB 2: FARM (middle) · full effect package, same as welcome and save
+--=====================================================================
+local PageFarm = createPage("Farm")
+createTabButton("Farm", "Farm", 2, "Farm", "auto click · rebirth · win")
+
+local ToggleRefresh = {}
+
+local StatsCard = card(PageFarm, "Session")
+StatsCard.LayoutOrder = 1
+
+local statsRows = {}
+local statOrder = { "Clicks", "Rebirths", "Wins", "Uptime" }
+for i, name in ipairs(statOrder) do
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 26)
+    row.BackgroundColor3 = THEME.inner
+    row.BackgroundTransparency = 0.1
+    row.BorderSizePixel = 0
+    row.LayoutOrder = i
+    row.ZIndex = 12
+    row.Parent = StatsCard
+    corner(row, 6)
+    local k = Instance.new("TextLabel")
+    k.Size = UDim2.new(0.5, 0, 1, 0)
+    k.Position = UDim2.fromOffset(10, 0)
+    k.BackgroundTransparency = 1
+    k.Text = name
+    k.Font = Enum.Font.GothamBold
+    k.TextSize = 12
+    k.TextColor3 = THEME.dim
+    k.TextXAlignment = Enum.TextXAlignment.Left
+    k.ZIndex = 13
+    k.Parent = row
+    local v = Instance.new("TextLabel")
+    v.Size = UDim2.new(0.5, -14, 1, 0)
+    v.Position = UDim2.new(0.5, 0, 0, 0)
+    v.BackgroundTransparency = 1
+    v.Text = "0"
+    v.Font = Enum.Font.Code
+    v.TextSize = 12
+    v.TextColor3 = THEME.green
+    v.TextXAlignment = Enum.TextXAlignment.Right
+    v.ZIndex = 13
+    v.Parent = row
+    statsRows[name] = v
+end
+
+task.spawn(function()
+    while true do
+        if statsRows["Clicks"] then statsRows["Clicks"].Text = tostring(Session.clicks) end
+        if statsRows["Rebirths"] then statsRows["Rebirths"].Text = tostring(Session.rebirths) end
+        if statsRows["Wins"] then statsRows["Wins"].Text = tostring(Session.wins) end
+        if statsRows["Uptime"] then
+            local mins = math.floor((os.clock() - Session.startedAt) / 60)
+            local secs = math.floor((os.clock() - Session.startedAt) % 60)
+            statsRows["Uptime"].Text = string.format("%dm %02ds", mins, secs)
+        end
+        task.wait(0.25)
+    end
+end)
+
+local ClickCard = card(PageFarm, "Auto Click")
+ClickCard.LayoutOrder = 2
+
+local ClickStatus = line(ClickCard, "mode: normal (0.05s per click, like your code)", THEME.dim)
+
+local _, refreshClick = toggle(ClickCard, "Auto Click", function() return Farm.autoClick end, function(v)
+    Farm.autoClick = v
+end)
+ToggleRefresh.click = refreshClick
+
+local normalBtn, instantBtn
+normalBtn = btn(ClickCard, "🐢  MODE 1 · NORMAL (0.05s per click)", function()
+    Farm.clickMode = "normal"
+    normalBtn.BackgroundColor3 = Color3.fromRGB(30, 84, 58)
+    instantBtn.BackgroundColor3 = Color3.fromRGB(34, 44, 84)
+    ClickStatus.Text = "mode: normal (0.05s per click)"
+    ClickStatus.TextColor3 = THEME.dim
+end, Color3.fromRGB(30, 84, 58))
+
+instantBtn = btn(ClickCard, "⚡  MODE 2 · INSTANT (super fast, sunod sunod)", function()
+    Farm.clickMode = "instant"
+    instantBtn.BackgroundColor3 = Color3.fromRGB(90, 60, 20)
+    normalBtn.BackgroundColor3 = Color3.fromRGB(34, 44, 84)
+    ClickStatus.Text = "mode: instant, max burst every frame"
+    ClickStatus.TextColor3 = THEME.gold
+end, Color3.fromRGB(34, 44, 84))
+
+input(ClickCard, "Instant Burst (fires per frame, 1 to 30)", "8", function(v)
+    local n = tonumber(v)
+    if n and n >= 1 and n <= 30 then
+        Farm.clickBurst = math.floor(n)
+        ClickStatus.Text = "instant burst set to " .. Farm.clickBurst .. " per frame"
+    else
+        ClickStatus.Text = "invalid burst, kept " .. Farm.clickBurst
+    end
+end)
+
+local RebirthCard = card(PageFarm, "Auto Rebirth")
+RebirthCard.LayoutOrder = 3
+
+local _, refreshRebirth = toggle(RebirthCard, "Auto Rebirth", function() return Farm.autoRebirth end, function(v)
+    Farm.autoRebirth = v
+end)
+ToggleRefresh.rebirth = refreshRebirth
+
+line(RebirthCard, "fires DoRebirth every 0.25s, same as your code.", THEME.mute)
+
+local WinCard = card(PageFarm, "Auto Win")
+WinCard.LayoutOrder = 4
+
+local _, refreshWin = toggle(WinCard, "Auto Win", function() return Farm.autoWin end, function(v)
+    Farm.autoWin = v
+end)
+ToggleRefresh.win = refreshWin
+
+line(WinCard, "touches the WinPads Normal 15 hitbox every 0.1s.", THEME.mute)
+if not hasFireTouch then
+    line(WinCard, "firetouchinterest missing, using teleport fallback.", THEME.red)
+end
+
+--=====================================================================
+-- TAB 3: SAVE CONFIG (always last)
+--=====================================================================
+local PageSave = createPage("Save")
+createTabButton("Save", "Save Config", 3, "Save Config", "your setups · saved on device")
+
+local CONFIG_FOLDER = "KHUB_Configs"
+local selectedConfig = nil
+local configList = {}
+
+local function ensureFolder()
+    pcall(function()
+        if makefolder and not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+    end)
+end
+
+local function listConfigs()
+    configList = {}
+    pcall(function()
+        if listfiles and isfolder and isfolder(CONFIG_FOLDER) then
+            for _, path in ipairs(listfiles(CONFIG_FOLDER)) do
+                local name = string.match(path, "([^/\\]+)%.json$")
+                if name then table.insert(configList, name) end
+            end
+        end
+    end)
+    table.sort(configList)
+    return configList
+end
+
+local SaveCard = card(PageSave, "Custom Config")
+local SaveStatus = line(SaveCard, "status: ready", THEME.dim)
+
+local NameBox = input(SaveCard, "config name", "", function(v) end)
+
+local function setStatus(txt, col)
+    SaveStatus.Text = "status: " .. txt
+    SaveStatus.TextColor3 = col or THEME.dim
+end
+
+btn(SaveCard, "💾  create / save config", function()
+    local name = NameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+    if name == "" then
+        setStatus("type a name first :c", THEME.red)
+        return
+    end
+    ensureFolder()
+    local ok, err = pcall(function()
+        if not writefile then error("writefile not supported") end
+        writefile(CONFIG_FOLDER .. "/" .. name .. ".json",
+            HttpService:JSONEncode({
+                SavedAt  = os.date("%Y-%m-%d %H:%M"),
+                User     = player.Name,
+                Version  = "khub-edition-5.1",
+                Settings = {
+                    autoClick   = Farm.autoClick,
+                    clickMode   = Farm.clickMode,
+                    clickBurst  = Farm.clickBurst,
+                    autoRebirth = Farm.autoRebirth,
+                    autoWin     = Farm.autoWin,
+                },
+            }))
+    end)
+    if ok then
+        selectedConfig = name
+        setStatus("saved \"" .. name .. "\" :)", THEME.green)
+        refreshConfigList()
+    else
+        setStatus("failed · " .. tostring(err), THEME.red)
+    end
+end, Color3.fromRGB(30, 84, 58))
+
+local ListFrame = Instance.new("ScrollingFrame")
+ListFrame.Size = UDim2.new(1, 0, 0, 140)
+ListFrame.BackgroundColor3 = THEME.inner
+ListFrame.BackgroundTransparency = 0.1
+ListFrame.BorderSizePixel = 0
+ListFrame.ScrollBarThickness = 3
+ListFrame.ScrollBarImageColor3 = THEME.accent
+ListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ListFrame.ZIndex = 11
+ListFrame.Parent = SaveCard
+corner(ListFrame, 8)
+mkstroke(ListFrame, THEME.stroke, 1, 0.4)
+
+local LL = Instance.new("UIListLayout")
+LL.Padding = UDim.new(0, 4)
+LL.SortOrder = Enum.SortOrder.LayoutOrder
+LL.Parent = ListFrame
+
+local listPad = Instance.new("UIPadding")
+listPad.PaddingTop = UDim.new(0, 6)
+listPad.PaddingBottom = UDim.new(0, 6)
+listPad.PaddingLeft = UDim.new(0, 6)
+listPad.PaddingRight = UDim.new(0, 6)
+listPad.Parent = ListFrame
+
+function refreshConfigList()
+    for _, child in ipairs(ListFrame:GetChildren()) do
+        if child:IsA("TextButton") or child:IsA("TextLabel") then child:Destroy() end
+    end
+    listConfigs()
+    if #configList == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Size = UDim2.new(1, -8, 0, 28)
+        empty.BackgroundTransparency = 1
+        empty.Text = "no configs yet · make one above"
+        empty.Font = Enum.Font.Gotham
+        empty.TextSize = 12
+        empty.TextColor3 = THEME.mute
+        empty.ZIndex = 12
+        empty.LayoutOrder = 999
+        empty.Parent = ListFrame
+    else
+        for i, name in ipairs(configList) do
+            local b = Instance.new("TextButton")
+            b.Size = UDim2.new(1, -8, 0, 30)
+            local sel = (selectedConfig == name)
+            b.BackgroundColor3 = sel and THEME.accent2 or Color3.fromRGB(22, 28, 56)
+            b.BackgroundTransparency = sel and 0.25 or 0.15
+            b.Text = (sel and "✓  " or "     ") .. name
+            b.Font = Enum.Font.GothamBold
+            b.TextSize = 13
+            b.TextColor3 = sel and THEME.gold or THEME.text
+            b.TextXAlignment = Enum.TextXAlignment.Left
+            b.ZIndex = 12
+            b.LayoutOrder = i
+            b.Parent = ListFrame
+            corner(b, 7)
+            b.MouseButton1Click:Connect(function()
+                selectedConfig = name
+                NameBox.Text = name
+                setStatus("selected " .. name, THEME.gold)
+                refreshConfigList()
+            end)
+        end
+    end
+end
+
+btn(SaveCard, "📂  load config", function()
+    local name = selectedConfig or NameBox.Text
+    if not name or name == "" then
+        setStatus("select a config first", THEME.red)
+        return
+    end
+    local ok, data = pcall(function()
+        if not readfile or not isfile then error("readfile not supported") end
+        local path = CONFIG_FOLDER .. "/" .. name .. ".json"
+        if not isfile(path) then error("file not found") end
+        return HttpService:JSONDecode(readfile(path))
+    end)
+    if ok then
+        if type(data) == "table" and type(data.Settings) == "table" then
+            local s = data.Settings
+            if type(s.autoClick) == "boolean" then Farm.autoClick = s.autoClick end
+            if s.clickMode == "normal" or s.clickMode == "instant" then Farm.clickMode = s.clickMode end
+            if tonumber(s.clickBurst) then Farm.clickBurst = math.clamp(math.floor(s.clickBurst), 1, 30) end
+            if type(s.autoRebirth) == "boolean" then Farm.autoRebirth = s.autoRebirth end
+            if type(s.autoWin) == "boolean" then Farm.autoWin = s.autoWin end
+        end
+        if ToggleRefresh.click then ToggleRefresh.click() end
+        if ToggleRefresh.rebirth then ToggleRefresh.rebirth() end
+        if ToggleRefresh.win then ToggleRefresh.win() end
+        setStatus("loaded \"" .. name .. "\" · settings applied :)", THEME.green)
+    else
+        setStatus("failed to load", THEME.red)
+    end
+end)
+
+btn(SaveCard, "🗑️  delete selected", function()
+    local name = selectedConfig
+    if not name or name == "" then
+        setStatus("select a config first", THEME.red)
+        return
+    end
+    local ok = pcall(function()
+        if not delfile then error("delfile not supported") end
+        delfile(CONFIG_FOLDER .. "/" .. name .. ".json")
+    end)
+    if ok then
+        setStatus("deleted \"" .. name .. "\"", THEME.green)
+        selectedConfig = nil
+        NameBox.Text = ""
+        refreshConfigList()
+    else
+        setStatus("delete failed", THEME.red)
+    end
+end, THEME.red)
+
+btn(SaveCard, "🔄  refresh list", function()
+    refreshConfigList()
+    setStatus("refreshed", THEME.dim)
+end)
+
+task.defer(refreshConfigList)
+
+--=====================================================================
+-- FEATURE MASTER LOOPS · one loop each, toggling never stacks
+--=====================================================================
+task.spawn(function()
+    while true do
+        if Farm.autoClick then
+            if Farm.clickMode == "instant" then
+                for _ = 1, Farm.clickBurst do
+                    fireClick()
+                end
+                RunService.Heartbeat:Wait()
+            else
+                fireClick()
+                task.wait(0.05)
+            end
+        else
+            task.wait(0.2)
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if Farm.autoRebirth then
+            fireRebirth()
+            task.wait(0.25)
+        else
+            task.wait(0.2)
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if Farm.autoWin then
+            fireWin()
+            task.wait(0.1)
+        else
+            task.wait(0.2)
+        end
+    end
+end)
+
+--=====================================================================
+-- BIG FLOATING ICON · one root, fire wind orbit
+--=====================================================================
+local ORB_SIZE   = 104
+local HaloA_SIZE = 132
+local HaloB_SIZE = 118
+
+local OrbRoot = Instance.new("Frame")
+OrbRoot.Name = "OrbRoot"
+OrbRoot.Size = UDim2.fromOffset(ORB_SIZE, ORB_SIZE)
+OrbRoot.Position = UDim2.new(0, 10, 0.5, -ORB_SIZE/2)
+OrbRoot.BackgroundTransparency = 1
+OrbRoot.Visible = false
+OrbRoot.ZIndex = 48
+OrbRoot.Parent = ScreenGui
+
+local Bobber = Instance.new("Frame")
+Bobber.Size = UDim2.new(1, 0, 1, 0)
+Bobber.BackgroundTransparency = 1
+Bobber.ZIndex = 48
+Bobber.Parent = OrbRoot
+
+local function centerCircle(parent, size, color, transp, z)
+    local f = Instance.new("Frame")
+    f.AnchorPoint = Vector2.new(0.5, 0.5)
+    f.Position = UDim2.new(0.5, 0, 0.5, 0)
+    f.Size = UDim2.fromOffset(size, size)
+    f.BackgroundColor3 = color or Color3.new(1, 1, 1)
+    f.BackgroundTransparency = transp or 0.4
+    f.BorderSizePixel = 0
+    f.ZIndex = z or 48
+    f.Parent = parent
+    corner(f, math.floor(size/2))
+    return f
+end
+
+local HaloA = centerCircle(Bobber, HaloA_SIZE, Color3.new(1, 1, 1), 0.55, 47)
+local haloAGrad = Instance.new("UIGradient")
+haloAGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, THEME.accent),
+    ColorSequenceKeypoint.new(0.25, THEME.accent2),
+    ColorSequenceKeypoint.new(0.50, THEME.pink),
+    ColorSequenceKeypoint.new(0.75, THEME.gold),
+    ColorSequenceKeypoint.new(1.00, THEME.accent),
+})
+haloAGrad.Parent = HaloA
+
+local HaloB = centerCircle(Bobber, HaloB_SIZE, Color3.new(1, 1, 1), 0.62, 47)
+local haloBGrad = Instance.new("UIGradient")
+haloBGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, THEME.accent),
+    ColorSequenceKeypoint.new(0.50, THEME.accent2),
+    ColorSequenceKeypoint.new(1.00, THEME.accent),
+})
+haloBGrad.Parent = HaloB
+
+local OrbGlow = centerCircle(Bobber, ORB_SIZE + 18, THEME.accent2, 0.7, 48)
+
+local Orb = Instance.new("ImageButton")
+Orb.Name = "Orb"
+Orb.Size = UDim2.new(1, 0, 1, 0)
+Orb.BackgroundTransparency = 1
+Orb.Image = LOGO_ID
+Orb.ScaleType = Enum.ScaleType.Fit
+Orb.ZIndex = 50
+Orb.Parent = Bobber
+corner(Orb, ORB_SIZE/2)
+mkstroke(Orb, THEME.accent2, 3, 0.1)
+
+local fireDots = {}
+for i = 1, 4 do
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.fromOffset(8, 8)
+    dot.BackgroundColor3 = Color3.fromRGB(255, 160, 60)
+    dot.BackgroundTransparency = 0.15
+    dot.BorderSizePixel = 0
+    dot.ZIndex = 53
+    dot.Parent = Bobber
+    corner(dot, 4)
+    table.insert(fireDots, dot)
+end
+
+task.spawn(function()
+    while OrbRoot.Parent do
+        local r = HaloB_SIZE/2 + 10
+        for step = 0, 72 do
+            if not OrbRoot.Parent then break end
+            local ang = math.rad(step * 5)
+            for i, dot in ipairs(fireDots) do
+                if not dot.Parent then break end
+                local a2 = ang - (i - 1) * 0.35
+                dot.Position = UDim2.new(0.5, math.cos(a2) * r - 4, 0.5, math.sin(a2) * r - 4)
+                local heat = math.abs(math.sin((step / 72) * math.pi))
+                dot.BackgroundColor3 = Color3.fromRGB(255, math.floor(120 + 100 * heat), 40)
+                dot.BackgroundTransparency = 0.5 - (heat * 0.35)
+            end
+            task.wait(0.016)
+        end
+        local angEnd = math.rad(360)
+        for i, dot in ipairs(fireDots) do
+            if not dot.Parent then break end
+            local dx = math.random(-14, 14)
+            local dy = math.random(-14, 14)
+            TweenService:Create(dot, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Position = UDim2.new(0.5, math.cos(angEnd) * r - 4 + dx, 0.5, math.sin(angEnd) * r - 4 + dy),
+                BackgroundTransparency = 0.9,
+            }):Play()
+        end
+        task.wait(0.32)
+        for step = 72, 0, -1 do
+            if not OrbRoot.Parent then break end
+            local ang = math.rad(step * 5)
+            for i, dot in ipairs(fireDots) do
+                if not dot.Parent then break end
+                local a2 = ang - (i - 1) * 0.35
+                dot.Position = UDim2.new(0.5, math.cos(a2) * r - 4, 0.5, math.sin(a2) * r - 4)
+                dot.BackgroundTransparency = 0.3
+            end
+            task.wait(0.016)
+        end
+        for _, dot in ipairs(fireDots) do
+            if dot.Parent then dot.BackgroundTransparency = 0.3 end
+        end
+        task.wait(0.2)
+    end
+end)
+
+Orb.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        local circle = Instance.new("Frame")
+        circle.AnchorPoint = Vector2.new(0.5, 0.5)
+        circle.Position = UDim2.new(0.5, 0, 0.5, 0)
+        circle.Size = UDim2.fromOffset(10, 10)
+        circle.BackgroundColor3 = Color3.new(1, 1, 1)
+        circle.BackgroundTransparency = 0.4
+        circle.BorderSizePixel = 0
+        circle.ZIndex = 53
+        circle.Parent = OrbRoot
+        corner(circle, 5)
+        TweenService:Create(circle, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = UDim2.fromOffset(ORB_SIZE * 2, ORB_SIZE * 2),
+            BackgroundTransparency = 1,
+        }):Play()
+        task.delay(0.55, function()
+            if circle.Parent then circle:Destroy() end
+        end)
+    end
+end)
+
+local draggingOrb, dragStartOrb, startPosOrb
+Orb.InputBegan:Connect(function(input)
+    if OrbState.locked then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        draggingOrb = true; dragStartOrb = input.Position; startPosOrb = OrbRoot.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then draggingOrb = false end
+        end)
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if draggingOrb and not OrbState.locked and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local d = input.Position - dragStartOrb
+        OrbRoot.Position = UDim2.new(startPosOrb.X.Scale, startPosOrb.X.Offset + d.X, startPosOrb.Y.Scale, startPosOrb.Y.Offset + d.Y)
+    end
+end)
+
+refreshOrbVisual = function()
+    if Win.Visible then return end
+    OrbRoot.Visible = OrbState.visible
+end
+
+local function setVisible(on)
+    if on then
+        Win.Visible = true
+        OrbRoot.Visible = false
+        Win.Position = UDim2.new(0.5, -BASE_W/2, 0.5, -BASE_H/2)
+        TweenService:Create(Win, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, BASE_W, 0, BASE_H),
+        }):Play()
+    else
+        Win.Visible = false
+        OrbRoot.Visible = OrbState.visible
+    end
+end
+
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+CloseBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function() setVisible(true) end)
+
+--=====================================================================
+-- GLOBAL RENDER LOOP · borders, rings, bar shimmer + safety re-assert
+--=====================================================================
+task.spawn(function()
+    local a = 0
+    while ScreenGui.Parent do
+        local dt = RunService.RenderStepped:Wait()
+        a = (a + 1.8 * dt * 60) % 36000
+        winStrokeGrad.Rotation = a % 360
+        logoRingGrad.Rotation = (a * 1.4) % 360
+        ringGrad.Rotation = (a * 1.1) % 360
+        if OrbRoot.Visible then
+            haloAGrad.Rotation = a % 360
+            haloBGrad.Rotation = (-a * 0.7) % 360
+            local bob = math.sin(os.clock() * 1.6) * 4
+            Bobber.Position = UDim2.new(0, 0, 0, bob)
+        end
+        -- active tab: shimmer + safety, bar can never collapse or hide
+        local activeId = TabButtons.ActiveId
+        if activeId then
+            local grad = TabButtons[activeId .. "_BarGrad"]
+            local bar = TabButtons[activeId .. "_Bar"]
+            if grad then
+                local off = (math.sin(os.clock() * 2.2) + 1) / 2
+                grad.Offset = Vector2.new(-1 + off * 2, 0)
+            end
+            if bar and bar.Parent then
+                if not bar.Visible then bar.Visible = true end
+                if bar.Size.X.Offset < 4 then
+                    bar.Size = UDim2.new(0, 4, 0.62, 0)
+                end
+            end
+        end
+        TitleGrad.Offset = Vector2.new(-1.3 + ((os.clock() * 0.35) % 2.6), 0)
+        HeroGrad.Offset = Vector2.new(-1.4 + ((os.clock() * 0.3) % 2.8), 0)
+    end
+end)
+
+--=====================================================================
+-- ANTI AFK
+--=====================================================================
+player.Idled:Connect(function()
+    pcall(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+end)
+
+--=====================================================================
+-- KEYBINDS
+--=====================================================================
+UserInputService.InputBegan:Connect(function(i, gp)
+    if gp then return end
+    if i.KeyCode == Enum.KeyCode.RightShift
+       or i.KeyCode == Enum.KeyCode.RightControl
+       or i.KeyCode == Enum.KeyCode.K then
+        setVisible(not Win.Visible)
+    end
+end)
+
+--=====================================================================
+-- INIT
+--=====================================================================
+task.delay(1.7, function()
+    switchPage("Welcome", "Welcome", "KHUB edition · by Kyiel Pambid")
+end)
+
+print("[KHUB] KHUB edition v5.1 loaded · all tabs share the full effect package")
+print("[KHUB] firetouchinterest: " .. tostring(hasFireTouch))
+print("[KHUB] Toggle: RightShift / RightCtrl / K")
