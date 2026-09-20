@@ -1,0 +1,1599 @@
+--[[
+	KHUB · +1 TNT Mining
+	Full autofarm · English
+	Toggle: RightShift / RightCtrl / K
+]]
+repeat task.wait() until game:IsLoaded()
+
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
+local CoreGui           = game:GetService("CoreGui")
+local Workspace         = game:GetService("Workspace")
+local HttpService       = game:GetService("HttpService")
+local player            = Players.LocalPlayer
+
+local LOGO_ID  = "rbxassetid://127230219966945"
+local BG_ID    = "rbxassetid://127230219966945"
+local DISCORD  = "https://discord.gg/EKPb7BRDH8"
+local YOUTUBE  = "https://www.youtube.com/@kyielpambid"
+
+print("[KHUB] +1 TNT Mining starting...")
+
+local OrbState = { visible = true }
+
+-- ========== +1 TNT FEATURE ENGINE ==========
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterGui = game:GetService("StarterGui")
+
+local function notify(title, text)
+	pcall(function()
+		StarterGui:SetCore("SendNotification", {Title=title or "KHUB", Text=text or "", Duration=3})
+	end)
+end
+
+local ClientAction, ActiveBombsFolder, MineStateService, BombsConfig, AreasConfig, Signals
+local Session = nil
+local SessionReady = false
+
+task.spawn(function()
+	pcall(function()
+		if not player:GetAttribute("CoreInitialized") then
+			repeat task.wait(0.1) until player:GetAttribute("CoreInitialized") or not player.Parent
+		end
+		ClientAction = ReplicatedStorage:WaitForChild("Logic", 30)
+			:WaitForChild("Network"):WaitForChild("Remotes"):WaitForChild("ClientAction")
+		ActiveBombsFolder = workspace:WaitForChild("ActiveBombs", 30)
+		MineStateService = require(ReplicatedStorage.ClientLogic.Services.MineStateService)
+		BombsConfig = require(ReplicatedStorage.Logic.Configs.BombsConfig)
+		AreasConfig = require(ReplicatedStorage.Logic.Configs.AreasConfig)
+		Signals = require(ReplicatedStorage.Logic.Signals)
+	end)
+end)
+
+local function SafeRawGet(Object, Key)
+	if typeof(Object) ~= "table" then return nil end
+	local Ok, Value = pcall(rawget, Object, Key)
+	return Ok and Value or nil
+end
+local function GetMetaSafe(Object)
+	local Ok, Result = pcall(function()
+		if getrawmetatable then return getrawmetatable(Object) end
+		return getmetatable(Object)
+	end)
+	return Ok and Result or nil
+end
+local function GetMethodRaw(Object, Name)
+	if typeof(Object) ~= "table" then return nil end
+	local Direct = SafeRawGet(Object, Name)
+	if type(Direct) == "function" then return Direct end
+	local Meta = GetMetaSafe(Object)
+	if typeof(Meta) ~= "table" then return nil end
+	local Index = SafeRawGet(Meta, "__index")
+	if typeof(Index) == "table" then
+		local Method = SafeRawGet(Index, Name)
+		if type(Method) == "function" then return Method end
+	end
+	return nil
+end
+local function LooksLikeSession(Object)
+	if typeof(Object) ~= "table" then return false end
+	if SafeRawGet(Object, "HeldBombs") == nil then return false end
+	if SafeRawGet(Object, "ActiveBombs") == nil then return false end
+	if SafeRawGet(Object, "EquippedBomb") == nil then return false end
+	return GetMethodRaw(Object, "PlaceBomb") ~= nil
+		and GetMethodRaw(Object, "IgniteBomb") ~= nil
+		and GetMethodRaw(Object, "IsInMineArea") ~= nil
+end
+local function FindSession()
+	if getgc then
+		local Ok, Objects = pcall(getgc, true)
+		if Ok and typeof(Objects) == "table" then
+			for _, Object in ipairs(Objects) do
+				local Success, Match = pcall(LooksLikeSession, Object)
+				if Success and Match then return Object end
+			end
+		end
+	end
+	if getreg then
+		local Ok, Registry = pcall(getreg)
+		if Ok and typeof(Registry) == "table" then
+			for _, Object in pairs(Registry) do
+				local Success, Match = pcall(LooksLikeSession, Object)
+				if Success and Match then return Object end
+			end
+		end
+	end
+	return nil
+end
+
+task.spawn(function()
+	for i = 1, 60 do
+		Session = FindSession()
+		if Session then SessionReady = true; print("[KHUB] Session found"); break end
+		task.wait(0.5)
+	end
+	if not Session then warn("[KHUB] Session not found — features may not work") end
+end)
+
+local function CallSession(Name, ...)
+	if not Session then return nil end
+	local Method = GetMethodRaw(Session, Name)
+	if type(Method) ~= "function" then return nil end
+	local Args = table.pack(...)
+	local Ok, Result = pcall(function()
+		return Method(Session, table.unpack(Args, 1, Args.n))
+	end)
+	if not Ok then return nil end
+	return Result
+end
+
+local function CountTable(T)
+	local Count = 0
+	if typeof(T) == "table" then for _ in pairs(T) do Count += 1 end end
+	return Count
+end
+
+local function GetRoot()
+	local Character = player.Character
+	return Character and Character:FindFirstChild("HumanoidRootPart")
+end
+local function IsInMine()
+	return CallSession("IsInMineArea") == true
+end
+local function GetCurrentAreaName()
+	local Ok, AreaName = pcall(function() return MineStateService and MineStateService.GetAreaName() end)
+	return Ok and AreaName or nil
+end
+local function GetOwnedArea()
+	local OwnedAreas = SafeRawGet(Session, "OwnedAreas")
+	if typeof(OwnedAreas) ~= "table" or not AreasConfig then return nil end
+	local Ordered = AreasConfig.GetOrderedNames()
+	for Index = #Ordered, 1, -1 do
+		local AreaName = Ordered[Index]
+		if OwnedAreas[AreaName] or table.find(OwnedAreas, AreaName) then return AreaName end
+	end
+	return nil
+end
+local function OwnsArea(AreaName)
+	local OwnedAreas = SafeRawGet(Session, "OwnedAreas")
+	if typeof(OwnedAreas) ~= "table" then return false end
+	return OwnedAreas[AreaName] == true or table.find(OwnedAreas, AreaName) ~= nil
+end
+
+-- STATE
+local AutoFarm, AutoRefill, AutoCollect, AutoSell, AutoRebirth = false, true, false, false, false
+local AutoMineLuck, AutoBuyArea, AutoBuyBestBomb, AutoEquipBestBomb, AutoVoidRecovery = false, false, false, false, true
+local FarmBusy, RefillBusy, CollectBusy, SellBusy, RebirthBusy = false, false, false, false, false
+local BombShopBusy, BombShopTripBusy, AreaPurchaseBusy, MineReturnBusy = false, false, false, false
+local BombShopBusySince, BombShopRetryAt, VoidRecoveryCooldown = 0, 0, 0
+local ReservedBlocks, PendingBombs = {}, {}
+local RejectStreak, LastFarmProgress, LastFarmRecovery = 0, os.clock(), 0
+local FARM_DELAY, MAX_REJECTS = 0.09, 8
+local COLLECT_MOVE_DELAY, COLLECT_LOOP_DELAY = 0.07, 0.65
+local SELL_INTERVAL, REBIRTH_INTERVAL = 5, 5
+local UPGRADE_DELAY, MINE_LUCK_DELAY, AREA_BUY_DELAY, BOMB_SHOP_DELAY, BOMB_SHOP_LOBBY_WAIT = 1, 1, 2, 2, 2.1
+local LastSell, LastRebirth, LastFailedRefill = 0, 0, 0
+local UpgradeStates = { MaxHeldBombs=false, MaxActiveBombs=false, BombExplosionRadius=false, CollectionRange=false }
+
+-- SELL
+local function SellBlocks()
+	if SellBusy or not ClientAction then return false end
+	SellBusy = true
+	local BeforeMoney = tonumber(SafeRawGet(Session, "Money")) or 0
+	local Ok, Result = pcall(function() return ClientAction:InvokeServer({"SellBlocks", {}}) end)
+	if not Ok or typeof(Result) ~= "table" or Result.Success ~= true then SellBusy=false; return false end
+	local Payout = tonumber(Result.Payout) or 0
+	task.wait(0.15)
+	local CurrentMoney = tonumber(SafeRawGet(Session, "Money")) or BeforeMoney
+	if CurrentMoney == BeforeMoney and Payout > 0 then
+		CurrentMoney = BeforeMoney + Payout
+		pcall(function() rawset(Session, "Money", CurrentMoney) end)
+	end
+	pcall(function() if Signals then Signals.Fire("MoneyChanged", Session, CurrentMoney) end end)
+	SellBusy = false
+	return true
+end
+
+-- MINE BLOCKS
+local function ParseBlockName(Name)
+	if type(Name) ~= "string" then return nil end
+	local CleanName = Name:match("^[^:]+:(.+)$") or Name
+	local A, B, C = CleanName:match("^(%d+)_(%d+)_(%d+)$")
+	if A then return tonumber(A), tonumber(B), tonumber(C) end
+	local DynamicA, DynamicB = CleanName:match("^Dynamic_(%d+)_(%d+)$")
+	if DynamicA then return 100000 + tonumber(DynamicA), tonumber(DynamicB), 0 end
+	return nil
+end
+local function GetMineBlocks()
+	if not IsInMine() then return {} end
+	local Folder = workspace:FindFirstChild("ClientMineBlocks")
+	if not Folder then return {} end
+	local Blocks = {}
+	for _, Object in ipairs(Folder:GetDescendants()) do
+		if Object:IsA("BasePart") then
+			local A, B, C = ParseBlockName(Object.Name)
+			if A then Blocks[#Blocks+1] = {Part=Object, A=A, B=B, C=C} end
+		end
+	end
+	table.sort(Blocks, function(X,Y)
+		if X.A~=Y.A then return X.A<Y.A end
+		if X.B~=Y.B then return X.B<Y.B end
+		return X.C<Y.C
+	end)
+	return Blocks
+end
+local function ReserveBlock(Block, Seconds)
+	if Block then ReservedBlocks[Block.Name] = os.clock() + (Seconds or 2) end
+end
+local function IsReserved(Block)
+	local Expire = ReservedBlocks[Block.Name]
+	if not Expire then return false end
+	if os.clock() >= Expire then ReservedBlocks[Block.Name]=nil; return false end
+	return true
+end
+local function ClearReservations() table.clear(ReservedBlocks) end
+
+local function SessionActiveBombCount()
+	local Count = 0
+	for _ in SafeRawGet(Session, "ActiveBombs") or {} do Count += 1 end
+	return Count
+end
+local function MaxActiveBombs()
+	return math.max(math.floor(tonumber(SafeRawGet(Session, "MaxActiveBombs")) or 1), 1)
+end
+local function RefreshPendingBombs()
+	if not ActiveBombsFolder then return end
+	local SessionBombs = SafeRawGet(Session, "ActiveBombs")
+	local Now = os.clock()
+	for Id, Data in pairs(PendingBombs) do
+		local InSession = SessionBombs and SessionBombs[Id] ~= nil
+		local InWorkspace = ActiveBombsFolder:FindFirstChild(Id) ~= nil
+		if InSession or InWorkspace then PendingBombs[Id]=nil
+		elseif Now - Data.Created > 2.5 then PendingBombs[Id]=nil end
+	end
+end
+local function EffectiveActiveCount()
+	RefreshPendingBombs()
+	local Replicated = math.max(SessionActiveBombCount(), ActiveBombsFolder and #ActiveBombsFolder:GetChildren() or 0)
+	return Replicated + CountTable(PendingBombs)
+end
+local function IsNearRenderedBomb(Position)
+	if not ActiveBombsFolder then return false end
+	for _, Bomb in ipairs(ActiveBombsFolder:GetChildren()) do
+		local BombPosition
+		if Bomb:IsA("Model") then BombPosition = Bomb:GetPivot().Position
+		elseif Bomb:IsA("BasePart") then BombPosition = Bomb.Position end
+		if BombPosition then
+			local Delta = Vector2.new(Position.X, Position.Z) - Vector2.new(BombPosition.X, BombPosition.Z)
+			if Delta.Magnitude < 4 then return true end
+		end
+	end
+	return false
+end
+local function IsNearPendingBomb(Position)
+	for _, Data in pairs(PendingBombs) do
+		local P = Data.Position
+		if P then
+			local Delta = Vector2.new(Position.X, Position.Z) - Vector2.new(P.X, P.Z)
+			if Delta.Magnitude < 4 then return true end
+		end
+	end
+	return false
+end
+local function GetNextBombBlock()
+	if not IsInMine() then return nil end
+	local Root = GetRoot()
+	local Candidates = {}
+	for _, Entry in ipairs(GetMineBlocks()) do
+		local Part = Entry.Part
+		if Part and Part.Parent and not IsReserved(Part) then
+			local Distance = Root and (Part.Position - Root.Position).Magnitude or 0
+			Candidates[#Candidates+1] = {Part=Part, Distance=Distance, A=Entry.A, B=Entry.B, C=Entry.C}
+		end
+	end
+	table.sort(Candidates, function(X,Y)
+		if X.Distance~=Y.Distance then return X.Distance<Y.Distance end
+		if X.A~=Y.A then return X.A<Y.A end
+		if X.B~=Y.B then return X.B<Y.B end
+		return X.C<Y.C
+	end)
+	return Candidates[1] and Candidates[1].Part or nil
+end
+local function GetBombRootSize()
+	local Models = ReplicatedStorage:FindFirstChild("Assets")
+	Models = Models and Models:FindFirstChild("Models")
+	local Template = Models and Models:FindFirstChild("BombTemplate")
+	local Root = Template and Template:FindFirstChild("Root")
+	if Root and Root:IsA("BasePart") then return Root.Size end
+	return Vector3.new(4,4,4)
+end
+local function GetPlacementCandidates(Block)
+	local BombSize = GetBombRootSize()
+	local BlockHalf, BombHalf, Gap = Block.Size/2, BombSize/2, 0.2
+	local Up = Block.CFrame.UpVector * (BlockHalf.Y + BombHalf.Y + Gap)
+	local Right = Block.CFrame.RightVector * (BlockHalf.X + BombHalf.X + Gap)
+	local Look = Block.CFrame.LookVector * (BlockHalf.Z + BombHalf.Z + Gap)
+	local Position = Block.Position
+	return {CFrame.new(Position+Up), CFrame.new(Position+Right), CFrame.new(Position-Right), CFrame.new(Position+Look), CFrame.new(Position-Look)}
+end
+local function PlaceBomb(Block)
+	if not IsInMine() or not Block or not Block.Parent then return nil end
+	local BombName = SafeRawGet(Session, "EquippedBomb")
+	if not BombName then return nil end
+	for _, PlacementCFrame in ipairs(GetPlacementCandidates(Block)) do
+		if not IsInMine() or not Block.Parent then return nil end
+		if not IsNearRenderedBomb(PlacementCFrame.Position) and not IsNearPendingBomb(PlacementCFrame.Position) then
+			local Result = CallSession("PlaceBomb", PlacementCFrame, nil, BombName)
+			if typeof(Result)=="table" and Result.Success and Result.Id then
+				local Id = tostring(Result.Id)
+				PendingBombs[Id] = {Created=os.clock(), Position=PlacementCFrame.Position}
+				LastFarmProgress = os.clock()
+				return Id
+			end
+		end
+		task.wait(0.025)
+	end
+	return nil
+end
+local function IgniteBomb(Id)
+	if not IsInMine() or not Id then return false end
+	for Attempt = 1, 4 do
+		local Result = CallSession("IgniteBomb", Id)
+		if typeof(Result)=="table" and Result.Success==true then LastFarmProgress=os.clock(); return true end
+		task.wait(Attempt*0.05)
+	end
+	return false
+end
+
+local function GetAreaModel(AreaName)
+	local Map = workspace:FindFirstChild("Map")
+	local Areas = Map and Map:FindFirstChild("Areas")
+	if not Areas then return nil end
+	for _, Area in ipairs(Areas:GetChildren()) do
+		if (Area:GetAttribute("AreaName") or Area.Name) == AreaName then return Area end
+	end
+	return nil
+end
+local function GetMineReturnCFrame()
+	local AreaName = GetOwnedArea() or GetCurrentAreaName()
+	if not AreaName then return nil end
+	local Area = GetAreaModel(AreaName)
+	if not Area then return nil end
+	local Mine = Area:FindFirstChild("Mine")
+	if not Mine then return nil end
+	local BlocksArea = Mine:FindFirstChild("BlocksArea")
+	if not BlocksArea or not BlocksArea:IsA("BasePart") then return nil end
+	local Position = BlocksArea.Position + BlocksArea.CFrame.UpVector * (BlocksArea.Size.Y/2 + 6)
+	return CFrame.new(Position, Position + BlocksArea.CFrame.LookVector)
+end
+local function ReturnToMineIfNeeded()
+	if not AutoFarm or RefillBusy or RebirthBusy or MineReturnBusy or BombShopBusy or BombShopTripBusy or AreaPurchaseBusy then return false end
+	if IsInMine() then return true end
+	local Root, Target = GetRoot(), GetMineReturnCFrame()
+	if not Root or not Target then return false end
+	MineReturnBusy = true
+	Root.AssemblyLinearVelocity = Vector3.zero
+	Root.AssemblyAngularVelocity = Vector3.zero
+	Root.CFrame = Target
+	local Deadline = os.clock()+5
+	while os.clock() < Deadline do
+		if IsInMine() then ClearReservations(); table.clear(PendingBombs); MineReturnBusy=false; return true end
+		task.wait(0.1)
+	end
+	MineReturnBusy = false
+	return false
+end
+local function RecoverFromVoid()
+	if os.clock() < VoidRecoveryCooldown then return false end
+	local Root = GetRoot()
+	if not Root then return false end
+	if Root.Position.Y > workspace.FallenPartsDestroyHeight + 128 then return false end
+	VoidRecoveryCooldown = os.clock()+2
+	return CallSession("RecoverFromVoid") ~= false
+end
+local function ValidatePlayerPosition()
+	local Root = GetRoot()
+	if not Root then return end
+	if Root.Position.Y <= workspace.FallenPartsDestroyHeight + 128 then RecoverFromVoid(); return end
+	if IsInMine() then
+		local Safe = GetMineReturnCFrame()
+		if Safe and Root.Position.Y < Safe.Position.Y - 80 then
+			Root.AssemblyLinearVelocity = Vector3.zero
+			Root.CFrame = Safe
+		end
+	end
+end
+local function GetLobbySpawn()
+	local Map = workspace:FindFirstChild("Map")
+	local Lobby = Map and Map:FindFirstChild("Lobby")
+	return Lobby and Lobby:FindFirstChild("SpawnLocation")
+end
+local function RefillBombs()
+	if RefillBusy or BombShopTripBusy or not AutoRefill or not IsInMine() then return false end
+	local Held = tonumber(SafeRawGet(Session, "HeldBombs")) or 0
+	if Held > 0 then return true end
+	if os.clock() - LastFailedRefill < 5 then return false end
+	local Root, Spawn = GetRoot(), GetLobbySpawn()
+	if not Root or not Spawn or not Spawn:IsA("BasePart") then return false end
+	RefillBusy = true; FarmBusy = false
+	Root.AssemblyLinearVelocity = Vector3.zero
+	Root.AssemblyAngularVelocity = Vector3.zero
+	Root.CFrame = Spawn.CFrame * CFrame.new(0,4,0)
+	local LeaveTimeout = os.clock()+4
+	while os.clock() < LeaveTimeout do if not IsInMine() then break end; task.wait(0.1) end
+	if IsInMine() then LastFailedRefill=os.clock(); RefillBusy=false; return false end
+	if AutoSell then SellBlocks() end
+	local RefillTimeout = os.clock()+10
+	while os.clock() < RefillTimeout do
+		local Current = tonumber(SafeRawGet(Session, "HeldBombs")) or 0
+		if Current > 0 then
+			ClearReservations(); table.clear(PendingBombs); RejectStreak=0; RefillBusy=false
+			if AutoFarm then task.wait(0.25); ReturnToMineIfNeeded() end
+			return true
+		end
+		task.wait(0.4)
+	end
+	LastFailedRefill=os.clock(); RefillBusy=false; return false
+end
+local function RecoverFarmState()
+	if os.clock() - LastFarmRecovery < 2 then return end
+	LastFarmRecovery = os.clock()
+	ClearReservations(); table.clear(PendingBombs); RejectStreak=0; FarmBusy=false
+	if BombShopBusy and BombShopBusySince > 0 and os.clock() - BombShopBusySince > 3 then
+		BombShopBusy=false; BombShopBusySince=0
+	end
+	ValidatePlayerPosition()
+	if AutoFarm and not IsInMine() and not RefillBusy and not RebirthBusy then
+		task.spawn(ReturnToMineIfNeeded)
+	end
+end
+local function FarmTick()
+	if not AutoFarm or FarmBusy or RefillBusy or RebirthBusy or MineReturnBusy or BombShopBusy or AreaPurchaseBusy then return end
+	if not IsInMine() then RecoverFarmState(); return end
+	ValidatePlayerPosition()
+	local Held = tonumber(SafeRawGet(Session, "HeldBombs")) or 0
+	if Held <= 0 then if AutoRefill then task.spawn(RefillBombs) end; return end
+	RefreshPendingBombs()
+	if EffectiveActiveCount() >= MaxActiveBombs() then return end
+	FarmBusy = true
+	local Block = GetNextBombBlock()
+	if not Block then
+		FarmBusy = false
+		if os.clock() - LastFarmProgress > 1.5 then RecoverFarmState() end
+		return
+	end
+	ReserveBlock(Block, 1.5)
+	local Id = PlaceBomb(Block)
+	if Id then
+		RejectStreak=0; ReserveBlock(Block, 3); IgniteBomb(Id)
+	else
+		ReserveBlock(Block, 0.35); RejectStreak += 1
+		if RejectStreak >= 5 then RecoverFarmState() end
+	end
+	FarmBusy = false
+end
+
+-- COLLECT
+local function GetCollectiblePosition(Object)
+	if Object:IsA("BasePart") then return Object.Position end
+	if Object:IsA("Model") then return Object:GetPivot().Position end
+	local Part = Object:FindFirstChildWhichIsA("BasePart", true)
+	return Part and Part.Position
+end
+local function CollectOne(Id)
+	local Result = CallSession("CollectBlocks", {Id}, true)
+	if typeof(Result)=="table" then
+		if Result.Success and GetMethodRaw(Session, "ApplyCollectedBlocks") then
+			CallSession("ApplyCollectedBlocks", Result)
+		end
+		return Result.Success == true
+	end
+	return false
+end
+local function CollectEverything()
+	if not AutoCollect or CollectBusy or RefillBusy or RebirthBusy or MineReturnBusy or BombShopBusy or BombShopTripBusy or not IsInMine() then return end
+	CollectBusy = true
+	local Folder = workspace:FindFirstChild("ClientCollectibleBlocks")
+	local Root = GetRoot()
+	if not Folder or not Root then CollectBusy=false; return end
+	local ReturnCFrame = Root.CFrame
+	local Items = {}
+	for _, Object in ipairs(Folder:GetChildren()) do
+		if string.find(Object.Name, ":", 1, true) then
+			local Position = GetCollectiblePosition(Object)
+			if Position then Items[#Items+1] = {Id=Object.Name, Position=Position} end
+		end
+	end
+	for _, Item in ipairs(Items) do
+		if not AutoCollect or not IsInMine() or RefillBusy or RebirthBusy or MineReturnBusy or BombShopBusy then break end
+		local CurrentFolder = workspace:FindFirstChild("ClientCollectibleBlocks")
+		local Object = CurrentFolder and CurrentFolder:FindFirstChild(Item.Id)
+		if Object then
+			Root = GetRoot()
+			local Position = GetCollectiblePosition(Object)
+			if Root and Position then
+				Root.AssemblyLinearVelocity = Vector3.zero
+				Root.AssemblyAngularVelocity = Vector3.zero
+				Root.CFrame = CFrame.new(Position + Vector3.new(0,2.5,0))
+				task.wait(COLLECT_MOVE_DELAY)
+				CollectOne(Item.Id)
+				task.wait(0.035)
+			end
+		end
+	end
+	Root = GetRoot()
+	if Root and IsInMine() and not RefillBusy then
+		Root.AssemblyLinearVelocity = Vector3.zero
+		Root.CFrame = ReturnCFrame
+		task.wait(0.1)
+		ValidatePlayerPosition()
+	end
+	CollectBusy = false
+end
+
+local function PerformRebirth()
+	if RebirthBusy or RefillBusy or BombShopBusy or BombShopTripBusy or AreaPurchaseBusy then return false end
+	RebirthBusy = true; FarmBusy = false
+	local Result = CallSession("PerformRebirth")
+	if typeof(Result)=="table" and Result.Success then
+		ClearReservations(); table.clear(PendingBombs); RejectStreak=0
+		task.wait(1); RebirthBusy=false
+		if AutoFarm then task.spawn(ReturnToMineIfNeeded) end
+		return true
+	end
+	RebirthBusy = false
+	return false
+end
+local function BuyUpgrade(Name)
+	local Result = CallSession("BuyUpgrade", Name)
+	return typeof(Result)=="table" and Result.Success==true
+end
+local function BuyMineLuck()
+	local AreaName = GetOwnedArea() or GetCurrentAreaName()
+	if not AreaName then return false end
+	local Result = CallSession("BuyUpgrade", "MineLuck", AreaName)
+	return typeof(Result)=="table" and Result.Success==true
+end
+
+-- AREA
+local function GetNextAreaToBuy()
+	local HighestOwned = GetOwnedArea()
+	if not HighestOwned or not AreasConfig then return nil end
+	return AreasConfig.GetNextName(HighestOwned)
+end
+local function GetAreaPrice(AreaName)
+	local Config = AreasConfig and AreasConfig[AreaName]
+	return Config and tonumber(Config.Price) or nil
+end
+local function MirrorOwnedArea(AreaName)
+	local OwnedAreas = SafeRawGet(Session, "OwnedAreas")
+	if typeof(OwnedAreas) ~= "table" then return end
+	local ArrayStyle = false
+	for Key, Value in pairs(OwnedAreas) do
+		if typeof(Key)=="number" and typeof(Value)=="string" then ArrayStyle=true; break end
+	end
+	if ArrayStyle then
+		if not table.find(OwnedAreas, AreaName) then table.insert(OwnedAreas, AreaName) end
+	else OwnedAreas[AreaName]=true end
+end
+local function WaitForAreaRendered(AreaName, Timeout)
+	local Deadline = os.clock() + (Timeout or 8)
+	while os.clock() < Deadline do
+		local Area = GetAreaModel(AreaName)
+		if Area and Area:GetAttribute("MineRenderReady") ~= false then
+			local Mine = Area:FindFirstChild("Mine")
+			local BlocksArea = Mine and Mine:FindFirstChild("BlocksArea")
+			if BlocksArea and BlocksArea:IsA("BasePart") then return Area end
+		end
+		task.wait(0.1)
+	end
+	return nil
+end
+local function TeleportToAreaMine(AreaName)
+	local Area = WaitForAreaRendered(AreaName, 10)
+	if not Area then return false end
+	local Mine = Area:FindFirstChild("Mine")
+	local BlocksArea = Mine and Mine:FindFirstChild("BlocksArea")
+	local Root = GetRoot()
+	if not Root or not BlocksArea or not BlocksArea:IsA("BasePart") then return false end
+	local Position = BlocksArea.Position + BlocksArea.CFrame.UpVector * (BlocksArea.Size.Y/2 + 6)
+	Root.AssemblyLinearVelocity = Vector3.zero
+	Root.AssemblyAngularVelocity = Vector3.zero
+	Root.CFrame = CFrame.new(Position, Position + BlocksArea.CFrame.LookVector)
+	local Deadline = os.clock()+6
+	while os.clock() < Deadline do
+		if GetCurrentAreaName()==AreaName and IsInMine() then
+			ClearReservations(); table.clear(PendingBombs); RejectStreak=0; LastFarmProgress=os.clock()
+			return true
+		end
+		task.wait(0.1)
+	end
+	return false
+end
+local function PurchaseNextArea()
+	if AreaPurchaseBusy or RefillBusy or RebirthBusy or BombShopBusy or BombShopTripBusy or MineReturnBusy or not ClientAction then return false end
+	local NextArea = GetNextAreaToBuy()
+	if not NextArea then return false end
+	local Price = GetAreaPrice(NextArea)
+	local Money = tonumber(SafeRawGet(Session, "Money")) or 0
+	if not Price or Money < Price then return false end
+	AreaPurchaseBusy = true; FarmBusy = false
+	local Ok, Result = pcall(function() return ClientAction:InvokeServer({"PurchaseArea", {NextArea}}) end)
+	if not Ok or (typeof(Result)=="table" and Result.Success==false) then AreaPurchaseBusy=false; return false end
+	task.wait(0.2)
+	local Confirmed = OwnsArea(NextArea) or (typeof(Result)=="table" and Result.Success==true)
+	if not Confirmed then AreaPurchaseBusy=false; return false end
+	if not OwnsArea(NextArea) then MirrorOwnedArea(NextArea) end
+	pcall(function() if Signals then Signals.Fire("OwnedAreasChanged", Session, SafeRawGet(Session, "OwnedAreas")) end end)
+	task.wait(0.25)
+	local Entered = TeleportToAreaMine(NextArea)
+	AreaPurchaseBusy = false
+	return Entered
+end
+
+-- BOMB SHOP
+local SortedBombs = {}
+task.spawn(function()
+	task.wait(2)
+	if not BombsConfig then return end
+	for Name, Config in pairs(BombsConfig) do
+		if Name ~= "Default" and typeof(Config)=="table" then
+			SortedBombs[#SortedBombs+1] = {Name=Name, Price=tonumber(Config.Price) or 0, Damage=tonumber(Config.DamagePerClick) or 0}
+		end
+	end
+	table.sort(SortedBombs, function(A,B)
+		if A.Damage~=B.Damage then return A.Damage>B.Damage end
+		return A.Price>B.Price
+	end)
+end)
+local function OwnsBomb(Name) return CallSession("OwnsBomb", Name)==true end
+local function GetBestOwnedBomb()
+	for _, Bomb in ipairs(SortedBombs) do if OwnsBomb(Bomb.Name) then return Bomb end end
+	return nil
+end
+local function GetBestAffordableUnownedBomb()
+	local Money = tonumber(SafeRawGet(Session, "Money")) or 0
+	for _, Bomb in ipairs(SortedBombs) do
+		if Bomb.Price <= Money and not OwnsBomb(Bomb.Name) then return Bomb end
+	end
+	return nil
+end
+local function InvokeBombAction(Action, Name)
+	if not ClientAction then return nil end
+	local Ok, Result = pcall(function() return ClientAction:InvokeServer({Action, {Name}}) end)
+	return Ok and Result or nil
+end
+local function MirrorOwnedBomb(Name)
+	local OwnedBombs = SafeRawGet(Session, "OwnedBombs")
+	if typeof(OwnedBombs) ~= "table" then return end
+	local ArrayStyle = false
+	for Key, Value in pairs(OwnedBombs) do
+		if typeof(Key)=="number" and typeof(Value)=="string" then ArrayStyle=true; break end
+	end
+	if ArrayStyle then
+		if not table.find(OwnedBombs, Name) then table.insert(OwnedBombs, Name) end
+	else OwnedBombs[Name]=true end
+end
+local function MirrorEquippedBomb(Name)
+	if SafeRawGet(Session, "EquippedBomb") ~= Name then pcall(function() rawset(Session, "EquippedBomb", Name) end) end
+end
+local function RefreshBombUi(Action, Name)
+	pcall(function()
+		if not Signals then return end
+		if Action=="BuyBomb" then Signals.Fire("BombGranted", Name); Signals.Fire("OwnedBombsChanged", Name) end
+		if Action=="EquipBomb" then Signals.Fire("EquippedBombChanged", Name) end
+	end)
+end
+local function WaitUntilNoActiveBombs(Timeout)
+	local Deadline = os.clock() + (Timeout or 8)
+	while os.clock() < Deadline do
+		RefreshPendingBombs()
+		if EffectiveActiveCount() <= 0 then return true end
+		task.wait(0.1)
+	end
+	table.clear(PendingBombs)
+	return EffectiveActiveCount() <= 0
+end
+local function GetBombShopPromptPart()
+	local Map = workspace:FindFirstChild("Map")
+	local Lobby = Map and Map:FindFirstChild("Lobby")
+	local Shop = Lobby and Lobby:FindFirstChild("BombShop")
+	local PromptPart = Shop and Shop:FindFirstChild("PromptPart")
+	if PromptPart and PromptPart:IsA("BasePart") then return PromptPart end
+	return nil
+end
+local function GoToBombShop()
+	local Root, PromptPart = GetRoot(), GetBombShopPromptPart()
+	if not Root or not PromptPart then return false end
+	Root.AssemblyLinearVelocity = Vector3.zero
+	Root.AssemblyAngularVelocity = Vector3.zero
+	Root.CFrame = PromptPart.CFrame * CFrame.new(0,3,-4)
+	task.wait(BOMB_SHOP_LOBBY_WAIT)
+	return true
+end
+local function WaitForBombOwned(Name, Timeout)
+	local Deadline = os.clock() + (Timeout or 3)
+	while os.clock() < Deadline do if OwnsBomb(Name) then return true end; task.wait(0.1) end
+	return false
+end
+local function WaitForBombEquipped(Name, Timeout)
+	local Deadline = os.clock() + (Timeout or 3)
+	while os.clock() < Deadline do
+		if SafeRawGet(Session, "EquippedBomb")==Name then return true end
+		task.wait(0.1)
+	end
+	return false
+end
+local function BuyBombAtShop(Name)
+	local Result = InvokeBombAction("BuyBomb", Name)
+	if typeof(Result)=="table" and Result.Success==false then return false end
+	local Confirmed = WaitForBombOwned(Name, 3)
+	if not Confirmed and typeof(Result)=="table" and Result.Success==true then MirrorOwnedBomb(Name); Confirmed=true end
+	if Confirmed then RefreshBombUi("BuyBomb", Name) end
+	return Confirmed
+end
+local function EquipBombAtShop(Name)
+	if not OwnsBomb(Name) then return false end
+	if SafeRawGet(Session, "EquippedBomb")==Name then return true end
+	local Result = InvokeBombAction("EquipBomb", Name)
+	if typeof(Result)=="table" and Result.Success==false then return false end
+	local Confirmed = WaitForBombEquipped(Name, 3)
+	if not Confirmed and typeof(Result)=="table" and Result.Success==true then MirrorEquippedBomb(Name); Confirmed=true end
+	if Confirmed then MirrorEquippedBomb(Name); RefreshBombUi("EquipBomb", Name) end
+	return Confirmed
+end
+local function ReturnAfterBombShop(PreviousArea, PreviousCFrame)
+	local TargetArea = GetOwnedArea() or PreviousArea
+	if TargetArea and TeleportToAreaMine(TargetArea) then return true end
+	local Root = GetRoot()
+	if Root and PreviousCFrame then
+		Root.AssemblyLinearVelocity = Vector3.zero
+		Root.AssemblyAngularVelocity = Vector3.zero
+		Root.CFrame = PreviousCFrame
+		task.wait(0.35)
+		return true
+	end
+	return false
+end
+local function RunBombShopTrip()
+	if BombShopTripBusy or BombShopBusy or RefillBusy or RebirthBusy or AreaPurchaseBusy or MineReturnBusy or os.clock() < BombShopRetryAt then return false end
+	local BombToBuy = AutoBuyBestBomb and GetBestAffordableUnownedBomb() or nil
+	local BestOwned = AutoEquipBestBomb and GetBestOwnedBomb() or nil
+	local NeedsEquip = BestOwned and SafeRawGet(Session, "EquippedBomb") ~= BestOwned.Name
+	if not BombToBuy and not NeedsEquip then return false end
+	BombShopTripBusy = true; FarmBusy = false; CollectBusy = false
+	WaitUntilNoActiveBombs(8)
+	local Root = GetRoot()
+	local PreviousCFrame = Root and Root.CFrame or nil
+	local PreviousArea = GetCurrentAreaName() or GetOwnedArea()
+	if not GoToBombShop() then BombShopRetryAt=os.clock()+3; BombShopTripBusy=false; return false end
+	BombShopBusy = true; BombShopBusySince = os.clock()
+	local DidWork = false
+	if AutoBuyBestBomb then
+		BombToBuy = GetBestAffordableUnownedBomb()
+		if BombToBuy and BuyBombAtShop(BombToBuy.Name) then
+			DidWork = true
+			if AutoEquipBestBomb then task.wait(0.1); EquipBombAtShop(BombToBuy.Name) end
+		end
+	end
+	if AutoEquipBestBomb then
+		BestOwned = GetBestOwnedBomb()
+		if BestOwned and SafeRawGet(Session, "EquippedBomb") ~= BestOwned.Name then
+			if EquipBombAtShop(BestOwned.Name) then DidWork = true end
+		end
+	end
+	BombShopBusy = false; BombShopBusySince = 0
+	task.wait(0.25)
+	ReturnAfterBombShop(PreviousArea, PreviousCFrame)
+	ClearReservations(); table.clear(PendingBombs); RejectStreak=0; LastFarmProgress=os.clock()
+	task.wait(0.35)
+	BombShopTripBusy = false
+	if not DidWork then BombShopRetryAt = os.clock()+2 end
+	return DidWork
+end
+
+-- LOOPS
+task.spawn(function()
+	while true do
+		if AutoFarm then
+			if not IsInMine() and not RefillBusy and not RebirthBusy and not MineReturnBusy and not BombShopBusy and not BombShopTripBusy and not AreaPurchaseBusy then
+				ReturnToMineIfNeeded()
+			end
+			if IsInMine() and not BombShopBusy and not BombShopTripBusy and not AreaPurchaseBusy then FarmTick() end
+			task.wait(FARM_DELAY)
+		else task.wait(0.2) end
+	end
+end)
+task.spawn(function()
+	while true do
+		if AutoCollect then CollectEverything(); task.wait(COLLECT_LOOP_DELAY)
+		else task.wait(0.25) end
+	end
+end)
+task.spawn(function()
+	while true do
+		if AutoSell and not RefillBusy and not RebirthBusy and not BombShopBusy and not BombShopTripBusy then
+			if os.clock() - LastSell >= SELL_INTERVAL then LastSell=os.clock(); SellBlocks() end
+		end
+		task.wait(0.25)
+	end
+end)
+task.spawn(function()
+	while true do
+		if AutoRebirth and not RefillBusy and not BombShopBusy and not BombShopTripBusy then
+			if os.clock() - LastRebirth >= REBIRTH_INTERVAL then LastRebirth=os.clock(); PerformRebirth() end
+		end
+		task.wait(0.25)
+	end
+end)
+task.spawn(function()
+	while true do
+		if not FarmBusy and not RefillBusy and not RebirthBusy and not MineReturnBusy and not BombShopBusy and not BombShopTripBusy then
+			for Name, Enabled in pairs(UpgradeStates) do
+				if Enabled then BuyUpgrade(Name); task.wait(0.1) end
+			end
+		end
+		task.wait(UPGRADE_DELAY)
+	end
+end)
+task.spawn(function()
+	while true do
+		if AutoMineLuck and not FarmBusy and not RefillBusy and not RebirthBusy and not MineReturnBusy and not BombShopBusy and not BombShopTripBusy then
+			BuyMineLuck()
+		end
+		task.wait(MINE_LUCK_DELAY)
+	end
+end)
+task.spawn(function()
+	while true do
+		if AutoBuyArea and not AreaPurchaseBusy and not RefillBusy and not RebirthBusy and not BombShopBusy and not BombShopTripBusy and not MineReturnBusy then
+			PurchaseNextArea()
+		end
+		task.wait(AREA_BUY_DELAY)
+	end
+end)
+task.spawn(function()
+	while true do
+		if not BombShopTripBusy and not BombShopBusy and not RefillBusy and not RebirthBusy and not AreaPurchaseBusy and not MineReturnBusy then
+			if AutoBuyBestBomb or AutoEquipBestBomb then
+				local Affordable = AutoBuyBestBomb and GetBestAffordableUnownedBomb() or nil
+				local Best = AutoEquipBestBomb and GetBestOwnedBomb() or nil
+				local NeedsEquip = Best and SafeRawGet(Session, "EquippedBomb") ~= Best.Name
+				if Affordable or NeedsEquip then RunBombShopTrip() end
+			end
+		end
+		task.wait(BOMB_SHOP_DELAY)
+	end
+end)
+task.spawn(function()
+	while true do
+		if AutoFarm and not RefillBusy and not RebirthBusy and not BombShopTripBusy and not AreaPurchaseBusy then
+			local Held = tonumber(SafeRawGet(Session, "HeldBombs")) or 0
+			if Held > 0 and EffectiveActiveCount()==0 and os.clock()-LastFarmProgress > 3 then RecoverFarmState() end
+		end
+		task.wait(0.5)
+	end
+end)
+task.spawn(function()
+	while true do
+		if AutoVoidRecovery then RecoverFromVoid() end
+		task.wait(0.1)
+	end
+end)
+
+
+local ConfigFolder = "KHUB_Plus1TNT_Configs"
+
+local THEME = {
+	bg = Color3.fromRGB(5, 7, 18), panel = Color3.fromRGB(10, 14, 32),
+	card = Color3.fromRGB(17, 23, 48), inner = Color3.fromRGB(10, 14, 30),
+	accent = Color3.fromRGB(70, 225, 255), accent2 = Color3.fromRGB(175, 110, 255),
+	gold = Color3.fromRGB(255, 216, 140), text = Color3.fromRGB(238, 242, 255),
+	dim = Color3.fromRGB(150, 160, 205), mute = Color3.fromRGB(100, 112, 158),
+	stroke = Color3.fromRGB(80, 120, 210), green = Color3.fromRGB(95, 235, 165),
+	red = Color3.fromRGB(255, 100, 120), off = Color3.fromRGB(38, 44, 80),
+	white = Color3.fromRGB(255, 255, 255),
+}
+
+local function corner(p, r)
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, r or 10); c.Parent = p; return c
+end
+local function mkstroke(p, col, th, tr)
+	local s = Instance.new("UIStroke"); s.Color = col or THEME.stroke; s.Thickness = th or 1.2; s.Transparency = tr or 0.35; s.Parent = p; return s
+end
+local function openLink(url)
+	pcall(function() if openlink then openlink(url) elseif setclipboard then setclipboard(url) end end)
+end
+
+local Parent = CoreGui
+pcall(function() if gethui then Parent = gethui() end end)
+pcall(function()
+	for _, n in ipairs({"KHUB_Plus1TNT", "KHUB_UI"}) do
+		local o = Parent:FindFirstChild(n); if o then o:Destroy() end
+		local pg = player:FindFirstChild("PlayerGui")
+		if pg then local o2 = pg:FindFirstChild(n); if o2 then o2:Destroy() end end
+	end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_Plus1TNT"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999999
+pcall(function() if gethui then ScreenGui.Parent = gethui() end end)
+if not ScreenGui.Parent then pcall(function() ScreenGui.Parent = CoreGui end) end
+if not ScreenGui.Parent then ScreenGui.Parent = player:WaitForChild("PlayerGui") end
+
+-- Splash
+local Splash = Instance.new("Frame")
+Splash.Size = UDim2.new(1,0,1,0); Splash.BackgroundColor3 = Color3.fromRGB(4,5,14)
+Splash.BorderSizePixel = 0; Splash.ZIndex = 200; Splash.Parent = ScreenGui
+local SpTitle = Instance.new("TextLabel")
+SpTitle.Size = UDim2.new(1,0,0,60); SpTitle.Position = UDim2.new(0,0,0.42,0)
+SpTitle.BackgroundTransparency = 1; SpTitle.Text = "KHUB"
+SpTitle.Font = Enum.Font.GothamBlack; SpTitle.TextSize = 54
+SpTitle.TextColor3 = Color3.new(1,1,1); SpTitle.ZIndex = 201; SpTitle.Parent = Splash
+local SpG = Instance.new("UIGradient")
+SpG.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, THEME.accent), ColorSequenceKeypoint.new(0.4, Color3.new(1,1,1)),
+	ColorSequenceKeypoint.new(0.7, THEME.accent2), ColorSequenceKeypoint.new(1, THEME.gold),
+})
+SpG.Parent = SpTitle
+local SpSub = Instance.new("TextLabel")
+SpSub.Size = UDim2.new(1,0,0,24); SpSub.Position = UDim2.new(0,0,0.52,0)
+SpSub.BackgroundTransparency = 1; SpSub.Text = "+1 TNT Mining"
+SpSub.Font = Enum.Font.GothamBold; SpSub.TextSize = 16; SpSub.TextColor3 = THEME.gold
+SpSub.ZIndex = 201; SpSub.Parent = Splash
+task.spawn(function()
+	task.wait(1.5)
+	TweenService:Create(Splash, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+	task.wait(0.55); pcall(function() Splash:Destroy() end)
+end)
+
+local BASE_W, BASE_H = 620, 420
+local Scale = Instance.new("UIScale"); Scale.Parent = ScreenGui
+local function updateScale()
+	local cam = Workspace.CurrentCamera; if not cam then return end
+	local vs = cam.ViewportSize
+	Scale.Scale = math.clamp(math.min(vs.X / 900, vs.Y / 600), 0.55, 1.15)
+end
+updateScale()
+pcall(function() Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale) end)
+
+local Win = Instance.new("Frame")
+Win.Name = "Win"; Win.Size = UDim2.new(0, BASE_W, 0, BASE_H)
+Win.Position = UDim2.new(0.5, -BASE_W/2, 0.5, -BASE_H/2)
+Win.BackgroundColor3 = THEME.bg; Win.BorderSizePixel = 0
+Win.ClipsDescendants = true; Win.Visible = true; Win.Parent = ScreenGui
+corner(Win, 20); mkstroke(Win, THEME.accent2, 2, 0.3)
+
+local WinBG = Instance.new("ImageLabel")
+WinBG.Size = UDim2.new(1,0,1,0); WinBG.BackgroundTransparency = 1
+WinBG.Image = BG_ID; WinBG.ScaleType = Enum.ScaleType.Crop
+WinBG.ImageTransparency = 0.3; WinBG.ZIndex = 0; WinBG.Parent = Win
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1,0,0,52); Header.BackgroundColor3 = THEME.panel
+Header.BackgroundTransparency = 0.55; Header.BorderSizePixel = 0; Header.ZIndex = 5; Header.Parent = Win
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.new(0,36,0,36); Logo.Position = UDim2.new(0,12,0.5,-18)
+Logo.BackgroundTransparency = 1; Logo.Image = LOGO_ID; Logo.ZIndex = 6; Logo.Parent = Header
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0,280,1,0); Title.Position = UDim2.new(0,56,0,0)
+Title.BackgroundTransparency = 1; Title.Text = "KHUB · +1 TNT"
+Title.Font = Enum.Font.GothamBlack; Title.TextSize = 22
+Title.TextColor3 = Color3.new(1,1,1); Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 6; Title.Parent = Header
+local TG = Instance.new("UIGradient")
+TG.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120,190,255)),
+	ColorSequenceKeypoint.new(0.5, Color3.new(1,1,1)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(180,130,255)),
+})
+TG.Parent = Title
+task.spawn(function()
+	while Title.Parent do TG.Offset = Vector2.new(math.sin(tick()*1.2)*0.5, 0); task.wait(0.03) end
+end)
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0,32,0,28); MinBtn.Position = UDim2.new(1,-78,0.5,-14)
+MinBtn.BackgroundColor3 = Color3.fromRGB(30,38,70); MinBtn.Text = "-"
+MinBtn.Font = Enum.Font.GothamBold; MinBtn.TextSize = 16; MinBtn.TextColor3 = THEME.text
+MinBtn.ZIndex = 7; MinBtn.Parent = Header; corner(MinBtn, 8)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0,32,0,28); CloseBtn.Position = UDim2.new(1,-40,0.5,-14)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(66,22,36); CloseBtn.Text = "X"
+CloseBtn.Font = Enum.Font.GothamBold; CloseBtn.TextSize = 14; CloseBtn.TextColor3 = THEME.text
+CloseBtn.ZIndex = 7; CloseBtn.Parent = Header; corner(CloseBtn, 8)
+
+do
+	local dragging, dragStart, startPos
+	Header.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true; dragStart = i.Position; startPos = Win.Position
+			i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+			local d = i.Position - dragStart
+			Win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset+d.X, startPos.Y.Scale, startPos.Y.Offset+d.Y)
+		end
+	end)
+end
+
+local Rail = Instance.new("ScrollingFrame")
+Rail.Size = UDim2.new(0,72,1,-52); Rail.Position = UDim2.new(0,0,0,52)
+Rail.BackgroundColor3 = THEME.panel; Rail.BackgroundTransparency = 0.35
+Rail.BorderSizePixel = 0; Rail.ScrollBarThickness = 2
+Rail.CanvasSize = UDim2.new(0,0,0,0); Rail.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Rail.ZIndex = 5; Rail.Parent = Win
+local RailList = Instance.new("UIListLayout")
+RailList.Padding = UDim.new(0,6); RailList.HorizontalAlignment = Enum.HorizontalAlignment.Center; RailList.SortOrder = Enum.SortOrder.LayoutOrder; RailList.Parent = Rail
+local RailPad = Instance.new("UIPadding"); RailPad.PaddingTop = UDim.new(0,8); RailPad.Parent = Rail
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1,-84,1,-60); Content.Position = UDim2.new(0,78,0,56)
+Content.BackgroundTransparency = 1; Content.ZIndex = 5; Content.Parent = Win
+
+local PageTitle = Instance.new("TextLabel")
+PageTitle.Size = UDim2.new(1,-10,0,22); PageTitle.Position = UDim2.new(0,4,0,0)
+PageTitle.BackgroundTransparency = 1; PageTitle.Text = "Welcome"
+PageTitle.Font = Enum.Font.GothamBlack; PageTitle.TextSize = 18
+PageTitle.TextColor3 = THEME.text; PageTitle.TextXAlignment = Enum.TextXAlignment.Left
+PageTitle.ZIndex = 6; PageTitle.Parent = Content
+
+local PageSub = Instance.new("TextLabel")
+PageSub.Size = UDim2.new(1,-10,0,16); PageSub.Position = UDim2.new(0,4,0,22)
+PageSub.BackgroundTransparency = 1; PageSub.Text = "KHUB · +1 TNT"
+PageSub.Font = Enum.Font.Gotham; PageSub.TextSize = 12
+PageSub.TextColor3 = THEME.dim; PageSub.TextXAlignment = Enum.TextXAlignment.Left
+PageSub.ZIndex = 6; PageSub.Parent = Content
+
+local Pages = Instance.new("Frame")
+Pages.Size = UDim2.new(1,0,1,-44); Pages.Position = UDim2.new(0,0,0,42)
+Pages.BackgroundTransparency = 1; Pages.ClipsDescendants = true; Pages.ZIndex = 5; Pages.Parent = Content
+
+local Tabs, ActiveId = {}, nil
+local TAB_ICONS = {
+	Welcome  = "rbxassetid://7733960981",
+	Main     = "rbxassetid://7733774602",
+	Upgrade  = "rbxassetid://7734056607",
+	Settings = "rbxassetid://7734056607",
+	Config   = "rbxassetid://7734053495",
+}
+
+local function createPage(id)
+	local sc = Instance.new("ScrollingFrame")
+	sc.Name = id; sc.Size = UDim2.new(1,0,1,0); sc.BackgroundTransparency = 1
+	sc.BorderSizePixel = 0; sc.ScrollBarThickness = 3; sc.ScrollBarImageColor3 = THEME.accent2
+	sc.CanvasSize = UDim2.new(0,0,0,0); sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	sc.Visible = false; sc.ZIndex = 6; sc.Parent = Pages
+	local lay = Instance.new("UIListLayout"); lay.Padding = UDim.new(0,8); lay.SortOrder = Enum.SortOrder.LayoutOrder; lay.Parent = sc
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0,4); pad.PaddingBottom = UDim.new(0,12)
+	pad.PaddingLeft = UDim.new(0,4); pad.PaddingRight = UDim.new(0,8); pad.Parent = sc
+	return sc
+end
+
+local function switchPage(id, title, subtitle)
+	ActiveId = id
+	PageTitle.Text = title or id
+	PageSub.Text = subtitle or ""
+	for _, pg in ipairs(Pages:GetChildren()) do
+		if pg:IsA("ScrollingFrame") then pg.Visible = (pg.Name == id) end
+	end
+	for tid, btnRef in pairs(Tabs) do
+		if typeof(btnRef) == "Instance" then
+			local bar = btnRef:FindFirstChild("ActiveBar")
+			local iconF = btnRef:FindFirstChild("IconFrame")
+			local isActive = (tid == id)
+			if bar then
+				bar.BackgroundTransparency = isActive and 0 or 1
+				bar.Size = isActive and UDim2.new(0, 3, 0.6, 0) or UDim2.new(0, 3, 0.3, 0)
+			end
+			if iconF then
+				iconF.BackgroundColor3 = isActive and THEME.accent2 or Color3.fromRGB(24,30,60)
+				local stroke = iconF:FindFirstChildOfClass("UIStroke")
+				if stroke then stroke.Transparency = isActive and 0.1 or 0.5 end
+			end
+		end
+	end
+end
+
+local function createTabButton(id, label, order, pageTitle, pageSub)
+	local b = Instance.new("TextButton")
+	b.Name = id; b.Size = UDim2.new(0,58,0,54); b.BackgroundTransparency = 1
+	b.Text = ""; b.LayoutOrder = order; b.ZIndex = 8; b.Parent = Rail
+
+	local iconFrame = Instance.new("Frame")
+	iconFrame.Name = "IconFrame"; iconFrame.Size = UDim2.new(0,40,0,40)
+	iconFrame.Position = UDim2.new(0.5,-20,0,4)
+	iconFrame.BackgroundColor3 = Color3.fromRGB(24,30,60); iconFrame.BackgroundTransparency = 0.15
+	iconFrame.ZIndex = 9; iconFrame.Parent = b
+	corner(iconFrame, 10); mkstroke(iconFrame, THEME.accent2, 1.2, 0.5)
+
+	local icon = Instance.new("ImageLabel")
+	icon.Size = UDim2.new(0,22,0,22); icon.Position = UDim2.new(0.5,-11,0.5,-11)
+	icon.BackgroundTransparency = 1; icon.Image = TAB_ICONS[id] or TAB_ICONS.Welcome
+	icon.ImageColor3 = Color3.fromRGB(200,215,250); icon.ZIndex = 10; icon.Parent = iconFrame
+
+	local activeBar = Instance.new("Frame")
+	activeBar.Name = "ActiveBar"; activeBar.Size = UDim2.new(0,3,0.3,0)
+	activeBar.Position = UDim2.new(1,-3,0.2,0)
+	activeBar.BackgroundColor3 = THEME.white; activeBar.BackgroundTransparency = 1
+	activeBar.BorderSizePixel = 0; activeBar.ZIndex = 11; activeBar.Parent = b
+	corner(activeBar, 2)
+
+	b.MouseButton1Click:Connect(function()
+		TweenService:Create(iconFrame, TweenInfo.new(0.12, Enum.EasingStyle.Back), {Size = UDim2.new(0,44,0,44)}):Play()
+		task.delay(0.12, function()
+			TweenService:Create(iconFrame, TweenInfo.new(0.15), {Size = UDim2.new(0,40,0,40)}):Play()
+		end)
+		switchPage(id, pageTitle or label, pageSub or "")
+	end)
+	Tabs[id] = b
+	return b
+end
+
+local function card(parent, title)
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1,-4,0,0); f.AutomaticSize = Enum.AutomaticSize.Y
+	f.BackgroundColor3 = THEME.card; f.BackgroundTransparency = 0.25
+	f.BorderSizePixel = 0; f.ZIndex = 7; f.Parent = parent
+	corner(f, 12); mkstroke(f, THEME.stroke, 1, 0.5)
+	local lay = Instance.new("UIListLayout"); lay.Padding = UDim.new(0,6); lay.SortOrder = Enum.SortOrder.LayoutOrder; lay.Parent = f
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0,10); pad.PaddingBottom = UDim.new(0,10)
+	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10); pad.Parent = f
+	if title then
+		local t = Instance.new("TextLabel")
+		t.Size = UDim2.new(1,0,0,18); t.BackgroundTransparency = 1; t.Text = title
+		t.Font = Enum.Font.GothamBold; t.TextSize = 13; t.TextColor3 = THEME.gold
+		t.TextXAlignment = Enum.TextXAlignment.Left; t.ZIndex = 8; t.LayoutOrder = 0; t.Parent = f
+	end
+	return f
+end
+
+local function btn(parent, text, callback, color)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1,0,0,36); b.BackgroundColor3 = color or Color3.fromRGB(34,44,84)
+	b.Text = text; b.Font = Enum.Font.GothamBold; b.TextSize = 13; b.TextColor3 = THEME.text
+	b.ZIndex = 8; b.Parent = parent; corner(b, 8)
+	b.MouseButton1Click:Connect(function() pcall(callback) end)
+	return b
+end
+
+local function toggle(parent, text, get, set)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1,0,0,34); row.BackgroundTransparency = 1; row.ZIndex = 8; row.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1,-56,1,0); lbl.BackgroundTransparency = 1; lbl.Text = text
+	lbl.Font = Enum.Font.GothamMedium; lbl.TextSize = 13; lbl.TextColor3 = THEME.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.ZIndex = 9; lbl.Parent = row
+	local sw = Instance.new("TextButton")
+	sw.Size = UDim2.new(0,48,0,24); sw.Position = UDim2.new(1,-48,0.5,-12)
+	sw.BackgroundColor3 = get() and THEME.green or THEME.off; sw.Text = ""; sw.ZIndex = 9; sw.Parent = row
+	corner(sw, 12)
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.new(0,18,0,18)
+	knob.Position = get() and UDim2.new(1,-21,0.5,-9) or UDim2.new(0,3,0.5,-9)
+	knob.BackgroundColor3 = THEME.white; knob.ZIndex = 10; knob.Parent = sw; corner(knob, 9)
+	sw.MouseButton1Click:Connect(function()
+		local v = not get(); set(v)
+		sw.BackgroundColor3 = v and THEME.green or THEME.off
+		TweenService:Create(knob, TweenInfo.new(0.15), {
+			Position = v and UDim2.new(1,-21,0.5,-9) or UDim2.new(0,3,0.5,-9)
+		}):Play()
+	end)
+	return row
+end
+
+local function textBox(parent, placeholder)
+	local tb = Instance.new("TextBox")
+	tb.Size = UDim2.new(1,0,0,34); tb.BackgroundColor3 = THEME.inner; tb.Text = ""
+	tb.PlaceholderText = placeholder or ""; tb.Font = Enum.Font.Gotham; tb.TextSize = 13
+	tb.TextColor3 = THEME.text; tb.PlaceholderColor3 = THEME.mute
+	tb.ClearTextOnFocus = false; tb.ZIndex = 8; tb.Parent = parent; corner(tb, 8)
+	return tb
+end
+
+-- ========== WELCOME (first) ==========
+local PageWelcome = createPage("Welcome")
+createTabButton("Welcome", "Welcome", 1, "Welcome", "KHUB · +1 TNT")
+do
+	-- Big KHUB hero
+	local Hero = Instance.new("Frame")
+	Hero.Size = UDim2.new(1, -4, 0, 146)
+	Hero.BackgroundColor3 = THEME.card
+	Hero.BackgroundTransparency = 0.15
+	Hero.BorderSizePixel = 0
+	Hero.ZIndex = 9
+	Hero.LayoutOrder = 1
+	Hero.Parent = PageWelcome
+	corner(Hero, 16)
+	mkstroke(Hero, THEME.accent2, 1.4, 0.3)
+
+	local HeroText = Instance.new("TextLabel")
+	HeroText.Size = UDim2.new(1, -36, 0, 60)
+	HeroText.Position = UDim2.fromOffset(24, 18)
+	HeroText.BackgroundTransparency = 1
+	HeroText.Text = "KHUB"
+	HeroText.Font = Enum.Font.GothamBlack
+	HeroText.TextSize = 58
+	HeroText.TextColor3 = Color3.new(1, 1, 1)
+	HeroText.TextXAlignment = Enum.TextXAlignment.Left
+	HeroText.ZIndex = 12
+	HeroText.Parent = Hero
+
+	local HeroGrad = Instance.new("UIGradient")
+	HeroGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.00, THEME.accent),
+		ColorSequenceKeypoint.new(0.35, Color3.new(1, 1, 1)),
+		ColorSequenceKeypoint.new(0.60, THEME.accent2),
+		ColorSequenceKeypoint.new(1.00, THEME.gold),
+	})
+	HeroGrad.Offset = Vector2.new(-1.4, 0)
+	HeroGrad.Parent = HeroText
+	task.spawn(function()
+		while HeroText.Parent do
+			local t = (tick() % 3) / 3
+			HeroGrad.Offset = Vector2.new(-1.4 + t * 2.8, 0)
+			task.wait(0.03)
+		end
+	end)
+
+	local HeroBy = Instance.new("TextLabel")
+	HeroBy.Size = UDim2.new(1, -36, 0, 22)
+	HeroBy.Position = UDim2.fromOffset(26, 82)
+	HeroBy.BackgroundTransparency = 1
+	HeroBy.Text = "by Kyiel Pambid"
+	HeroBy.Font = Enum.Font.GothamBold
+	HeroBy.TextSize = 17
+	HeroBy.TextColor3 = THEME.gold
+	HeroBy.TextXAlignment = Enum.TextXAlignment.Left
+	HeroBy.ZIndex = 12
+	HeroBy.Parent = Hero
+
+	-- Typewriter moving text under KHUB
+	local HeroType = Instance.new("TextLabel")
+	HeroType.Size = UDim2.new(1, -36, 0, 18)
+	HeroType.Position = UDim2.fromOffset(26, 110)
+	HeroType.BackgroundTransparency = 1
+	HeroType.Text = ""
+	HeroType.Font = Enum.Font.Code
+	HeroType.TextSize = 12
+	HeroType.TextColor3 = THEME.dim
+	HeroType.TextXAlignment = Enum.TextXAlignment.Left
+	HeroType.ZIndex = 12
+	HeroType.Parent = Hero
+
+	task.spawn(function()
+		local phrases = {
+			"Join Discord for more scripts",
+			"Subscribe on my channel",
+			"Toggle: RightShift / RightCtrl / K",
+			"KHUB · smooth like butter",
+		}
+		while HeroType.Parent do
+			for _, phrase in ipairs(phrases) do
+				if not HeroType.Parent then break end
+				HeroType.Text = ""
+				for i = 1, #phrase do
+					if not HeroType.Parent then break end
+					HeroType.Text = string.sub(phrase, 1, i)
+					task.wait(0.028)
+				end
+				task.wait(1.8)
+				for i = #phrase, 1, -1 do
+					if not HeroType.Parent then break end
+					HeroType.Text = string.sub(phrase, 1, i)
+					task.wait(0.012)
+				end
+				task.wait(0.2)
+			end
+		end
+	end)
+
+	-- Profile card
+	local ProfileCard = card(PageWelcome, "Player")
+	ProfileCard.LayoutOrder = 2
+
+	local PF = Instance.new("Frame")
+	PF.Size = UDim2.new(1, 0, 0, 100)
+	PF.BackgroundColor3 = THEME.inner
+	PF.BackgroundTransparency = 0.1
+	PF.BorderSizePixel = 0
+	PF.ZIndex = 10
+	PF.Parent = ProfileCard
+	corner(PF, 10)
+	mkstroke(PF, THEME.stroke, 1, 0.35)
+
+	local Avatar = Instance.new("ImageLabel")
+	Avatar.Size = UDim2.fromOffset(72, 72)
+	Avatar.Position = UDim2.new(0, 14, 0.5, -36)
+	Avatar.BackgroundColor3 = Color3.fromRGB(30, 38, 70)
+	Avatar.BackgroundTransparency = 0.05
+	Avatar.ZIndex = 12
+	Avatar.Parent = PF
+	corner(Avatar, 36)
+	mkstroke(Avatar, THEME.accent, 1.5, 0.3)
+	pcall(function()
+		local content, isReady = Players:GetUserThumbnailAsync(
+			player.UserId,
+			Enum.ThumbnailType.HeadShot,
+			Enum.ThumbnailSize.Size150x150
+		)
+		if isReady then Avatar.Image = content end
+	end)
+
+	local function profRow(y, txt, col, font, size)
+		local l = Instance.new("TextLabel")
+		l.Size = UDim2.new(1, -110, 0, 22)
+		l.Position = UDim2.new(0, 100, 0, y)
+		l.BackgroundTransparency = 1
+		l.Text = txt
+		l.Font = font or Enum.Font.GothamBold
+		l.TextSize = size or 14
+		l.TextColor3 = col or THEME.text
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.ZIndex = 12
+		l.Parent = PF
+		return l
+	end
+	profRow(16, "hey, " .. (player.DisplayName or player.Name) .. " :)", THEME.gold, Enum.Font.GothamBold, 17)
+	profRow(42, "@" .. player.Name, THEME.dim, Enum.Font.Gotham, 13)
+	profRow(64, "user id · " .. tostring(player.UserId), THEME.mute, Enum.Font.Code, 12)
+
+	-- Links
+	local sc = card(PageWelcome, "Join & Subscribe")
+	sc.LayoutOrder = 3
+	btn(sc, "JOIN DISCORD FOR MORE SCRIPTS", function() openLink(DISCORD) end, Color3.fromRGB(45, 70, 160))
+	btn(sc, "SUBSCRIBE ON YOUTUBE", function() openLink(YOUTUBE) end, Color3.fromRGB(150, 40, 50))
+
+	-- Status
+	local StatusCard = card(PageWelcome, "Status")
+	StatusCard.LayoutOrder = 4
+	local StatusLbl = Instance.new("TextLabel")
+	StatusLbl.Size = UDim2.new(1, 0, 0, 20)
+	StatusLbl.BackgroundTransparency = 1
+	StatusLbl.Text = "KHUB online · everything ready"
+	StatusLbl.Font = Enum.Font.Gotham
+	StatusLbl.TextSize = 12
+	StatusLbl.TextColor3 = THEME.green
+	StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+	StatusLbl.ZIndex = 8
+	StatusLbl.Parent = StatusCard
+	task.spawn(function()
+		local statusList = {
+			"KHUB online · everything ready",
+			"Join Discord for more scripts",
+			"Toggle: RightShift / RightCtrl / K",
+		}
+		local i = 1
+		while StatusLbl.Parent do
+			StatusLbl.Text = statusList[i]
+			StatusLbl.TextTransparency = 1
+			TweenService:Create(StatusLbl, TweenInfo.new(0.5), { TextTransparency = 0 }):Play()
+			i = i % #statusList + 1
+			task.wait(3.5)
+		end
+	end)
+
+	-- Keybinds
+	local info = card(PageWelcome, "Keybinds")
+	info.LayoutOrder = 5
+	local tip = Instance.new("TextLabel")
+	tip.Size = UDim2.new(1, 0, 0, 50)
+	tip.BackgroundTransparency = 1
+	tip.Text = "• RightShift — Toggle UI\n• RightCtrl — Toggle UI\n• K — Toggle UI\n• Drag header to move window"
+	tip.Font = Enum.Font.Gotham
+	tip.TextSize = 12
+	tip.TextColor3 = THEME.dim
+	tip.TextXAlignment = Enum.TextXAlignment.Left
+	tip.TextYAlignment = Enum.TextYAlignment.Top
+	tip.ZIndex = 8
+	tip.Parent = info
+end
+
+
+
+-- ========== MAIN (Autofarms) ==========
+local PageMain = createPage("Main")
+createTabButton("Main", "Main", 2, "Autofarms", "farm · collect · sell · rebirth")
+do
+	local c = card(PageMain, "Autofarms")
+	toggle(c, "Auto Farm (Place + Ignite)", function() return AutoFarm end, function(v)
+		AutoFarm = v; FarmBusy=false; RejectStreak=0
+		if v then ClearReservations(); table.clear(PendingBombs); task.spawn(ReturnToMineIfNeeded) end
+	end)
+	toggle(c, "Auto Refill", function() return AutoRefill end, function(v) AutoRefill=v end)
+	toggle(c, "Auto Collect", function() return AutoCollect end, function(v) AutoCollect=v; CollectBusy=false end)
+	toggle(c, "Auto Sell Blocks", function() return AutoSell end, function(v) AutoSell=v; LastSell=0 end)
+	toggle(c, "Auto Rebirth (5s)", function() return AutoRebirth end, function(v) AutoRebirth=v; LastRebirth=0 end)
+	toggle(c, "Void Recovery", function() return AutoVoidRecovery end, function(v) AutoVoidRecovery=v end)
+end
+
+-- ========== UPGRADES ==========
+local PageUpgrade = createPage("Upgrade")
+createTabButton("Upgrade", "Upgrades", 3, "Upgrades", "bombs · areas · luck")
+do
+	local c = card(PageUpgrade, "Auto Upgrades")
+	toggle(c, "Max Held Bombs", function() return UpgradeStates.MaxHeldBombs end, function(v) UpgradeStates.MaxHeldBombs=v end)
+	toggle(c, "Max Active Bombs", function() return UpgradeStates.MaxActiveBombs end, function(v) UpgradeStates.MaxActiveBombs=v end)
+	toggle(c, "Explosion Radius", function() return UpgradeStates.BombExplosionRadius end, function(v) UpgradeStates.BombExplosionRadius=v end)
+	toggle(c, "Collection Range", function() return UpgradeStates.CollectionRange end, function(v) UpgradeStates.CollectionRange=v end)
+	toggle(c, "Mine Luck", function() return AutoMineLuck end, function(v) AutoMineLuck=v end)
+
+	local a = card(PageUpgrade, "Area & TNT Shop")
+	toggle(a, "Auto Buy Next Area", function() return AutoBuyArea end, function(v) AutoBuyArea=v end)
+	toggle(a, "Auto Buy Best TNT", function() return AutoBuyBestBomb end, function(v)
+		AutoBuyBestBomb=v; BombShopRetryAt=0
+		if v then task.spawn(function() task.wait(0.1); RunBombShopTrip() end) end
+	end)
+	toggle(a, "Auto Equip Best TNT", function() return AutoEquipBestBomb end, function(v)
+		AutoEquipBestBomb=v; BombShopRetryAt=0
+		if v then task.spawn(function() task.wait(0.1); RunBombShopTrip() end) end
+	end)
+end
+
+
+-- ========== SETTINGS ==========
+local PageSettings = createPage("Settings")
+createTabButton("Settings", "Settings", 12, "Settings", "UI options · keybinds")
+do
+	local uiOpt = { ShowOrb = true, RainbowTitle = true }
+	local c = card(PageSettings, "UI Options")
+	toggle(c, "Show floating orb when minimized", function() return uiOpt.ShowOrb end, function(v)
+		uiOpt.ShowOrb = v; OrbState.visible = v
+	end)
+	toggle(c, "Rainbow title gradient", function() return uiOpt.RainbowTitle end, function(v)
+		uiOpt.RainbowTitle = v; TG.Enabled = v
+	end)
+	local k = card(PageSettings, "Keybinds")
+	local tip = Instance.new("TextLabel")
+	tip.Size = UDim2.new(1,0,0,55); tip.BackgroundTransparency = 1
+	tip.Text = "PC: RightShift / RightCtrl / K\nMobile: Tap floating orb to reopen"
+	tip.Font = Enum.Font.Gotham; tip.TextSize = 12; tip.TextColor3 = THEME.dim
+	tip.TextXAlignment = Enum.TextXAlignment.Left; tip.TextYAlignment = Enum.TextYAlignment.Top
+	tip.ZIndex = 8; tip.Parent = k
+end
+
+-- ========== SAVE CONFIG (last) ==========
+local PageConfig = createPage("Config")
+createTabButton("Config", "Config", 99, "Save Config", "create · load · delete")
+do
+	local c = card(PageConfig, "Config Manager")
+	local nameBox = textBox(c, "Config name...")
+	local statusCfg = Instance.new("TextLabel")
+	statusCfg.Size = UDim2.new(1,0,0,18); statusCfg.BackgroundTransparency = 1
+	statusCfg.Text = "Ready"; statusCfg.Font = Enum.Font.Gotham; statusCfg.TextSize = 12
+	statusCfg.TextColor3 = THEME.dim; statusCfg.TextXAlignment = Enum.TextXAlignment.Left
+	statusCfg.ZIndex = 8; statusCfg.Parent = c
+
+	local function ensureFolder()
+		if isfolder and not isfolder(ConfigFolder) then pcall(function() makefolder(ConfigFolder) end) end
+	end
+	local function listConfigs()
+		ensureFolder(); if not listfiles then return {} end
+		local out = {}
+		pcall(function()
+			for _, f in ipairs(listfiles(ConfigFolder)) do
+				local n = f:match("([^/\\]+)%.json$"); if n then table.insert(out, n) end
+			end
+		end)
+		return out
+	end
+
+	local listFrame = Instance.new("Frame")
+	listFrame.Size = UDim2.new(1,0,0,100); listFrame.BackgroundColor3 = THEME.inner
+	listFrame.ZIndex = 8; listFrame.Parent = c; corner(listFrame, 8)
+	local listScroll = Instance.new("ScrollingFrame")
+	listScroll.Size = UDim2.new(1,-4,1,-4); listScroll.Position = UDim2.new(0,2,0,2)
+	listScroll.BackgroundTransparency = 1; listScroll.ScrollBarThickness = 3
+	listScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; listScroll.CanvasSize = UDim2.new(0,0,0,0)
+	listScroll.ZIndex = 9; listScroll.Parent = listFrame
+	local listLay = Instance.new("UIListLayout"); listLay.Padding = UDim.new(0,3); listLay.Parent = listScroll
+	local selectedCfg = nil
+
+	local function refreshCfg()
+		for _, ch in ipairs(listScroll:GetChildren()) do if ch:IsA("TextButton") then ch:Destroy() end end
+		for _, n in ipairs(listConfigs()) do
+			local b = Instance.new("TextButton")
+			b.Size = UDim2.new(1,-6,0,26)
+			b.BackgroundColor3 = selectedCfg == n and THEME.accent2 or Color3.fromRGB(22,28,56)
+			b.Text = n; b.Font = Enum.Font.Gotham; b.TextSize = 12; b.TextColor3 = THEME.text
+			b.ZIndex = 10; b.Parent = listScroll; corner(b, 6)
+			b.MouseButton1Click:Connect(function() selectedCfg = n; nameBox.Text = n; refreshCfg() end)
+		end
+	end
+
+	btn(c, "Save Config", function()
+		local n = nameBox.Text:gsub("%s+", "")
+		if n == "" then statusCfg.Text = "Enter a name"; return end
+		ensureFolder()
+		local ok = pcall(function()
+			writefile(ConfigFolder.."/"..n..".json", HttpService:JSONEncode({savedAt = os.date("%Y-%m-%d %H:%M:%S")}))
+		end)
+		statusCfg.Text = ok and ("Saved: "..n) or "Save failed"
+		refreshCfg()
+	end, Color3.fromRGB(40,80,50))
+
+	btn(c, "Load Config", function()
+		local n = selectedCfg or nameBox.Text:gsub("%s+", "")
+		if n == "" then statusCfg.Text = "Select a config"; return end
+		local ok, raw = pcall(function() return readfile(ConfigFolder.."/"..n..".json") end)
+		if not ok or not raw then statusCfg.Text = "Load failed"; return end
+		statusCfg.Text = "Loaded: "..n
+	end, Color3.fromRGB(40,50,90))
+
+	btn(c, "Delete Config", function()
+		local n = selectedCfg or nameBox.Text:gsub("%s+", "")
+		if n == "" then statusCfg.Text = "Select a config"; return end
+		pcall(function() delfile(ConfigFolder.."/"..n..".json") end)
+		selectedCfg = nil; statusCfg.Text = "Deleted: "..n; refreshCfg()
+	end, Color3.fromRGB(90,30,40))
+
+	btn(c, "Refresh List", refreshCfg)
+	task.defer(refreshCfg)
+end
+
+-- ORB
+local OrbRoot = Instance.new("Frame")
+OrbRoot.Size = UDim2.new(0,100,0,100); OrbRoot.Position = UDim2.new(0, 16, 0.5, -50)
+OrbRoot.BackgroundTransparency = 1; OrbRoot.Visible = false; OrbRoot.ZIndex = 50; OrbRoot.Parent = ScreenGui
+local Orb = Instance.new("ImageButton")
+Orb.Size = UDim2.new(0,90,0,90); Orb.Position = UDim2.new(0.5,-45,0.5,-45)
+Orb.BackgroundColor3 = THEME.panel; Orb.Image = LOGO_ID; Orb.ScaleType = Enum.ScaleType.Crop
+Orb.ZIndex = 51; Orb.Parent = OrbRoot; corner(Orb, 45); mkstroke(Orb, THEME.accent2, 2.5, 0.15)
+task.spawn(function()
+	local halo = Instance.new("UIStroke"); halo.Color = THEME.accent; halo.Thickness = 2; halo.Parent = Orb
+	while Orb.Parent do halo.Color = Color3.fromHSV((tick()%4)/4, 0.7, 1); task.wait(0.05) end
+end)
+do
+	local draggingOrb, dragStartOrb, startPosOrb
+	Orb.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			draggingOrb = true; dragStartOrb = input.Position; startPosOrb = OrbRoot.Position
+			input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then draggingOrb = false end end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if draggingOrb and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStartOrb
+			OrbRoot.Position = UDim2.new(startPosOrb.X.Scale, startPosOrb.X.Offset+delta.X, startPosOrb.Y.Scale, startPosOrb.Y.Offset+delta.Y)
+		end
+	end)
+end
+
+local function setVisible(on)
+	if on then
+		Win.Visible = true; OrbRoot.Visible = false
+		Win.Position = UDim2.new(0.5, -BASE_W/2, 0.5, -BASE_H/2)
+		TweenService:Create(Win, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = UDim2.new(0, BASE_W, 0, BASE_H),
+		}):Play()
+	else
+		Win.Visible = false; OrbRoot.Visible = OrbState.visible
+	end
+end
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+CloseBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function() setVisible(true) end)
+
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.RightShift or i.KeyCode == Enum.KeyCode.RightControl or i.KeyCode == Enum.KeyCode.K then
+		setVisible(not Win.Visible)
+	end
+end)
+
+task.delay(1.7, function() switchPage("Welcome", "Welcome", "KHUB · +1 TNT") end)
+print("[KHUB] +1 TNT FULL loaded · Welcome · Settings · Save Config")
+print("[KHUB] Toggle: RightShift / RightCtrl / K")
