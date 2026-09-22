@@ -149,18 +149,202 @@ local function applyPlayerESP(plr)
 	trackedPlayers[plr] = { highlight, billboard }
 end
 
-local function findKeyParts()
+-- Lobby vs Map: NEVER tween keys that live in lobby / hub / menu
+local LOBBY_NAME_MARKERS = {
+	"lobby", "menu", "title", "mainmenu", "main menu", "waiting", "queue",
+	"spawnlobby", "lobbyspawn", "hub", "afk", "intermission", "voting",
+	"votemap", "mapvote", "selection", "playergui", "cameralobby",
+}
+local MAP_NAME_MARKERS = {
+	"map", "maps", "round", "game", "ingame", "currentmap", "level",
+	"arena", "stage", "playarea", "match", "dungeon", "house", "locust",
+	"mapmodel", "active map", "current round", "gamemap",
+}
+
+-- Max distance from player for a key to count as "same map"
+local KEY_MAX_HORIZ = 450   -- studs on XZ (same map island)
+local KEY_MAX_Y_UP = 35     -- never go "up into lobby"
+local KEY_MAX_Y_DN = 60
+local KEY_MAX_DIST = 500
+
+local function pathString(inst)
+	local parts = {}
+	local p = inst
+	while p and p ~= game do
+		table.insert(parts, 1, string.lower(tostring(p.Name or "")))
+		p = p.Parent
+	end
+	return table.concat(parts, "/")
+end
+
+local function pathIsLobby(inst)
+	local full = pathString(inst)
+	for _, m in ipairs(LOBBY_NAME_MARKERS) do
+		if full:find(m, 1, true) then return true end
+	end
+	local p = inst
+	while p and p ~= Workspace do
+		local n = string.lower(p.Name or "")
+		for _, m in ipairs(LOBBY_NAME_MARKERS) do
+			if n == m or n:find(m, 1, true) then return true end
+		end
+		p = p.Parent
+	end
+	return false
+end
+
+local function pathLooksLikeMap(inst)
+	local full = pathString(inst)
+	for _, m in ipairs(MAP_NAME_MARKERS) do
+		if full:find(m, 1, true) then return true end
+	end
+	return false
+end
+
+-- True if LOCAL PLAYER is standing in a lobby container
+local function playerIsInLobby(playerRoot)
+	if not playerRoot then return false end
+	if pathIsLobby(playerRoot) then return true end
+	-- high above typical maps often = lobby platforms
+	return false
+end
+
+local function isValidMapKey(part, playerRoot)
+	if not part or not part:IsA("BasePart") or not part.Parent then return false end
+	if not part:IsDescendantOf(Workspace) then return false end
+	-- hard reject lobby hierarchy
+	if pathIsLobby(part) then return false end
+	local pos = part.Position
+	if pos.Y > 350 or pos.Y < -80 then return false end
+	local size = part.Size
+	if size.Magnitude < 0.15 or size.Magnitude > 60 then return false end
+	if not playerRoot then return false end
+
+	local ppos = playerRoot.Position
+	local dy = pos.Y - ppos.Y
+	-- reject keys clearly above player (lobby is often higher)
+	if dy > KEY_MAX_Y_UP then return false end
+	if dy < -KEY_MAX_Y_DN then return false end
+
+	local horiz = Vector3.new(pos.X - ppos.X, 0, pos.Z - ppos.Z).Magnitude
+	if horiz > KEY_MAX_HORIZ then return false end
+	local dist = (pos - ppos).Magnitude
+	if dist > KEY_MAX_DIST then return false end
+
+	-- if key is under a known map folder, always ok
+	-- if not, still ok only when close to player (same area)
+	if not pathLooksLikeMap(part) and horiz > 220 then
+		return false
+	end
+	return true
+end
+
+local function findKeyParts(playerRoot)
 	local keys = {}
-	for _, obj in ipairs(Workspace:GetDescendants()) do
-		if obj.Name:lower():find("key") then
-			if obj:IsA("BasePart") then table.insert(keys, obj)
-			elseif obj:IsA("Model") then
-				local p = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-				if p then table.insert(keys, p) end
+	local seen = {}
+	if not playerRoot then return keys end
+	-- while YOU are in lobby, do not tween any keys
+	if playerIsInLobby(playerRoot) then return keys end
+
+	local function consider(obj)
+		local part = nil
+		if obj:IsA("BasePart") then
+			part = obj
+		elseif obj:IsA("Model") then
+			part = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+		end
+		if not part or seen[part] then return end
+		if not isValidMapKey(part, playerRoot) then return end
+		seen[part] = true
+		table.insert(keys, part)
+	end
+
+	local function isLobbyFolder(inst)
+		local n = string.lower(inst.Name or "")
+		for _, m in ipairs(LOBBY_NAME_MARKERS) do
+			if n:find(m, 1, true) then return true end
+		end
+		return pathIsLobby(inst)
+	end
+
+	local preferred = {}
+	local nonLobbyRoots = {}
+	for _, child in ipairs(Workspace:GetChildren()) do
+		if isLobbyFolder(child) then
+			-- skip entirely
+		else
+			local n = string.lower(child.Name or "")
+			local mapped = false
+			for _, m in ipairs(MAP_NAME_MARKERS) do
+				if n:find(m, 1, true) then
+					table.insert(preferred, child)
+					mapped = true
+					break
+				end
+			end
+			if not mapped then
+				table.insert(nonLobbyRoots, child)
 			end
 		end
 	end
+
+	local function scan(rootInst)
+		if not rootInst or isLobbyFolder(rootInst) then return end
+		local ok, descendants = pcall(function() return rootInst:GetDescendants() end)
+		if not ok or not descendants then return end
+		for _, obj in ipairs(descendants) do
+			if pathIsLobby(obj) then
+				-- skip lobby subtree items
+			else
+				local n = string.lower(obj.Name or "")
+				if n:find("key", 1, true)
+					and not n:find("keyboard", 1, true)
+					and not n:find("hotkey", 1, true)
+					and not n:find("keybind", 1, true)
+					and not n:find("keyframe", 1, true) then
+					consider(obj)
+				end
+			end
+		end
+	end
+
+	-- 1) map-named folders first
+	for _, folder in ipairs(preferred) do
+		scan(folder)
+	end
+	-- 2) other non-lobby workspace children (still filtered by distance/Y)
+	if #keys == 0 then
+		for _, folder in ipairs(nonLobbyRoots) do
+			scan(folder)
+		end
+	end
+	-- NEVER bare-scan whole Workspace without folder filter (that was pulling lobby keys)
+
+	table.sort(keys, function(a, b)
+		return (a.Position - playerRoot.Position).Magnitude < (b.Position - playerRoot.Position).Magnitude
+	end)
 	return keys
+end
+
+local function fireKeyCollect(keyPart)
+	pcall(function()
+		local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+		local event = remotes and remotes:FindFirstChild("KeyCollected")
+		if event then
+			pcall(function() firesignal(event.OnClientEvent, keyPart, player, 0.65) end)
+		end
+		local roots = { keyPart }
+		if keyPart.Parent then table.insert(roots, keyPart.Parent) end
+		for _, root in ipairs(roots) do
+			for _, d in ipairs(root:GetDescendants()) do
+				if d:IsA("ProximityPrompt") then
+					pcall(function()
+						if fireproximityprompt then fireproximityprompt(d) end
+					end)
+				end
+			end
+		end
+	end)
 end
 
 local function tweenToKeys()
@@ -168,30 +352,52 @@ local function tweenToKeys()
 	local myChar = player.Character
 	if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
 	local root = myChar.HumanoidRootPart
-	local keys = findKeyParts()
+	if playerIsInLobby(root) then return end
+	local keys = findKeyParts(root)
 	if #keys == 0 then return end
 	isTweeningKey = true
 	for _, keyPart in ipairs(keys) do
-		if not S.TweenKey or not keyPart or not keyPart.Parent then break end
-		local dist = (root.Position - keyPart.Position).Magnitude
-		local time = math.clamp(dist / math.max(S.TweenKeySpeed, 1), 0.1, 3)
-		local tween = TweenService:Create(root, TweenInfo.new(time, Enum.EasingStyle.Linear), {
-			CFrame = keyPart.CFrame + Vector3.new(0, 3, 0),
-		})
-		tween:Play()
-		local conn = RunService.Heartbeat:Connect(function()
-			pcall(function()
-				local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-				local event = remotes and remotes:FindFirstChild("KeyCollected")
-				if event then pcall(function() firesignal(event.OnClientEvent, keyPart, player, 0.65) end) end
-			end)
-		end)
-		tween.Completed:Wait()
-		conn:Disconnect()
-		task.wait(0.1)
+		if not S.TweenKey then break end
+		root = myChar:FindFirstChild("HumanoidRootPart")
+		if not root then break end
+		if playerIsInLobby(root) then break end
+		if keyPart and keyPart.Parent and isValidMapKey(keyPart, root) then
+			local dist = (root.Position - keyPart.Position).Magnitude
+			local dy = keyPart.Position.Y - root.Position.Y
+			local horiz = Vector3.new(keyPart.Position.X - root.Position.X, 0, keyPart.Position.Z - root.Position.Z).Magnitude
+			-- map-only limits (no lobby hop)
+			if dy <= KEY_MAX_Y_UP and horiz <= KEY_MAX_HORIZ and dist <= KEY_MAX_DIST then
+				local time = math.clamp(dist / math.max(S.TweenKeySpeed, 1), 0.08, 2.0)
+				local goalCF = keyPart.CFrame + Vector3.new(0, 2.2, 0)
+				local tween = TweenService:Create(root, TweenInfo.new(time, Enum.EasingStyle.Linear), {
+					CFrame = goalCF,
+				})
+				tween:Play()
+				local conn = RunService.Heartbeat:Connect(function()
+					if keyPart and keyPart.Parent and isValidMapKey(keyPart, root) then
+						fireKeyCollect(keyPart)
+					end
+				end)
+				tween.Completed:Wait()
+				conn:Disconnect()
+				if keyPart and keyPart.Parent then fireKeyCollect(keyPart) end
+				task.wait(0.08)
+			end
+		end
 	end
 	isTweeningKey = false
 end
+
+
+-- Separate loop so TweenKey only runs on map keys, not every frame
+task.spawn(function()
+	while true do
+		if S.TweenKey and not isTweeningKey then
+			pcall(tweenToKeys)
+		end
+		task.wait(0.35)
+	end
+end)
 
 Players.PlayerRemoving:Connect(function(plr) removeESP(trackedPlayers, plr) end)
 UserInputService.JumpRequest:Connect(function()
@@ -208,6 +414,35 @@ player.Idled:Connect(function()
 end)
 
 local espTimer = 0
+
+-- Extra tight back-ride lock (RenderStepped = every frame, no lag gap)
+RunService.RenderStepped:Connect(function()
+	if not S.Troll then return end
+	local char = player.Character
+	if not char then return end
+	local root = char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local nearestLocust, minDist = nil, math.huge
+	local function consider(obj)
+		local lRoot = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart
+		if lRoot then
+			local dist = (root.Position - lRoot.Position).Magnitude
+			if dist < minDist then minDist = dist; nearestLocust = lRoot end
+		end
+	end
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr.Character and isLocustModel(plr.Character) then consider(plr.Character) end
+	end
+	for _, obj in ipairs(Workspace:GetChildren()) do
+		if isLocustModel(obj) then consider(obj) end
+	end
+	if nearestLocust then
+		root.CFrame = nearestLocust.CFrame * CFrame.new(0, 4.0, 11.5)
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+	end
+end)
+
 RunService.Heartbeat:Connect(function(dt)
 	espTimer = espTimer + dt
 	if espTimer >= 0.5 then
@@ -261,9 +496,29 @@ RunService.Heartbeat:Connect(function(dt)
 			end
 			if nearestLocust then
 				if S.Troll then
-					root.CFrame = nearestLocust.CFrame * CFrame.new(0, 0, 1.5)
+					-- Far behind + high: out of locust camera / attack reach
+					-- Local +Z = behind, +Y = up
+					local BACK = 11.5  -- further back (was 6.8)
+					local UP = 4.0     -- higher
+					-- lock every frame to their CFrame (hard stick)
+					root.CFrame = nearestLocust.CFrame * CFrame.new(0, UP, BACK)
+					root.AssemblyLinearVelocity = Vector3.zero
+					root.AssemblyAngularVelocity = Vector3.zero
 					for _, p in ipairs(char:GetDescendants()) do
-						if p:IsA("BasePart") then p.AssemblyLinearVelocity = Vector3.zero end
+						if p:IsA("BasePart") then
+							p.AssemblyLinearVelocity = Vector3.zero
+							p.AssemblyAngularVelocity = Vector3.zero
+							p.CanCollide = false
+							p.Massless = true
+						end
+					end
+					local hum = char:FindFirstChildOfClass("Humanoid")
+					if hum then
+						pcall(function()
+							hum.PlatformStand = true
+							hum.AutoRotate = false
+							hum:ChangeState(Enum.HumanoidStateType.Physics)
+						end)
 					end
 				elseif S.PlaySafe and minDist < S.SafeDist then
 					local away = (root.Position - nearestLocust.Position)
@@ -273,7 +528,8 @@ RunService.Heartbeat:Connect(function(dt)
 		end
 	end
 
-	if S.TweenKey then task.spawn(tweenToKeys) end
+	-- TweenKey runs on its own loop (not every Heartbeat frame)
+
 	if S.AutoAttack or S.LoopKill then
 		local myChar = player.Character
 		if myChar then
@@ -485,15 +741,15 @@ Pages.BackgroundTransparency = 1; Pages.ClipsDescendants = true; Pages.ZIndex = 
 
 local Tabs, ActiveId = {}, nil
 -- Clear visible icons (home, sword, eye, move, gear, save)
--- Lucide icons (open-source, Fluent/Rayfield set — reliable rbxassetid)
 local TAB_ICONS = {
-	Welcome  = "rbxassetid://10723407389", -- lucide-home
-	Combat   = "rbxassetid://10734975692", -- lucide-swords
-	ESP      = "rbxassetid://10723346959", -- lucide-eye
-	Move     = "rbxassetid://10734920149", -- lucide-person-standing
-	Misc     = "rbxassetid://10709818534", -- lucide-crosshair / tools feel
-	Settings = "rbxassetid://10734950309", -- lucide-settings
-	Config   = "rbxassetid://10734941499", -- lucide-save
+	-- Classic Roblox material icons (same set as Jump to Steal — always visible)
+	Welcome  = "rbxassetid://6023426926",
+	Combat   = "rbxassetid://6031094678",
+	ESP      = "rbxassetid://6031075931",
+	Move     = "rbxassetid://6034754445",
+	Misc     = "rbxassetid://6031280882",
+	Settings = "rbxassetid://6031280882",
+	Config   = "rbxassetid://6031229361",
 }
 
 local function createPage(id)
@@ -549,7 +805,7 @@ local function createTabButton(id, label, order, pageTitle, pageSub)
 	local icon = Instance.new("ImageLabel")
 	icon.Size = UDim2.new(0,24,0,24); icon.Position = UDim2.new(0.5,-12,0.5,-12)
 	icon.BackgroundTransparency = 1; icon.Image = TAB_ICONS[id] or TAB_ICONS.Welcome
-	icon.ImageColor3 = Color3.fromRGB(230, 235, 255)
+	icon.ImageColor3 = Color3.fromRGB(255, 255, 255)
 	icon.ImageTransparency = 0
 	icon.ScaleType = Enum.ScaleType.Fit
 	icon.ZIndex = 10; icon.Parent = iconFrame
@@ -861,7 +1117,24 @@ do
 	toggle(c, "Loop Kill & Attack", function() return S.LoopKill end, function(v) S.LoopKill = v end)
 	toggle(c, "Auto Attack Click", function() return S.AutoAttack end, function(v) S.AutoAttack = v end)
 	toggle(c, "Play Safe (Auto Dodge)", function() return S.PlaySafe end, function(v) S.PlaySafe = v end)
-	toggle(c, "Troll Locust (Back Ride)", function() return S.Troll end, function(v) S.Troll = v end)
+	toggle(c, "Troll Locust (Back Ride)", function() return S.Troll end, function(v)
+		S.Troll = v
+		if not v then
+			local char = player.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if hum then
+				pcall(function()
+					hum.PlatformStand = false
+					hum.AutoRotate = true
+				end)
+			end
+			if char then
+				for _, p in ipairs(char:GetDescendants()) do
+					if p:IsA("BasePart") then p.Massless = false end
+				end
+			end
+		end
+	end)
 	slider(c, "Safe Distance", function() return S.SafeDist end, function(v) S.SafeDist = v end, 10, 50)
 end
 
