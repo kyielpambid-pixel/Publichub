@@ -1,6 +1,7 @@
 --[[
-	KHUB · Blade Ball
-	Same UI as Jump to Steal · Skin Changer · Auto Parry · Spam
+	KHUB - Blade Ball
+	Ported from Kittylol full source into KHUB UI
+	Tabs: Welcome | Combat | Spam | Detection | Visual | Misc | World | Unlock | Settings | Config
 	Toggle: RightShift / RightCtrl / K
 ]]
 repeat task.wait() until game:IsLoaded()
@@ -14,213 +15,52 @@ local Workspace         = game:GetService("Workspace")
 local HttpService       = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Stats             = game:GetService("Stats")
-local player            = Players.LocalPlayer
-local LocalPlayer       = player
+local Debris            = game:GetService("Debris")
+local Lighting          = game:GetService("Lighting")
+local LocalPlayer       = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local player            = LocalPlayer
 
 local LOGO_ID  = "rbxassetid://127230219966945"
 local BG_ID    = "rbxassetid://127230219966945"
 local DISCORD  = "https://discord.gg/EKPb7BRDH8"
 local YOUTUBE  = "https://www.youtube.com/@kyielpambid"
+local ConfigFolder = "KHUB_BladeBall_Configs"
 
 print("[KHUB] Blade Ball starting...")
 
-local OrbState = { visible = true }
-
-pcall(function() setfflag("TaskSchedulerTargetFps", "5099990") end)
-
--- Safe helpers
-local function safeGetConnections(event)
-	if not getconnections then return {} end
-	local ok, r = pcall(getconnections, event)
-	return (ok and r) or {}
-end
-local islclosure = islclosure or function(f) return type(f) == "function" end
-local setupvalue = setupvalue or debug.setupvalue
-if not debug.getupvalues then
-	debug.getupvalues = function(f)
-		local t, i = {}, 1
-		while true do
-			local n, v = debug.getupvalue(f, i)
-			if not n then break end
-			t[i] = v; i = i + 1
-		end
-		return t
-	end
-end
-
-local Alive = workspace:FindFirstChild("Alive") or workspace:WaitForChild("Alive", 10)
-local Runtime = workspace:FindFirstChild("Runtime") or workspace:WaitForChild("Runtime", 10)
-
--- Sword instances
-local swordInstancesInstance = nil
 pcall(function()
-	swordInstancesInstance = ReplicatedStorage:WaitForChild("Shared", 10)
-		:WaitForChild("ReplicatedInstances", 10)
-		:WaitForChild("Swords", 10)
-end)
-local oldIdentity = (getthreadidentity and getthreadidentity()) or 2
-if setthreadidentity then pcall(setthreadidentity, 2) end
-local success, swordInstances = false, nil
-if swordInstancesInstance then
-	success, swordInstances = pcall(require, swordInstancesInstance)
-end
-if setthreadidentity then pcall(setthreadidentity, oldIdentity) end
-
-local getSlashName = function(swordName)
-	if type(swordName) ~= "string" or swordName == "" then return "SlashEffect" end
-	if not swordInstances then return "SlashEffect" end
-	local ok, result = pcall(function() return swordInstances:GetSword(swordName) end)
-	if ok and type(result) == "table" then
-		return result.SlashName or result.SlashEffect or "SlashEffect"
-	end
-	return "SlashEffect"
-end
-
--- ========== SKIN CHANGER ==========
-local skinchangerSystem = {
-	equipHooked = false,
-	originalEquipSwordTo = nil,
-	fxHooked = false,
-	playParryFunc = nil,
-	swordsController = nil,
-	myParryHandler = nil,
-	slashName = nil,
-	changeSwordModel = false,
-	changeSwordAnimation = false,
-	changeSwordFX = false,
-	fxConnection = nil,
-	swordModel = nil,
-	swordAnimations = nil,
-	swordFX = nil,
-	skinChangerEnabled = false,
-}
-
-if success and swordInstances and not skinchangerSystem.equipHooked then
-	skinchangerSystem.originalEquipSwordTo = swordInstances.EquipSwordTo
-	swordInstances.EquipSwordTo = function(self, char, swordName)
-		if skinchangerSystem.skinChangerEnabled and skinchangerSystem.changeSwordModel and char == LocalPlayer.Character then
-			swordName = skinchangerSystem.swordModel
-		end
-		return skinchangerSystem.originalEquipSwordTo(self, char, swordName)
-	end
-	skinchangerSystem.equipHooked = true
-end
-
-local setSword = function()
-	if not skinchangerSystem.skinChangerEnabled then return end
-	pcall(function() if skinchangerSystem.originalEquipSwordTo then setupvalue(skinchangerSystem.originalEquipSwordTo, 3, false) end end)
-	if skinchangerSystem.changeSwordModel and LocalPlayer.Character and swordInstances then
-		pcall(function() swordInstances:EquipSwordTo(LocalPlayer.Character, skinchangerSystem.swordModel) end)
-	end
-	if skinchangerSystem.changeSwordAnimation and skinchangerSystem.swordsController then
-		pcall(function() skinchangerSystem.swordsController:SetSword(skinchangerSystem.swordAnimations) end)
-	end
-end
-
-skinchangerSystem.myParryHandler = function(...)
-	if setthreadidentity then pcall(setthreadidentity, 2) end
-	local args = {...}
-	local argCount = select("#", ...)
-	if tostring(args[4]) == LocalPlayer.Name then
-		if skinchangerSystem.skinChangerEnabled and skinchangerSystem.changeSwordFX then
-			args[1] = skinchangerSystem.slashName or getSlashName(skinchangerSystem.swordFX or skinchangerSystem.swordModel) or "SlashEffect"
-			args[3] = skinchangerSystem.swordFX or skinchangerSystem.swordModel
-		end
-	end
-	if skinchangerSystem.playParryFunc then
-		return skinchangerSystem.playParryFunc(unpack(args, 1, math.max(argCount, 4)))
-	end
-end
-
-pcall(function()
-	if ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("ParrySuccessAll") then
-		skinchangerSystem.fxConnection = ReplicatedStorage.Remotes.ParrySuccessAll.OnClientEvent:Connect(skinchangerSystem.myParryHandler)
-		skinchangerSystem.fxHooked = true
-	end
-end)
-
-task.spawn(function()
-	while task.wait(0.2) do
-		if not skinchangerSystem.skinChangerEnabled then continue end
-		pcall(function()
-			local fireConns = safeGetConnections(ReplicatedStorage.Remotes.FireSwordInfo.OnClientEvent)
-			for i = #fireConns, 1, -1 do
-				local conn = fireConns[i]
-				if conn.Function and islclosure(conn.Function) then
-					local upvalues = debug.getupvalues(conn.Function)
-					if type(upvalues[1]) == "table" and upvalues[1].SetSword then
-						local controller = upvalues[1]
-						skinchangerSystem.swordsController = controller
-						if not controller.isHooked then
-							local oldSet = controller.SetSword
-							controller.SetSword = function(self, anim)
-								if skinchangerSystem.skinChangerEnabled and skinchangerSystem.changeSwordAnimation then
-									anim = skinchangerSystem.swordAnimations
-								end
-								return oldSet(self, anim)
-							end
-							controller.isHooked = true
-							if skinchangerSystem.changeSwordAnimation then
-								pcall(function() oldSet(controller, skinchangerSystem.swordAnimations) end)
-							end
-						end
-						break
-					end
-				end
-			end
-			local parryConns = safeGetConnections(ReplicatedStorage.Remotes.ParrySuccessAll.OnClientEvent)
-			for i = #parryConns, 1, -1 do
-				local conn = parryConns[i]
-				if conn.Function then
-					local ok, info = pcall(debug.getinfo, conn.Function)
-					if ok and info and info.name == "parrySuccessAll" then
-						if not skinchangerSystem.playParryFunc then skinchangerSystem.playParryFunc = conn.Function end
-						pcall(function() if conn.Disable then conn:Disable() end end)
-					end
-				end
-			end
-		end)
-	end
-end)
-
-skinchangerSystem.updateSword = function()
-	if skinchangerSystem.changeSwordFX and skinchangerSystem.swordFX then
-		skinchangerSystem.slashName = getSlashName(skinchangerSystem.swordFX)
-	end
-	setSword()
-end
-
-LocalPlayer.CharacterAdded:Connect(function(character)
-	if not skinchangerSystem.skinChangerEnabled then return end
-	local hrp = character:WaitForChild("HumanoidRootPart", 5)
-	if not hrp then return end
-	character.ChildAdded:Connect(function(child)
-		if skinchangerSystem.skinChangerEnabled and skinchangerSystem.changeSwordModel and child:IsA("Model") and child.Name ~= skinchangerSystem.swordModel then
-			local ok, isSword = pcall(function() return swordInstances and swordInstances:GetSword(child.Name) end)
-			if ok and isSword then task.wait(); child:Destroy() end
-		end
-	end)
-	task.wait(1)
-	pcall(setSword)
-end)
-
-task.spawn(function()
-	while task.wait(0.5) do
-		if not skinchangerSystem.skinChangerEnabled then continue end
-		local char = LocalPlayer.Character
-		if char and skinchangerSystem.swordModel then
-			if not char:FindFirstChild(skinchangerSystem.swordModel) then pcall(setSword) end
-			for _, child in pairs(char:GetChildren()) do
-				if child:IsA("Model") and child.Name ~= skinchangerSystem.swordModel then
-					local ok, isSword = pcall(function() return swordInstances and swordInstances:GetSword(child.Name) end)
-					if ok and isSword then child:Destroy() end
-				end
+	for _, parent in ipairs({CoreGui, player:FindFirstChild("PlayerGui")}) do
+		if parent then
+			for _, n in ipairs({"KHUB_BladeBall", "KHUB_BladeBall_Orb", "Kittylol_Notifications", "Kittylol_KeyboardUI", "Kittylol_CurveUI", "Kittylol_SpamUI", "Kittylol_TriggerUI"}) do
+				local o = parent:FindFirstChild(n); if o then o:Destroy() end
 			end
 		end
 	end
+	if gethui then
+		local h = gethui()
+		if h then
+			local o = h:FindFirstChild("KHUB_BladeBall"); if o then o:Destroy() end
+		end
+	end
 end)
 
--- ========== SYSTEM CORE (combat) ==========
+local function detectMobile()
+	local touch = UserInputService.TouchEnabled
+	local mouse = UserInputService.MouseEnabled
+	local keyboard = UserInputService.KeyboardEnabled
+	if touch and not keyboard then return true end
+	if touch and not mouse then return true end
+	return false
+end
+
+local function notify(msg)
+	print("[KHUB Blade Ball]", msg)
+end
+
+local Alive = Workspace:FindFirstChild("Alive") or Workspace:WaitForChild("Alive", 15)
+local Runtime = Workspace:FindFirstChild("Runtime") or Workspace:WaitForChild("Runtime", 15)
+
+-- ===================== SYSTEM (Kittylol core) =====================
 local System = {
 	__properties = {
 		__autoparry_enabled = false,
@@ -228,445 +68,1117 @@ local System = {
 		__manual_spam_enabled = false,
 		__auto_spam_enabled = false,
 		__play_animation = false,
-		__curve_mode = 1,
 		__accuracy = 50,
+		__divisor_multiplier = 1.1,
+		__parried = false,
+		__training_parried = false,
+		__spam_threshold = 1.5,
 		__parries = 0,
-		vfxdisabled = false,
-		potatographics = false,
-		potatocache = {},
+		__grab_animation = nil,
+		__tornado_time = tick(),
 		__connections = {},
-		__spam_rate = 240,
+		__spam_rate = 340,
 		__infinity_active = false,
 		__deathslash_active = false,
 		__timehole_active = false,
 		__slashesoffury_active = false,
 		__slashesoffury_count = 0,
-		__is_mobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled,
-		__mobile_guis = {},
+		__is_mobile = detectMobile(),
+		__randomized_accuracy_enabled = false,
 	},
 	__config = {
-		__curve_names = {'Camera', 'Random', 'Straight', 'Backwards', 'Slow', 'High', 'Left', 'Right', 'RandomTarget'},
-		__detections = { __infinity = false, __deathslash = false, __timehole = false, __slashesoffury = false, __phantom = false },
+		__detections = {
+			__infinity=false,__deathslash=false,
+			__timehole=false,__slashesoffury=false,__phantom=false
+		}
 	},
-	__triggerbot = { __enabled = false, __trigger_range = 28 },
+	__triggerbot = {
+		__enabled=false,__is_parrying=false,
+		__parries=0,__max_parries=10000,__parry_delay=0.05
+	}
 }
 
+local S = {
+	CurveType = "Camera",
+	AutoParryMode = "Remote",
+	AutoSpamMode = "Remote",
+	ManualSpamMode = "Remote",
+	AutoAbility = false,
+	AutoSpamAnimFix = true,
+	ManualSpamAnimFix = true,
+	FOV = 70, FOVEnabled = false,
+	WalkSpeed = 36, EnableSpeed = false,
+	JumpPower = 50, EnableJump = false,
+	InfJump = false, Spin = false, SpinSpeed = 5,
+	Gravity = 196.2, EnableGravity = false,
+	HipHeight = 0, EnableHip = false,
+	CharacterMod = false,
+	NoRender = false,
+	Emotes = false, AutoStopEmote = false, SelectedEmote = "",
+	AbilityESP = false, BallStats = false,
+	SkyEnabled = false, SkyPreset = "Sunset",
+	Immortal = false, UnlockAll = false,
+	ShowSpamBtn = false, ShowTriggerBtn = false, ShowCurveUI = false, ShowKeyboard = false,
+	RandomCurve = false,
+}
+
+local function update_divisor()
+	System.__properties.__divisor_multiplier = 0.7 + (System.__properties.__accuracy - 1) * (0.9/99)
+end
+update_divisor()
+
+task.spawn(function()
+	while task.wait(1) do
+		if System.__properties.__randomized_accuracy_enabled then
+			local ping = 0
+			pcall(function()
+				local ping_str = Stats.Network.ServerStatsItem["Data Ping"]:GetValueString()
+				ping = tonumber(ping_str:match("%d+")) or 0
+			end)
+			local new_accuracy
+			if ping >= 90 then new_accuracy = 4
+			elseif ping <= 50 then new_accuracy = math.random(70, 100)
+			else new_accuracy = System.__properties.__accuracy end
+			if new_accuracy then System.__properties.__accuracy = new_accuracy; update_divisor() end
+		end
+	end
+end)
+
+-- Token / remote capture for parry
+local _token, _tokenFound = nil, false
+pcall(function()
+	for _, Function in getgc(true) do
+		if type(Function) == "function" then
+			local ok, src = pcall(function() return debug.info(Function, "s") end)
+			if ok and type(src) == "string" and src:find("PRY", 1, true) then
+				local ok2, ups = pcall(debug.getupvalues, Function)
+				if ok2 and type(ups) == "table" then
+					for _, value in pairs(ups) do
+						if type(value) == "function" then
+							_token = value; _tokenFound = true; break
+						end
+					end
+				end
+			end
+		end
+		if _tokenFound then break end
+	end
+end)
+if not _tokenFound then
+	notify("Parry token not found yet - rejoin or play a round then re-inject")
+end
+
+local function _tokenize(_remote_uid)
+	if not _token then return "" end
+	local time = tostring(math.floor(Workspace:GetServerTimeNow() * 100))
+	local key = _token(_remote_uid, "TIME")
+	if type(key) ~= "string" or #key == 0 then return "" end
+	local characters = table.create(#time)
+	for index = 1, #time do
+		characters[index] = string.char(bit32.bxor(
+			(string.byte(time, index) + index) % 256,
+			string.byte(key, (index - 1) % #key + 1)
+		))
+	end
+	return table.concat(characters)
+end
+
+local _reverted, _original = {}, {}
+local _capturedRemote, _capturedArgs = nil, nil
+
+local function _is_valid(args)
+	return args and #args >= 8
+end
+
+local function _hook(remote)
+	if not remote or _reverted[remote] then return end
+	local meta = getrawmetatable(remote)
+	if not meta or _original[meta] then return end
+	_original[meta] = true
+	pcall(function()
+		setreadonly(meta, false)
+		local _old = meta.__index
+		meta.__index = function(self, key)
+			if (key == "FireServer" and self:IsA("RemoteEvent"))
+				or (key == "InvokeServer" and self:IsA("RemoteFunction")) then
+				return function(_, ...)
+					local _arguments = {...}
+					if _is_valid(_arguments) then
+						if not _reverted[self] then
+							_reverted[self] = _arguments
+							_capturedRemote = self
+							_capturedArgs = _arguments
+						end
+					end
+					return _old(self, key)(_, unpack(_arguments))
+				end
+			end
+			return _old(self, key)
+		end
+		setreadonly(meta, true)
+	end)
+end
+
+pcall(function()
+	for _, _remote in pairs(ReplicatedStorage:GetDescendants()) do
+		if _remote:IsA("RemoteEvent") or _remote:IsA("RemoteFunction") then
+			_hook(_remote)
+		end
+	end
+end)
+
+task.spawn(function()
+	task.wait(5)
+	if _capturedRemote then notify("Anti-cheat bypass ready") end
+end)
+
+local CURVE_NAMES = {"Camera","Random","Accelerated","Backwards","Slow","High","Normal","Speed","Down","Left","Right"}
+
 System.ball = {}
-System.ball.get = function()
-	local balls = workspace:FindFirstChild('Balls')
+function System.ball.get()
+	local balls = Workspace:FindFirstChild("Balls")
 	if not balls then return nil end
 	for _, ball in pairs(balls:GetChildren()) do
-		if ball:GetAttribute('realBall') then return ball end
+		if ball:GetAttribute("realBall") then
+			pcall(function() ball.CanCollide = false end)
+			return ball
+		end
 	end
 	return nil
 end
-System.ball.get_all = function()
+function System.ball.get_all()
 	local t = {}
-	local balls = workspace:FindFirstChild('Balls')
+	local balls = Workspace:FindFirstChild("Balls")
 	if not balls then return t end
 	for _, ball in pairs(balls:GetChildren()) do
-		if ball:GetAttribute('realBall') then table.insert(t, ball) end
+		if ball:GetAttribute("realBall") then
+			pcall(function() ball.CanCollide = false end)
+			table.insert(t, ball)
+		end
 	end
 	return t
 end
 
--- Parry remote resolve
-local Hash, UUID, ParryRemote
-pcall(function()
-	local Net = ReplicatedStorage.Packages._Index["sleitnick_net@0.1.0"].net
-	for _, T in pairs(getgc(true)) do
-		if type(T) == "function" then
-			local ok, upvalues = pcall(debug.getupvalues, T)
-			if ok and upvalues and type(upvalues) == "table" and #upvalues == 9 and typeof(upvalues[1]) == "Instance" and typeof(upvalues[5]) == "table" and typeof(upvalues[8]) == "string" then
-				Hash = upvalues[5][3]; UUID = upvalues[8]
-			end
-		elseif type(T) == "table" then
-			local value4, value5 = rawget(T, 2), rawget(T, 3)
-			if not ParryRemote and type(value4) == "function" and type(value5) == "string" and type(rawget(T, 0)) == "table" then
-				if string.len(value5) >= 36 and string.sub(value5, 9, 9) == "-" then
-					ParryRemote = Net:FindFirstChild("RE/" .. value4(string.gsub(value5, "-", ""), value5))
+System.player = {}
+local Closest_Entity, last_closest_check = nil, 0
+function System.player.get_closest()
+	local now = tick()
+	if now - last_closest_check < 0.1 then return Closest_Entity end
+	last_closest_check = now
+	local max_distance, closest_entity = math.huge, nil
+	if not Alive then return nil end
+	for _, entity in pairs(Alive:GetChildren()) do
+		if entity ~= LocalPlayer.Character and entity.PrimaryPart then
+			local distance = LocalPlayer:DistanceFromCharacter(entity.PrimaryPart.Position)
+			if distance < max_distance then max_distance = distance; closest_entity = entity end
+		end
+	end
+	Closest_Entity = closest_entity
+	return closest_entity
+end
+
+System.curve = {}
+function System.curve.get_cframe()
+	local Camera = Workspace.CurrentCamera
+	local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	local root_pos = root and root.Position or Camera.CFrame.Position
+	local targetPart
+	local bestDist = math.huge
+	local mouseLoc = not System.__properties.__is_mobile and UserInputService:GetMouseLocation() or nil
+	if Alive then
+		for _, v in pairs(Alive:GetChildren()) do
+			if v ~= LocalPlayer.Character and v.PrimaryPart then
+				local screenPos, onScreen = Camera:WorldToScreenPoint(v.PrimaryPart.Position)
+				if onScreen then
+					local dist
+					if mouseLoc then
+						dist = (Vector2.new(screenPos.X, screenPos.Y) - mouseLoc).Magnitude
+					else
+						local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+						dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+					end
+					if dist < bestDist then bestDist = dist; targetPart = v.PrimaryPart end
 				end
 			end
 		end
-		if Hash and UUID and ParryRemote then break end
 	end
+	local target_pos = targetPart and targetPart.Position or (root_pos + Camera.CFrame.LookVector * 100)
+	local Parry_Type = S.CurveType
+	local cf
+	if Parry_Type == "Camera" then
+		cf = Camera.CFrame
+	elseif Parry_Type == "Random" then
+		local direction = (target_pos - root_pos).Unit
+		local random_offset
+		local attempts = 0
+		repeat
+			random_offset = Vector3.new(math.random(-4000,4000), math.random(-4000,4000), math.random(-4000,4000))
+			local curve_dir = (target_pos + random_offset - root_pos).Unit
+			local dot = direction:Dot(curve_dir)
+			attempts = attempts + 1
+		until dot < 0.95 or attempts > 10
+		cf = CFrame.new(root_pos, target_pos + random_offset)
+	elseif Parry_Type == "Accelerated" then
+		cf = CFrame.new(root_pos, target_pos + Vector3.new(0, 5, 0))
+	elseif Parry_Type == "Backwards" then
+		local direction = (root_pos - target_pos).Unit
+		local backwards_pos = root_pos + direction * 10000 + Vector3.new(0, 1000, 0)
+		cf = CFrame.new(Camera.CFrame.Position, backwards_pos)
+	elseif Parry_Type == "Slow" then
+		cf = CFrame.new(root_pos, target_pos + Vector3.new(0, -9e18, 0))
+	elseif Parry_Type == "High" then
+		cf = CFrame.new(root_pos, target_pos + Vector3.new(0, 9e18, 0))
+	elseif Parry_Type == "Normal" then
+		cf = CFrame.new(root_pos, root_pos + (root and root.CFrame.LookVector or Camera.CFrame.LookVector))
+	elseif Parry_Type == "Speed" then
+		cf = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + Camera.CFrame.UpVector * 5)
+	elseif Parry_Type == "Down" then
+		cf = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + Camera.CFrame.UpVector * -9e9)
+	elseif Parry_Type == "Left" then
+		cf = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position - Camera.CFrame.RightVector * 9e9)
+	elseif Parry_Type == "Right" then
+		cf = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + Camera.CFrame.RightVector * 9e9)
+	else
+		cf = Camera.CFrame
+	end
+	return cf
+end
+
+local function fireParryRemote(curveCF)
+	if not _capturedRemote or not _capturedArgs then return false end
+	local cam = Workspace.CurrentCamera
+	local is_mobile = System.__properties.__is_mobile
+	local aim_target
+	if is_mobile then
+		local vp = cam.ViewportSize
+		aim_target = {math.floor(vp.X / 2), math.floor(vp.Y / 2)}
+	else
+		local ok, mouse = pcall(function() return UserInputService:GetMouseLocation() end)
+		if ok and mouse then
+			aim_target = {math.floor(mouse.X), math.floor(mouse.Y)}
+		else
+			local vp = cam.ViewportSize
+			aim_target = {math.floor(vp.X / 2), math.floor(vp.Y / 2)}
+		end
+	end
+	local event_data = {}
+	if Alive then
+		for _, entity in pairs(Alive:GetChildren()) do
+			if entity.PrimaryPart then
+				local ok, sp = pcall(function() return cam:WorldToScreenPoint(entity.PrimaryPart.Position) end)
+				if ok then event_data[entity.Name] = sp end
+			end
+		end
+	end
+	local packet = {
+		_capturedArgs[1],
+		_capturedArgs[2],
+		_tokenize(_capturedArgs[2]),
+		0.5,
+		curveCF or cam.CFrame,
+		event_data,
+		aim_target,
+		false
+	}
+	pcall(function()
+		if _capturedRemote:IsA("RemoteEvent") then
+			_capturedRemote:FireServer(unpack(packet))
+		elseif _capturedRemote:IsA("RemoteFunction") then
+			_capturedRemote:InvokeServer(unpack(packet))
+		end
+	end)
+	return true
+end
+
+-- Animation grab parry
+System.animation = {}
+local SwordAPI, LastPlayedd, Sword_CP, Sword_Spped, Grab_Parry, AnimFix_Cache = nil, 0, false, 1, nil, {}
+pcall(function()
+	SwordAPI = ReplicatedStorage:WaitForChild("Shared", 5):WaitForChild("SwordAPI", 5)
 end)
 
-local parryfunction = function() end
-if ParryRemote and Hash and UUID then
-	local StealthBridge = Instance.new("BindableEvent")
-	local stealth_action = function(countparries, curvecframe)
-		if not LocalPlayer.Character or not LocalPlayer.Character.PrimaryPart then return end
-		local current_frame_data = {}
-		local current_frame_cam = workspace.CurrentCamera.CFrame
-		local aliveFolder = workspace:FindFirstChild("Alive")
-		if aliveFolder then
-			for _, v in ipairs(aliveFolder:GetChildren()) do
-				if v ~= LocalPlayer.Character and v.PrimaryPart then
-					local screenPos, isOnScreen = workspace.CurrentCamera:WorldToScreenPoint(v.PrimaryPart.Position)
-					if isOnScreen then current_frame_data[tostring(v)] = screenPos end
-				end
-			end
-		end
-		local aim
-		if UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
-			local screenSize = workspace.CurrentCamera.ViewportSize
-			aim = {screenSize.X/2, screenSize.Y/2}
-		else
-			local ml = UserInputService:GetMouseLocation()
-			aim = {ml.X, ml.Y}
-		end
-		local finnalcframe = curvecframe or current_frame_cam
-		pcall(function()
-			ParryRemote:FireServer(UUID, Hash, 0.5, finnalcframe, current_frame_data, aim, false)
-		end)
-		if countparries then
-			System.__properties.__parries += 1
-			task.delay(0.5, function()
-				if System.__properties.__parries > 0 then System.__properties.__parries -= 1 end
-			end)
+local function GetParryAnimation(swordName)
+	if not SwordAPI then return nil end
+	if not swordName or swordName == "" then
+		return SwordAPI.Collection.Default and SwordAPI.Collection.Default:FindFirstChild("GrabParry")
+	end
+	if AnimFix_Cache[swordName] then return AnimFix_Cache[swordName] end
+	local ok, swordData = pcall(function()
+		return ReplicatedStorage.Shared.ReplicatedInstances.Swords.GetSword:Invoke(swordName)
+	end)
+	if not ok or not swordData or type(swordData) ~= "table" or not swordData.AnimationType then
+		AnimFix_Cache[swordName] = SwordAPI.Collection.Default and SwordAPI.Collection.Default:FindFirstChild("GrabParry")
+		return AnimFix_Cache[swordName]
+	end
+	for _, obj in pairs(SwordAPI.Collection:GetChildren()) do
+		if obj.Name == swordData.AnimationType then
+			local anim = obj:FindFirstChild("GrabParry") or obj:FindFirstChild("Grab")
+			if anim then AnimFix_Cache[swordName] = anim; return anim end
 		end
 	end
-	StealthBridge.Event:Connect(stealth_action)
-	parryfunction = function(countparries, curvecframe)
-		StealthBridge:Fire(countparries, curvecframe)
-	end
-	print("[KHUB] Parry remote found")
-else
-	warn("[KHUB] Parry remote not fully resolved — some combat features limited")
+	AnimFix_Cache[swordName] = SwordAPI.Collection.Default and SwordAPI.Collection.Default:FindFirstChild("GrabParry")
+	return AnimFix_Cache[swordName]
 end
+
+function System.animation.play_grab_parry()
+	if not System.__properties.__play_animation then return end
+	if not ((os.clock() - LastPlayedd) >= (Sword_Spped - 0.8) or Sword_CP) then return end
+	LastPlayedd = os.clock(); Sword_CP = false
+	local char = LocalPlayer.Character; if not char then return end
+	local humanoid = char:FindFirstChildOfClass("Humanoid"); if not humanoid or not humanoid.Animator then return end
+	local currentSword = char:GetAttribute("CurrentlyEquippedSword")
+	if getgenv().skinChanger then
+		currentSword = (getgenv().swordAnimations ~= "" and getgenv().swordAnimations)
+			or (getgenv().swordModel ~= "" and getgenv().swordModel) or currentSword
+	end
+	local animation = GetParryAnimation(currentSword); if not animation then return end
+	for _, track in pairs(humanoid.Animator:GetPlayingAnimationTracks()) do
+		if track.Name == "GrabParry" or track.Name == "Grab" or track.Name == "SuccessParry" or track.Name == "Success" then
+			pcall(function() track:Stop(0.1) end)
+		end
+	end
+	Grab_Parry = humanoid.Animator:LoadAnimation(animation)
+	pcall(function()
+		Grab_Parry:Play(Grab_Parry:GetAttribute("PlayFadeTime") or 0, Grab_Parry:GetAttribute("PlayWeight") or 1, Grab_Parry:GetAttribute("PlaySpeed") or 1)
+	end)
+end
+
+pcall(function()
+	ReplicatedStorage.Remotes.ParrySuccessAll.OnClientEvent:Connect(function()
+		Sword_CP = true
+	end)
+end)
 
 System.parry = {}
-System.parry.execute = function()
+function System.parry.execute()
 	if System.__properties.__parries > 10000 or not LocalPlayer.Character then return end
-	parryfunction(true)
+	fireParryRemote(System.curve.get_cframe())
+	System.__properties.__parries = System.__properties.__parries + 1
+	task.delay(0.5, function()
+		if System.__properties.__parries > 0 then System.__properties.__parries = System.__properties.__parries - 1 end
+	end)
+end
+function System.parry.keypress()
+	System.parry.execute()
+end
+function System.parry.execute_action()
+	System.animation.play_grab_parry()
+	System.parry.execute()
 end
 
-System.animation = {}
-System.animation.play_grab_parry = function() end
-System.animation.startfix = function() end
-System.animation.stopfix = function() end
-System.animation.startdisable = function()
-	AnimationFixService.DisableRunning = true
-end
-System.animation.stopdisable = function()
-	AnimationFixService.DisableRunning = false
-end
-System.animation.togglevfx = function(state)
-	AnimationFixService.VFXRunning = state
-	System.__properties.vfxdisabled = state
-end
-
-local AnimationFixService = {
-	Rate = 60, DisableRunning = false, VFXRunning = false, Cache = {},
+local function linear_predict(a,b,t) return a+(b-a)*t end
+System.detection = {
+	__ball_properties = {__aerodynamic_time=tick(),__last_warping=tick(),__lerp_radians=0,__curving=tick()}
 }
-System.AnimationFixService = AnimationFixService
-
-System.graphics = {}
-System.graphics.enablepotato = function(state)
-	System.__properties.potatographics = state
-	local Lighting = game:GetService("Lighting")
-	if state then
-		pcall(function()
-			Lighting.GlobalShadows = false
-			Lighting.Brightness = 1
-			settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-		end)
-	else
-		pcall(function()
-			settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
-		end)
-	end
+function System.detection.is_curved()
+	local props = System.detection.__ball_properties
+	local ball = System.ball.get(); if not ball then return false end
+	local zoomies = ball:FindFirstChild("zoomies"); if not zoomies then return false end
+	local velocity = zoomies.VectorVelocity; local speed = velocity.Magnitude
+	if speed < 1 then return false end
+	local ball_dir = velocity.Unit
+	local char = LocalPlayer.Character; if not char or not char.PrimaryPart then return false end
+	local pos = char.PrimaryPart.Position
+	local direction = (pos - ball.Position).Unit
+	local dot = direction:Dot(ball_dir)
+	local ping = 0
+	pcall(function() ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue()/1000 end)
+	local distance = (pos - ball.Position).Magnitude
+	local reach_time = distance/speed - ping
+	local dot_threshold = math.clamp(0.55-(ping*0.75), -1, 0.45)
+	local speed_threshold = math.min(speed/100, 45)
+	local ball_distance_threshold = 15 - math.min(distance/1000, 15) + speed_threshold
+	local clamped_dot = math.clamp(dot, -1, 1)
+	local radians = math.asin(clamped_dot)
+	props.__lerp_radians = linear_predict(props.__lerp_radians, radians, 0.85)
+	if props.__lerp_radians < 0.016 then props.__last_warping = tick() end
+	if distance < (ball_distance_threshold*0.85) then return false end
+	if (tick()-props.__last_warping) < (reach_time/1.4) then return true end
+	if (tick()-props.__curving) < (reach_time/1.1) then return true end
+	return dot < dot_threshold
 end
 
--- Autoparry simplified
-System.autoparry = {}
-System.autoparry.start = function()
-	if System.__properties.__connections.__autoparry then
-		System.__properties.__connections.__autoparry:Disconnect()
-	end
-	System.__properties.__autoparry_enabled = true
-	System.__properties.__connections.__autoparry = RunService.RenderStepped:Connect(function()
-		if not System.__properties.__autoparry_enabled then return end
-		if getgenv().InfinityDetection and System.__properties.__infinity_active then return end
-		if getgenv().DeathSlashDetection and System.__properties.__deathslash_active then return end
-		local char = LocalPlayer.Character
-		if not char or not char.PrimaryPart then return end
-		local ball = System.ball.get()
-		if not ball then return end
-		local zoomies = ball:FindFirstChild("zoomies")
-		if not zoomies then return end
-		local target = ball:GetAttribute("target")
-		if target ~= LocalPlayer.Name then return end
-		local dist = (char.PrimaryPart.Position - ball.Position).Magnitude
-		local speed = zoomies.VectorVelocity.Magnitude
-		local thresh = 12 + math.min(speed / 40, 30)
-		if dist <= thresh then
-			parryfunction(false)
+-- Ability detections
+pcall(function()
+	ReplicatedStorage.Remotes.DeathBall.OnClientEvent:Connect(function(c,d)
+		System.__properties.__deathslash_active = d or false
+	end)
+	ReplicatedStorage.Remotes.InfinityBall.OnClientEvent:Connect(function(a,b)
+		System.__properties.__infinity_active = b or false
+	end)
+end)
+pcall(function()
+	local net = ReplicatedStorage.Packages._Index["sleitnick_net@0.1.0"].net
+	net["RE/TimeHoleActivate"].OnClientEvent:Connect(function(...)
+		local args = {...}; local p = args[1]
+		if p == LocalPlayer or p == LocalPlayer.Name or (p and p.Name == LocalPlayer.Name) then
+			System.__properties.__timehole_active = true
+		end
+	end)
+	net["RE/TimeHoleDeactivate"].OnClientEvent:Connect(function()
+		System.__properties.__timehole_active = false
+	end)
+	local maxParryCount, parryDelay = 36, 0.05
+	net["RE/SlashesOfFuryActivate"].OnClientEvent:Connect(function(...)
+		local args = {...}; local p = args[1]
+		if p == LocalPlayer or p == LocalPlayer.Name or (p and p.Name == LocalPlayer.Name) then
+			System.__properties.__slashesoffury_active = true
+			System.__properties.__slashesoffury_count = 0
+		end
+	end)
+	net["RE/SlashesOfFuryEnd"].OnClientEvent:Connect(function()
+		System.__properties.__slashesoffury_active = false
+		System.__properties.__slashesoffury_count = 0
+	end)
+	net["RE/SlashesOfFuryParry"].OnClientEvent:Connect(function()
+		System.__properties.__slashesoffury_count = System.__properties.__slashesoffury_count + 1
+	end)
+	net["RE/SlashesOfFuryCatch"].OnClientEvent:Connect(function()
+		task.spawn(function()
+			while System.__properties.__slashesoffury_active and System.__properties.__slashesoffury_count < maxParryCount do
+				if System.__config.__detections.__slashesoffury then
+					System.parry.execute(); task.wait(parryDelay)
+				else break end
+			end
+		end)
+	end)
+end)
+
+if Runtime then
+	Runtime.ChildAdded:Connect(function(Object)
+		if not System.__config.__detections.__phantom then return end
+		if Object.Name == "maxTransmission" or Object.Name == "transmissionpart" then
+			local Weld = Object:FindFirstChildWhichIsA("WeldConstraint")
+			if Weld then
+				local Character = LocalPlayer.Character
+				if Character and Weld.Part1 == Character:FindFirstChild("HumanoidRootPart") then
+					local CurrentBall = System.ball.get()
+					Weld:Destroy()
+					if CurrentBall then
+						local FocusConnection
+						FocusConnection = RunService.RenderStepped:Connect(function()
+							local Highlighted = CurrentBall:GetAttribute("highlighted")
+							if Highlighted == true then
+								pcall(function() ReplicatedStorage.Remotes.AbilityButtonPress:Fire() end)
+								System.__properties.__parried = true
+								task.delay(1, function() System.__properties.__parried = false end)
+							elseif Highlighted == false then
+								FocusConnection:Disconnect()
+							end
+						end)
+						task.delay(3, function() if FocusConnection and FocusConnection.Connected then FocusConnection:Disconnect() end end)
+					end
+				end
+			end
 		end
 	end)
 end
-System.autoparry.stop = function()
-	System.__properties.__autoparry_enabled = false
+
+-- Triggerbot
+local triggerbotCooldown = false
+System.triggerbot = {}
+function System.triggerbot.trigger(ball)
+	if triggerbotCooldown or System.__triggerbot.__is_parrying then return end
+	if System.__triggerbot.__parries > System.__triggerbot.__max_parries then return end
+	if LocalPlayer.Character and LocalPlayer.Character.PrimaryPart and LocalPlayer.Character.PrimaryPart:FindFirstChild("SingularityCape") then return end
+	triggerbotCooldown = true
+	System.__triggerbot.__is_parrying = true
+	System.__triggerbot.__parries = System.__triggerbot.__parries + 1
+	System.parry.execute()
+	if System.__properties.__play_animation then System.animation.play_grab_parry() end
+	task.delay(0.2, function()
+		triggerbotCooldown = false
+		if System.__triggerbot.__parries > 0 then System.__triggerbot.__parries = System.__triggerbot.__parries - 1 end
+	end)
+	task.spawn(function()
+		local start_time = tick()
+		repeat RunService.Heartbeat:Wait() until (tick() - start_time >= 0.15 or not System.__triggerbot.__is_parrying)
+		System.__triggerbot.__is_parrying = false
+	end)
+end
+function System.triggerbot.loop()
+	if not System.__triggerbot.__enabled then return end
+	local balls = Workspace:FindFirstChild("Balls"); if not balls then return end
+	for _, ball in pairs(balls:GetChildren()) do
+		if ball:IsA("BasePart") and ball:GetAttribute("target") == LocalPlayer.Name then
+			System.triggerbot.trigger(ball); break
+		end
+	end
+end
+function System.triggerbot.enable(enabled)
+	System.__triggerbot.__enabled = enabled
+	if enabled then
+		if not System.__properties.__connections.__triggerbot then
+			System.__properties.__connections.__triggerbot = RunService.Heartbeat:Connect(System.triggerbot.loop)
+		end
+	else
+		if System.__properties.__connections.__triggerbot then
+			System.__properties.__connections.__triggerbot:Disconnect()
+			System.__properties.__connections.__triggerbot = nil
+		end
+		System.__triggerbot.__is_parrying = false
+		System.__triggerbot.__parries = 0
+		triggerbotCooldown = false
+	end
+end
+
+-- Manual spam
+System.manual_spam = {}
+local macroSpamActive = false
+function System.manual_spam.start()
+	System.manual_spam.stop()
+	System.__properties.__manual_spam_enabled = true
+	macroSpamActive = true
+end
+function System.manual_spam.stop()
+	System.__properties.__manual_spam_enabled = false
+	macroSpamActive = false
+end
+RunService.Heartbeat:Connect(function()
+	if macroSpamActive and _capturedRemote then
+		pcall(function()
+			fireParryRemote(System.curve.get_cframe())
+			if S.ManualSpamAnimFix then System.animation.play_grab_parry() end
+		end)
+	end
+end)
+
+-- Auto spam
+System.auto_spam = {}
+function System.auto_spam:get_entity_properties()
+	System.player.get_closest()
+	if not Closest_Entity or not LocalPlayer.Character or not LocalPlayer.Character.PrimaryPart or not Closest_Entity.PrimaryPart then return false end
+	return {
+		Velocity = Closest_Entity.PrimaryPart.AssemblyLinearVelocity,
+		Direction = (LocalPlayer.Character.PrimaryPart.Position - Closest_Entity.PrimaryPart.Position).Unit,
+		Distance = (LocalPlayer.Character.PrimaryPart.Position - Closest_Entity.PrimaryPart.Position).Magnitude
+	}
+end
+function System.auto_spam:get_ball_properties()
+	local ball = System.ball.get()
+	if not ball or not LocalPlayer.Character or not LocalPlayer.Character.PrimaryPart then return false end
+	local ball_velocity = ball.AssemblyLinearVelocity
+	local ball_direction = (LocalPlayer.Character.PrimaryPart.Position - ball.Position).Unit
+	local ball_distance = (LocalPlayer.Character.PrimaryPart.Position - ball.Position).Magnitude
+	local ball_dot = ball_velocity.Magnitude > 0 and ball_direction:Dot(ball_velocity.Unit) or 0
+	return {Velocity = ball_velocity, Direction = ball_direction, Distance = ball_distance, Dot = ball_dot}
+end
+function System.auto_spam.spam_service(self)
+	local ball = System.ball.get()
+	local entity = System.player.get_closest()
+	if not ball or not entity or not entity.PrimaryPart or not LocalPlayer.Character or not LocalPlayer.Character.PrimaryPart then return 0 end
+	local velocity = ball.AssemblyLinearVelocity
+	local speed = velocity.Magnitude
+	local direction = (LocalPlayer.Character.PrimaryPart.Position - ball.Position).Unit
+	local dot = speed > 0 and direction:Dot(velocity.Unit) or 0
+	local target_distance = LocalPlayer:DistanceFromCharacter(entity.PrimaryPart.Position)
+	local maximum_spam_distance = self.Ping + math.min(speed / 6, 255)
+	if self.Entity_Properties.Distance > maximum_spam_distance or self.Ball_Properties.Distance > maximum_spam_distance or target_distance > maximum_spam_distance then return 0 end
+	local maximum_speed = 5 - math.min(speed / 5, 5)
+	local maximum_dot = math.clamp(dot, -1, 0) * maximum_speed
+	return maximum_spam_distance - maximum_dot
+end
+function System.auto_spam.start()
+	if System.__properties.__connections.__auto_spam then
+		System.__properties.__connections.__auto_spam:Disconnect()
+	end
+	System.__properties.__auto_spam_enabled = true
+	System.__properties.__connections.__auto_spam = RunService.PreSimulation:Connect(function()
+		if not System.__properties.__auto_spam_enabled then return end
+		local ball = System.ball.get()
+		if not ball or System.__properties.__slashesoffury_active then return end
+		local zoomies = ball:FindFirstChild("zoomies"); if not zoomies then return end
+		System.player.get_closest()
+		local ball_properties = System.auto_spam:get_ball_properties()
+		local entity_properties = System.auto_spam:get_entity_properties()
+		if not ball_properties or not entity_properties or not Closest_Entity or not Closest_Entity.PrimaryPart then return end
+		local ping = 0
+		pcall(function() ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
+		local ping_threshold = math.clamp(ping / 10, 1, 16)
+		local spam_accuracy = System.auto_spam.spam_service({
+			Ball_Properties = ball_properties,
+			Entity_Properties = entity_properties,
+			Ping = ping_threshold
+		})
+		local target_distance = LocalPlayer:DistanceFromCharacter(Closest_Entity.PrimaryPart.Position)
+		local distance = LocalPlayer:DistanceFromCharacter(ball.Position)
+		local ball_target = ball:GetAttribute("target")
+		if not ball_target or target_distance > spam_accuracy or distance > spam_accuracy then return end
+		if LocalPlayer.Character:GetAttribute("Pulsed") then return end
+		if ball_target == LocalPlayer.Name and target_distance > 30 and distance > 30 then return end
+		if distance <= spam_accuracy and System.__properties.__parries > System.__properties.__spam_threshold then
+			System.parry.execute()
+			if S.AutoSpamAnimFix then System.animation.play_grab_parry() end
+		end
+	end)
+end
+function System.auto_spam.stop()
+	System.__properties.__auto_spam_enabled = false
+	if System.__properties.__connections.__auto_spam then
+		System.__properties.__connections.__auto_spam:Disconnect()
+		System.__properties.__connections.__auto_spam = nil
+	end
+end
+
+-- Auto parry
+System.autoparry = {}
+function System.autoparry.start()
+	if System.__properties.__connections.__autoparry then
+		System.__properties.__connections.__autoparry:Disconnect()
+	end
+	System.__properties.__connections.__autoparry = RunService.PreSimulation:Connect(function()
+		if not System.__properties.__autoparry_enabled or not LocalPlayer.Character or not LocalPlayer.Character.PrimaryPart then return end
+		local balls = System.ball.get_all()
+		local one_ball = System.ball.get()
+		local training_ball = nil
+		if Workspace:FindFirstChild("TrainingBalls") then
+			for _, Instance in pairs(Workspace.TrainingBalls:GetChildren()) do
+				if Instance:GetAttribute("realBall") then training_ball = Instance; break end
+			end
+		end
+		for _, ball in pairs(balls) do
+			if System.__triggerbot.__enabled then return end
+			if not ball then continue end
+			local zoomies = ball:FindFirstChild("zoomies"); if not zoomies then continue end
+			pcall(function()
+				ball:GetAttributeChangedSignal("target"):Once(function() System.__properties.__parried = false end)
+			end)
+			if System.__properties.__parried then continue end
+			local ball_target = ball:GetAttribute("target")
+			local velocity = zoomies.VectorVelocity
+			local distance = (LocalPlayer.Character.PrimaryPart.Position - ball.Position).Magnitude
+			local ping = 0
+			pcall(function() ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue()/10 end)
+			local ping_threshold = math.clamp(ping/10, 5, 17)
+			local speed = velocity.Magnitude
+			local capped_speed_diff = math.min(math.max(speed-9.5, 0), 650)
+			local speed_divisor = (2.4 + capped_speed_diff * 0.002) * System.__properties.__divisor_multiplier
+			local parry_accuracy = ping_threshold + math.max(speed / speed_divisor, 9.5)
+			local curved = System.detection.is_curved()
+			if ball:FindFirstChild("AeroDynamicSlashVFX") then
+				ball.AeroDynamicSlashVFX:Destroy()
+				System.__properties.__tornado_time = tick()
+			end
+			if Runtime and Runtime:FindFirstChild("Tornado") then
+				if (tick() - System.__properties.__tornado_time) < (Runtime.Tornado:GetAttribute("TornadoTime") or 1) + 0.314159 then continue end
+			end
+			if one_ball and one_ball:GetAttribute("target") == LocalPlayer.Name and curved then continue end
+			if ball:FindFirstChild("ComboCounter") then continue end
+			if LocalPlayer.Character.PrimaryPart:FindFirstChild("SingularityCape") then continue end
+			if System.__config.__detections.__infinity and System.__properties.__infinity_active then continue end
+			if System.__config.__detections.__deathslash and System.__properties.__deathslash_active then continue end
+			if System.__config.__detections.__timehole and System.__properties.__timehole_active then continue end
+			if System.__config.__detections.__slashesoffury and System.__properties.__slashesoffury_active then continue end
+			if ball_target == LocalPlayer.Name and distance <= parry_accuracy then
+				if S.AutoAbility then
+					pcall(function()
+						local AbilityCD = LocalPlayer.PlayerGui.Hotbar.Ability.UIGradient
+						if AbilityCD and AbilityCD.Offset.Y == 0.5 then
+							System.__properties.__parried = true
+							ReplicatedStorage.Remotes.AbilityButtonPress:Fire()
+							task.wait(2.432)
+							ReplicatedStorage.Remotes.DeathSlashShootActivation:FireServer(true)
+						end
+					end)
+				end
+			end
+			if ball_target == LocalPlayer.Name and distance <= parry_accuracy then
+				if S.AutoParryMode == "Keypress" then System.parry.keypress()
+				else System.parry.execute_action() end
+				System.__properties.__parried = true
+				local last_parrys = tick()
+				repeat RunService.Stepped:Wait() until (tick() - last_parrys) >= 1 or not System.__properties.__parried
+				System.__properties.__parried = false
+			end
+		end
+		if training_ball then
+			local zoomies = training_ball:FindFirstChild("zoomies")
+			if zoomies and not System.__properties.__training_parried then
+				local ball_target = training_ball:GetAttribute("target")
+				local velocity = zoomies.VectorVelocity
+				local distance = LocalPlayer:DistanceFromCharacter(training_ball.Position)
+				local speed = velocity.Magnitude
+				local ping = 0
+				pcall(function() ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue()/10 end)
+				local ping_threshold = math.clamp(ping/10, 5, 17)
+				local capped_speed_diff = math.min(math.max(speed-9.5, 0), 650)
+				local speed_divisor = (2.4 + capped_speed_diff * 0.002) * System.__properties.__divisor_multiplier
+				local parry_accuracy = ping_threshold + math.max(speed / speed_divisor, 9.5)
+				if ball_target == LocalPlayer.Name and distance <= parry_accuracy then
+					System.parry.execute_action()
+					System.__properties.__training_parried = true
+					task.delay(1, function() System.__properties.__training_parried = false end)
+				end
+			end
+		end
+	end)
+end
+function System.autoparry.stop()
 	if System.__properties.__connections.__autoparry then
 		System.__properties.__connections.__autoparry:Disconnect()
 		System.__properties.__connections.__autoparry = nil
 	end
 end
 
-System.triggerbot = {}
-System.triggerbot.start = function()
-	if System.__triggerbot.__connection then pcall(function() System.__triggerbot.__connection:Disconnect() end) end
-	System.__triggerbot.__enabled = true
-	System.__triggerbot.__connection = RunService.Heartbeat:Connect(function()
-		if not System.__triggerbot.__enabled then return end
-		local char = LocalPlayer.Character
-		if not char or not char.PrimaryPart then return end
-		local range = System.__triggerbot.__trigger_range or 28
-		for _, ball in ipairs(System.ball.get_all()) do
-			if ball:GetAttribute("target") == LocalPlayer.Name then
-				local zoomies = ball:FindFirstChild("zoomies")
-				if zoomies then
-					local dist = (char.PrimaryPart.Position - ball.Position).Magnitude
-					if dist <= range then parryfunction(false) end
+print("[KHUB] Blade Ball combat core loaded")
+
+-- ===================== CHARACTER / MISC BACKENDS =====================
+getgenv().AutoParryMode = "Remote"
+getgenv().AutoSpamMode = "Remote"
+getgenv().ManualSpamMode = "Remote"
+getgenv().AutoAbility = false
+getgenv().skinChanger = getgenv().skinChanger or false
+getgenv().swordModel = getgenv().swordModel or ""
+getgenv().swordAnimations = getgenv().swordAnimations or ""
+getgenv().swordFX = getgenv().swordFX or ""
+getgenv().explosionChanger = getgenv().explosionChanger or false
+getgenv().explosionFX = getgenv().explosionFX or ""
+
+local OriginalValues = nil
+local spinAngle = 0
+local function CharacterApply()
+	if not S.CharacterMod then return end
+	local char = LocalPlayer.Character; if not char then return end
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	local root = char:FindFirstChild("HumanoidRootPart")
+	if humanoid then
+		if not OriginalValues or OriginalValues.Character ~= char then
+			OriginalValues = {
+				Character = char, WalkSpeed = humanoid.WalkSpeed, JumpPower = humanoid.JumpPower,
+				JumpHeight = humanoid.JumpHeight, HipHeight = humanoid.HipHeight, AutoRotate = humanoid.AutoRotate
+			}
+		end
+		if S.EnableSpeed then humanoid.WalkSpeed = S.WalkSpeed end
+		if S.EnableJump then
+			if humanoid.UseJumpPower then humanoid.JumpPower = S.JumpPower
+			else humanoid.JumpHeight = S.JumpPower * 0.144 end
+		end
+		if S.EnableHip then humanoid.HipHeight = S.HipHeight end
+		if S.Spin and root then
+			humanoid.AutoRotate = false
+			spinAngle = (spinAngle + S.SpinSpeed) % 360
+			root.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, math.rad(spinAngle), 0)
+		elseif OriginalValues and OriginalValues.AutoRotate ~= nil then
+			humanoid.AutoRotate = OriginalValues.AutoRotate
+		end
+	end
+	if S.EnableGravity then Workspace.Gravity = S.Gravity end
+end
+
+UserInputService.JumpRequest:Connect(function()
+	if S.CharacterMod and S.InfJump then
+		local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+	end
+end)
+
+RunService.Heartbeat:Connect(function()
+	pcall(CharacterApply)
+	if S.FOVEnabled then
+		local cam = Workspace.CurrentCamera
+		if cam then cam.FieldOfView = S.FOV end
+	end
+end)
+
+-- Random curve
+RunService.PreSimulation:Connect(function()
+	if S.RandomCurve then
+		S.CurveType = CURVE_NAMES[math.random(1, #CURVE_NAMES)]
+	end
+end)
+
+-- No Render
+local noRenderConn = nil
+local function setNoRender(on)
+	S.NoRender = on
+	pcall(function()
+		local ps = LocalPlayer:FindFirstChild("PlayerScripts")
+		local es = ps and ps:FindFirstChild("EffectScripts")
+		local fx = es and es:FindFirstChild("ClientFX")
+		if fx then fx.Disabled = on end
+	end)
+	if noRenderConn then noRenderConn:Disconnect(); noRenderConn = nil end
+	if on and Runtime then
+		noRenderConn = Runtime.ChildAdded:Connect(function(v) Debris:AddItem(v, 0) end)
+	end
+end
+
+-- Emotes
+local animation_system = { storage = {}, current = nil, track = nil }
+pcall(function()
+	local emotes_folder = ReplicatedStorage.Misc.Emotes
+	for _, animation in pairs(emotes_folder:GetChildren()) do
+		if animation:IsA("Animation") and animation:GetAttribute("EmoteName") then
+			animation_system.storage[animation:GetAttribute("EmoteName")] = animation
+		end
+	end
+end)
+local function getEmotesList()
+	local t = {}
+	for n in pairs(animation_system.storage) do table.insert(t, n) end
+	table.sort(t)
+	return t
+end
+local emotes_data = getEmotesList()
+function animation_system.play(name)
+	local data = animation_system.storage[name]
+	if not data or not LocalPlayer.Character then return end
+	local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+	local animator = hum and hum:FindFirstChildOfClass("Animator")
+	if not animator then return end
+	if animation_system.track then pcall(function() animation_system.track:Stop(); animation_system.track:Destroy() end) end
+	animation_system.track = animator:LoadAnimation(data)
+	animation_system.track:Play()
+	animation_system.current = name
+end
+function animation_system.stop()
+	if animation_system.track then pcall(function() animation_system.track:Stop(); animation_system.track:Destroy() end) end
+	animation_system.track = nil; animation_system.current = nil
+end
+RunService.Heartbeat:Connect(function()
+	if not S.Emotes or not S.AutoStopEmote then return end
+	if not LocalPlayer.Character or not LocalPlayer.Character.PrimaryPart then return end
+	local speed = LocalPlayer.Character.PrimaryPart.AssemblyLinearVelocity.Magnitude
+	if speed > 30 and animation_system.track and animation_system.track.IsPlaying then
+		animation_system.track:Stop()
+	elseif animation_system.current and (not animation_system.track or not animation_system.track.IsPlaying) then
+		animation_system.play(animation_system.current)
+	end
+end)
+
+-- World presets
+local WorldPresets = {
+	{Name="Sunset", Sky={"rbxassetid://323494035","rbxassetid://323494368","rbxassetid://323494130","rbxassetid://323494252","rbxassetid://323494067","rbxassetid://323493360"},
+		Time=17.2,Brightness=2.2,Exposure=0.15,Ambient=Color3.fromRGB(255,180,150),Outdoor=Color3.fromRGB(255,200,170),Fog=Color3.fromRGB(255,185,155),FogEnd=1800},
+	{Name="Blue Sky", Sky={"rbxassetid://135483466","rbxassetid://135483484","rbxassetid://135483461","rbxassetid://135483495","rbxassetid://135483499","rbxassetid://135483475"},
+		Time=13.5,Brightness=2.5,Exposure=0.2,Ambient=Color3.fromRGB(175,205,255),Outdoor=Color3.fromRGB(200,220,255),Fog=Color3.fromRGB(175,210,255),FogEnd=2500},
+	{Name="Galaxy", Sky={"rbxassetid://159454299","rbxassetid://159454296","rbxassetid://159454293","rbxassetid://159454286","rbxassetid://159454300","rbxassetid://159454288"},
+		Time=12,Brightness=1.5,Exposure=0.2,Ambient=Color3.fromRGB(85,75,145),Outdoor=Color3.fromRGB(105,95,175),Fog=Color3.fromRGB(75,70,145),FogEnd=1800},
+}
+local function ClearWorld()
+	for _,o in ipairs(Lighting:GetChildren()) do
+		if o.Name=="KHUB_Sky" or o.Name=="KHUB_Atmosphere" or o.Name=="KHUB_CC" or o.Name=="KHUB_Bloom" then o:Destroy() end
+	end
+end
+local function ApplyWorld(preset)
+	if not preset then return end
+	ClearWorld()
+	local sky = Instance.new("Sky"); sky.Name="KHUB_Sky"
+	sky.SkyboxBk=preset.Sky[1]; sky.SkyboxDn=preset.Sky[2]; sky.SkyboxFt=preset.Sky[3]
+	sky.SkyboxLf=preset.Sky[4]; sky.SkyboxRt=preset.Sky[5]; sky.SkyboxUp=preset.Sky[6]
+	sky.Parent = Lighting
+	Lighting.ClockTime=preset.Time; Lighting.Brightness=preset.Brightness
+	Lighting.ExposureCompensation=preset.Exposure; Lighting.Ambient=preset.Ambient
+	Lighting.OutdoorAmbient=preset.Outdoor; Lighting.FogColor=preset.Fog; Lighting.FogEnd=preset.FogEnd
+end
+
+-- Immortal orbit
+local orbitEnabled, orbitHRP = false, nil
+local orbitConn = nil
+local function startImmortal()
+	orbitEnabled = true
+	if LocalPlayer.Character then orbitHRP = LocalPlayer.Character:FindFirstChild("HumanoidRootPart") end
+	LocalPlayer.CharacterAdded:Connect(function(c)
+		orbitHRP = c:WaitForChild("HumanoidRootPart", 5)
+	end)
+	if orbitConn then orbitConn:Disconnect() end
+	local Desync = {}
+	orbitConn = RunService.Heartbeat:Connect(function()
+		if not orbitEnabled or not orbitHRP or not orbitHRP.Parent then return end
+		Desync[1] = orbitHRP.CFrame
+		Desync[2] = orbitHRP.AssemblyLinearVelocity
+		local r, a = 20, tick() * math.pi * 2 * 4
+		orbitHRP.CFrame = Desync[1] + Vector3.new(math.cos(a)*r, 0, math.sin(a)*r)
+		orbitHRP.AssemblyLinearVelocity = Vector3.zero
+		RunService.RenderStepped:Wait()
+		if orbitEnabled and orbitHRP then
+			orbitHRP.CFrame = Desync[1]
+			orbitHRP.AssemblyLinearVelocity = Desync[2]
+		end
+	end)
+end
+local function stopImmortal()
+	orbitEnabled = false
+	if orbitConn then orbitConn:Disconnect(); orbitConn = nil end
+end
+
+-- Ability ESP (simplified)
+local Visual_Data = {}
+local function stopAbilityESP()
+	S.AbilityESP = false
+	for _, data in pairs(Visual_Data) do
+		pcall(function() if data.bill then data.bill:Destroy() end end)
+	end
+	Visual_Data = {}
+end
+local function startAbilityESP()
+	S.AbilityESP = true
+	task.spawn(function()
+		while S.AbilityESP do
+			for _, plr in ipairs(Players:GetPlayers()) do
+				if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") then
+					if not Visual_Data[plr] then
+						local bill = Instance.new("BillboardGui")
+						bill.Size = UDim2.fromOffset(100, 40); bill.StudsOffset = Vector3.new(0, 3, 0)
+						bill.AlwaysOnTop = true; bill.Adornee = plr.Character.Head
+						bill.Parent = CoreGui
+						local lbl = Instance.new("TextLabel")
+						lbl.Size = UDim2.new(1,0,1,0); lbl.BackgroundTransparency = 1
+						lbl.TextColor3 = Color3.new(1,1,1); lbl.TextSize = 12; lbl.Font = Enum.Font.GothamBold
+						lbl.TextStrokeTransparency = 0.3; lbl.Parent = bill
+						Visual_Data[plr] = {bill=bill, label=lbl}
+					end
+					local ab = plr:GetAttribute("CurrentlyEquippedAbility") or plr:GetAttribute("EquippedAbility") or plr.DisplayName
+					if Visual_Data[plr] and Visual_Data[plr].label then
+						Visual_Data[plr].label.Text = tostring(ab)
+						if Visual_Data[plr].bill then Visual_Data[plr].bill.Adornee = plr.Character:FindFirstChild("Head") end
+					end
 				end
 			end
+			task.wait(0.5)
 		end
 	end)
 end
-System.triggerbot.stop = function()
-	System.__triggerbot.__enabled = false
-	if System.__triggerbot.__connection then
-		pcall(function() System.__triggerbot.__connection:Disconnect() end)
-		System.__triggerbot.__connection = nil
-	end
-end
 
-System.manual_spam = {}
-System.manual_spam.start = function()
-	System.__properties.__manual_spam_enabled = true
-	task.spawn(function()
-		while System.__properties.__manual_spam_enabled do
-			parryfunction()
-			task.wait(1 / math.max(System.__properties.__spam_rate or 240, 1))
-		end
-	end)
+-- Ball stats GUI
+local BallStatsGui = nil
+local function destroyBallStats()
+	if BallStatsGui then BallStatsGui:Destroy(); BallStatsGui = nil end
 end
-System.manual_spam.stop = function()
-	System.__properties.__manual_spam_enabled = false
-end
-
-System.auto_spam = {}
-System.auto_spam.start = function()
-	System.__properties.__auto_spam_enabled = true
+local function createBallStats()
+	destroyBallStats()
+	local gui = Instance.new("ScreenGui"); gui.Name = "KHUB_BallStats"; gui.ResetOnSpawn = false; gui.Parent = CoreGui
+	BallStatsGui = gui
+	local panel = Instance.new("Frame")
+	panel.Size = UDim2.fromOffset(160, 70); panel.Position = UDim2.new(0, 20, 0.5, -35)
+	panel.BackgroundColor3 = Color3.fromRGB(20, 20, 28); panel.BorderSizePixel = 0; panel.Parent = gui
+	Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
+	local speedL = Instance.new("TextLabel"); speedL.Size = UDim2.new(1,-16,0,24); speedL.Position = UDim2.fromOffset(8,8)
+	speedL.BackgroundTransparency = 1; speedL.Text = "Speed: 0"; speedL.TextColor3 = Color3.new(1,1,1)
+	speedL.Font = Enum.Font.GothamBold; speedL.TextSize = 14; speedL.TextXAlignment = Enum.TextXAlignment.Left; speedL.Parent = panel
+	local peakL = Instance.new("TextLabel"); peakL.Size = UDim2.new(1,-16,0,24); peakL.Position = UDim2.fromOffset(8,36)
+	peakL.BackgroundTransparency = 1; peakL.Text = "Peak: 0"; peakL.TextColor3 = Color3.fromRGB(180,180,200)
+	peakL.Font = Enum.Font.Gotham; peakL.TextSize = 13; peakL.TextXAlignment = Enum.TextXAlignment.Left; peakL.Parent = panel
+	local peak = 0
 	task.spawn(function()
-		while System.__properties.__auto_spam_enabled do
+		while BallStatsGui and BallStatsGui.Parent do
 			local ball = System.ball.get()
-			local char = LocalPlayer.Character
-			if ball and char and char.PrimaryPart then
-				local dist = (char.PrimaryPart.Position - ball.Position).Magnitude
-				if dist < 35 then parryfunction() end
-			end
-			task.wait(1 / math.max(System.__properties.__spam_rate or 240, 1))
+			local sp = 0
+			if ball then sp = (ball.AssemblyLinearVelocity or Vector3.zero).Magnitude end
+			if sp > peak then peak = sp end
+			speedL.Text = string.format("Speed: %.1f", sp)
+			peakL.Text = string.format("Peak: %.1f", peak)
+			task.wait(0.05)
 		end
 	end)
 end
-System.auto_spam.stop = function()
-	System.__properties.__auto_spam_enabled = false
+
+-- Floating action buttons (Spam / Trigger)
+local function makeFloatBtn(name, text, pos, onClick)
+	local gui = Instance.new("ScreenGui"); gui.Name = name; gui.ResetOnSpawn = false; gui.Parent = CoreGui
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.fromOffset(100, 44); btn.Position = pos
+	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 55); btn.Text = text
+	btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamBold; btn.TextSize = 14
+	btn.BorderSizePixel = 0; btn.Parent = gui
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+	btn.MouseButton1Click:Connect(onClick)
+	-- drag
+	local dragging, d0, p0
+	btn.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true; d0 = i.Position; p0 = btn.Position
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+			local d = i.Position - d0
+			btn.Position = UDim2.new(p0.X.Scale, p0.X.Offset + d.X, p0.Y.Scale, p0.Y.Offset + d.Y)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = false end
+	end)
+	return gui
 end
 
--- Ball velocity HUD
-local ball_velocity = {
-	__state = { active = false, gui = nil },
-}
-ball_velocity.start = function()
-	if ball_velocity.__state.active then return end
-	ball_velocity.__state.active = true
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "KHUB_BallStats"
-	gui.ResetOnSpawn = false
-	pcall(function() gui.Parent = (gethui and gethui()) or CoreGui end)
-	if not gui.Parent then gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
-	local main = Instance.new("Frame")
-	main.Size = UDim2.new(0, 200, 0, 90)
-	main.Position = UDim2.new(0, 20, 0, 150)
-	main.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
-	main.Parent = gui
-	Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, 0, 0, 24); title.BackgroundTransparency = 1
-	title.Text = "  Ball Stats"; title.Font = Enum.Font.GothamBold; title.TextSize = 13
-	title.TextColor3 = Color3.new(1,1,1); title.TextXAlignment = Enum.TextXAlignment.Left; title.Parent = main
-	local cur = Instance.new("TextLabel")
-	cur.Size = UDim2.new(1, -16, 0, 22); cur.Position = UDim2.new(0, 8, 0, 28)
-	cur.BackgroundTransparency = 1; cur.Text = "Speed: 0"; cur.Font = Enum.Font.Gotham
-	cur.TextSize = 14; cur.TextColor3 = Color3.fromRGB(100, 255, 150)
-	cur.TextXAlignment = Enum.TextXAlignment.Left; cur.Parent = main
-	local peak = Instance.new("TextLabel")
-	peak.Size = UDim2.new(1, -16, 0, 22); peak.Position = UDim2.new(0, 8, 0, 52)
-	peak.BackgroundTransparency = 1; peak.Text = "Peak: 0"; peak.Font = Enum.Font.Gotham
-	peak.TextSize = 14; peak.TextColor3 = Color3.fromRGB(255, 180, 80)
-	peak.TextXAlignment = Enum.TextXAlignment.Left; peak.Parent = main
-	ball_velocity.__state.gui = gui
-	local peakV = 0
-	ball_velocity.__state.conn = RunService.Heartbeat:Connect(function()
-		local ball = System.ball.get()
-		if not ball then cur.Text = "Speed: 0"; return end
-		local z = ball:FindFirstChild("zoomies")
-		if not z then return end
-		local sp = z.VectorVelocity.Magnitude
-		peakV = math.max(peakV, sp)
-		cur.Text = string.format("Speed: %.1f", sp)
-		peak.Text = string.format("Peak: %.1f", peakV)
-	end)
-end
-ball_velocity.stop = function()
-	ball_velocity.__state.active = false
-	if ball_velocity.__state.conn then ball_velocity.__state.conn:Disconnect() end
-	if ball_velocity.__state.gui then ball_velocity.__state.gui:Destroy() end
-	ball_velocity.__state.gui = nil
-end
-
--- Ability flags
-pcall(function()
-	ReplicatedStorage.Remotes.DeathBall.OnClientEvent:Connect(function(c, d)
-		System.__properties.__deathslash_active = d or false
-	end)
-	ReplicatedStorage.Remotes.InfinityBall.OnClientEvent:Connect(function(a, b)
-		System.__properties.__infinity_active = b or false
-	end)
-end)
-
-print("[KHUB] Skin changer + combat core ready")
-
-
-local ConfigFolder = "KHUB_BladeBall_Configs"
-
+-- ===================== KHUB UI =====================
 local THEME = {
-	bg = Color3.fromRGB(5, 7, 18), panel = Color3.fromRGB(10, 14, 32),
-	card = Color3.fromRGB(17, 23, 48), inner = Color3.fromRGB(10, 14, 30),
-	accent = Color3.fromRGB(70, 225, 255), accent2 = Color3.fromRGB(175, 110, 255),
-	gold = Color3.fromRGB(255, 216, 140), text = Color3.fromRGB(238, 242, 255),
-	dim = Color3.fromRGB(150, 160, 205), mute = Color3.fromRGB(100, 112, 158),
-	stroke = Color3.fromRGB(80, 120, 210), green = Color3.fromRGB(95, 235, 165),
-	red = Color3.fromRGB(255, 100, 120), off = Color3.fromRGB(38, 44, 80),
-	white = Color3.fromRGB(255, 255, 255),
+	bg=Color3.fromRGB(5,7,18), panel=Color3.fromRGB(10,14,32), card=Color3.fromRGB(17,23,48),
+	inner=Color3.fromRGB(10,14,30), accent=Color3.fromRGB(70,225,255), accent2=Color3.fromRGB(175,110,255),
+	gold=Color3.fromRGB(255,216,140), text=Color3.fromRGB(238,242,255), dim=Color3.fromRGB(150,160,205),
+	mute=Color3.fromRGB(100,112,158), stroke=Color3.fromRGB(80,120,210), green=Color3.fromRGB(80,220,140),
+	red=Color3.fromRGB(255,90,110), off=Color3.fromRGB(45,50,75), white=Color3.fromRGB(255,255,255),
 }
-
-local function corner(p, r)
-	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, r or 10); c.Parent = p; return c
+local function corner(o,r) local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,r or 10); c.Parent=o end
+local function mkstroke(o,col,th,tr)
+	local s=Instance.new("UIStroke"); s.Color=col or THEME.stroke; s.Thickness=th or 1; s.Transparency=tr or 0.4; s.Parent=o; return s
 end
-local function mkstroke(p, col, th, tr)
-	local s = Instance.new("UIStroke"); s.Color = col or THEME.stroke; s.Thickness = th or 1.2; s.Transparency = tr or 0.35; s.Parent = p; return s
+local function GetUIParent()
+	local ok,res=pcall(function() if gethui then return gethui() end end)
+	if ok and res then return res end
+	return CoreGui
 end
-local function openLink(url)
-	pcall(function() if openlink then openlink(url) elseif setclipboard then setclipboard(url) end end)
-end
-
-local Parent = CoreGui
-pcall(function() if gethui then Parent = gethui() end end)
-pcall(function()
-	for _, n in ipairs({"KHUB_BladeBall", "KHUB_UI"}) do
-		local o = Parent:FindFirstChild(n); if o then o:Destroy() end
-		local pg = player:FindFirstChild("PlayerGui")
-		if pg then local o2 = pg:FindFirstChild(n); if o2 then o2:Destroy() end end
-	end
-end)
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "KHUB_BladeBall"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.IgnoreGuiInset = true
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.DisplayOrder = 999999
-pcall(function() if gethui then ScreenGui.Parent = gethui() end end)
-if not ScreenGui.Parent then pcall(function() ScreenGui.Parent = CoreGui end) end
-if not ScreenGui.Parent then ScreenGui.Parent = player:WaitForChild("PlayerGui") end
+ScreenGui.Name = "KHUB_BladeBall"; ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling; ScreenGui.Parent = GetUIParent()
 
--- Splash
 local Splash = Instance.new("Frame")
-Splash.Size = UDim2.new(1,0,1,0); Splash.BackgroundColor3 = Color3.fromRGB(4,5,14)
-Splash.BorderSizePixel = 0; Splash.ZIndex = 200; Splash.Parent = ScreenGui
+Splash.Size = UDim2.new(1,0,1,0); Splash.BackgroundColor3 = THEME.bg; Splash.BorderSizePixel = 0
+Splash.ZIndex = 200; Splash.Parent = ScreenGui
 local SpTitle = Instance.new("TextLabel")
-SpTitle.Size = UDim2.new(1,0,0,60); SpTitle.Position = UDim2.new(0,0,0.42,0)
-SpTitle.BackgroundTransparency = 1; SpTitle.Text = "KHUB"
-SpTitle.Font = Enum.Font.GothamBlack; SpTitle.TextSize = 54
-SpTitle.TextColor3 = Color3.new(1,1,1); SpTitle.ZIndex = 201; SpTitle.Parent = Splash
-local SpG = Instance.new("UIGradient")
-SpG.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, THEME.accent), ColorSequenceKeypoint.new(0.4, Color3.new(1,1,1)),
-	ColorSequenceKeypoint.new(0.7, THEME.accent2), ColorSequenceKeypoint.new(1, THEME.gold),
-})
-SpG.Parent = SpTitle
+SpTitle.Size = UDim2.new(1,0,0,40); SpTitle.Position = UDim2.new(0,0,0.42,0)
+SpTitle.BackgroundTransparency = 1; SpTitle.Text = "KHUB"; SpTitle.Font = Enum.Font.GothamBlack
+SpTitle.TextSize = 42; SpTitle.TextColor3 = THEME.accent; SpTitle.ZIndex = 201; SpTitle.Parent = Splash
 local SpSub = Instance.new("TextLabel")
-SpSub.Size = UDim2.new(1,0,0,24); SpSub.Position = UDim2.new(0,0,0.52,0)
-SpSub.BackgroundTransparency = 1; SpSub.Text = "Blade Ball"
-SpSub.Font = Enum.Font.GothamBold; SpSub.TextSize = 16; SpSub.TextColor3 = THEME.gold
-SpSub.ZIndex = 201; SpSub.Parent = Splash
+SpSub.Size = UDim2.new(1,0,0,24); SpSub.Position = UDim2.new(0,0,0.42,44)
+SpSub.BackgroundTransparency = 1; SpSub.Text = "BLADE BALL"; SpSub.Font = Enum.Font.GothamBold
+SpSub.TextSize = 16; SpSub.TextColor3 = THEME.gold; SpSub.ZIndex = 201; SpSub.Parent = Splash
 task.spawn(function()
-	task.wait(1.5)
-	TweenService:Create(Splash, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
-	task.wait(0.55); pcall(function() Splash:Destroy() end)
+	task.wait(1.4)
+	TweenService:Create(Splash, TweenInfo.new(0.45), {BackgroundTransparency=1}):Play()
+	task.wait(0.5); pcall(function() Splash:Destroy() end)
 end)
 
-local BASE_W, BASE_H = 620, 420
+local BASE_W, BASE_H = 640, 440
 local Scale = Instance.new("UIScale"); Scale.Parent = ScreenGui
 local function updateScale()
 	local cam = Workspace.CurrentCamera; if not cam then return end
 	local vs = cam.ViewportSize
-	Scale.Scale = math.clamp(math.min(vs.X / 900, vs.Y / 600), 0.55, 1.15)
+	Scale.Scale = math.clamp(math.min(vs.X/900, vs.Y/600), 0.55, 1.15)
 end
 updateScale()
 pcall(function() Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale) end)
 
 local Win = Instance.new("Frame")
-Win.Name = "Win"; Win.Size = UDim2.new(0, BASE_W, 0, BASE_H)
-Win.Position = UDim2.new(0.5, -BASE_W/2, 0.5, -BASE_H/2)
-Win.BackgroundColor3 = THEME.bg; Win.BorderSizePixel = 0
-Win.ClipsDescendants = true; Win.Visible = true; Win.Parent = ScreenGui
-corner(Win, 20); mkstroke(Win, THEME.accent2, 2, 0.3)
-
+Win.Name = "Win"; Win.Size = UDim2.new(0,BASE_W,0,BASE_H)
+Win.Position = UDim2.new(0.5,-BASE_W/2,0.5,-BASE_H/2)
+Win.BackgroundColor3 = THEME.bg; Win.BorderSizePixel = 0; Win.ClipsDescendants = true
+Win.Visible = true; Win.Parent = ScreenGui; corner(Win, 20); mkstroke(Win, THEME.accent2, 2, 0.3)
 local WinBG = Instance.new("ImageLabel")
-WinBG.Size = UDim2.new(1,0,1,0); WinBG.BackgroundTransparency = 1
-WinBG.Image = BG_ID; WinBG.ScaleType = Enum.ScaleType.Crop
-WinBG.ImageTransparency = 0.3; WinBG.ZIndex = 0; WinBG.Parent = Win
+WinBG.Size = UDim2.new(1,0,1,0); WinBG.BackgroundTransparency = 1; WinBG.Image = BG_ID
+WinBG.ScaleType = Enum.ScaleType.Crop; WinBG.ImageTransparency = 0.35; WinBG.ZIndex = 0; WinBG.Parent = Win
 
 local Header = Instance.new("Frame")
 Header.Size = UDim2.new(1,0,0,52); Header.BackgroundColor3 = THEME.panel
 Header.BackgroundTransparency = 0.55; Header.BorderSizePixel = 0; Header.ZIndex = 5; Header.Parent = Win
-
 local Logo = Instance.new("ImageLabel")
 Logo.Size = UDim2.new(0,36,0,36); Logo.Position = UDim2.new(0,12,0.5,-18)
 Logo.BackgroundTransparency = 1; Logo.Image = LOGO_ID; Logo.ZIndex = 6; Logo.Parent = Header
-
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(0,280,1,0); Title.Position = UDim2.new(0,56,0,0)
-Title.BackgroundTransparency = 1; Title.Text = "KHUB · Blade Ball"
-Title.Font = Enum.Font.GothamBlack; Title.TextSize = 22
-Title.TextColor3 = Color3.new(1,1,1); Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Size = UDim2.new(0,380,1,0); Title.Position = UDim2.new(0,56,0,0)
+Title.BackgroundTransparency = 1; Title.Text = "KHUB - Blade Ball"; Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 18; Title.TextColor3 = Color3.new(1,1,1); Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.ZIndex = 6; Title.Parent = Header
-local TG = Instance.new("UIGradient")
-TG.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(120,190,255)),
-	ColorSequenceKeypoint.new(0.5, Color3.new(1,1,1)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(180,130,255)),
-})
-TG.Parent = Title
-task.spawn(function()
-	while Title.Parent do TG.Offset = Vector2.new(math.sin(tick()*1.2)*0.5, 0); task.wait(0.03) end
-end)
-
 local MinBtn = Instance.new("TextButton")
-MinBtn.Size = UDim2.new(0,32,0,28); MinBtn.Position = UDim2.new(1,-78,0.5,-14)
-MinBtn.BackgroundColor3 = Color3.fromRGB(30,38,70); MinBtn.Text = "-"
-MinBtn.Font = Enum.Font.GothamBold; MinBtn.TextSize = 16; MinBtn.TextColor3 = THEME.text
-MinBtn.ZIndex = 7; MinBtn.Parent = Header; corner(MinBtn, 8)
-
+MinBtn.Size = UDim2.new(0,32,0,32); MinBtn.Position = UDim2.new(1,-76,0.5,-16)
+MinBtn.BackgroundColor3 = THEME.inner; MinBtn.Text = "-"; MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 18; MinBtn.TextColor3 = THEME.text; MinBtn.ZIndex = 7; MinBtn.Parent = Header; corner(MinBtn, 8)
 local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0,32,0,28); CloseBtn.Position = UDim2.new(1,-40,0.5,-14)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(66,22,36); CloseBtn.Text = "X"
-CloseBtn.Font = Enum.Font.GothamBold; CloseBtn.TextSize = 14; CloseBtn.TextColor3 = THEME.text
-CloseBtn.ZIndex = 7; CloseBtn.Parent = Header; corner(CloseBtn, 8)
+CloseBtn.Size = UDim2.new(0,32,0,32); CloseBtn.Position = UDim2.new(1,-40,0.5,-16)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(66,22,36); CloseBtn.Text = "X"; CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14; CloseBtn.TextColor3 = THEME.text; CloseBtn.ZIndex = 7; CloseBtn.Parent = Header; corner(CloseBtn, 8)
 
 do
 	local dragging, dragStart, startPos
@@ -686,44 +1198,40 @@ end
 
 local Rail = Instance.new("ScrollingFrame")
 Rail.Size = UDim2.new(0,72,1,-52); Rail.Position = UDim2.new(0,0,0,52)
-Rail.BackgroundColor3 = THEME.panel; Rail.BackgroundTransparency = 0.35
-Rail.BorderSizePixel = 0; Rail.ScrollBarThickness = 2
-Rail.CanvasSize = UDim2.new(0,0,0,0); Rail.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Rail.BackgroundColor3 = THEME.panel; Rail.BackgroundTransparency = 0.35; Rail.BorderSizePixel = 0
+Rail.ScrollBarThickness = 2; Rail.CanvasSize = UDim2.new(0,0,0,0); Rail.AutomaticCanvasSize = Enum.AutomaticSize.Y
 Rail.ZIndex = 5; Rail.Parent = Win
-local RailList = Instance.new("UIListLayout")
-RailList.Padding = UDim.new(0,6); RailList.HorizontalAlignment = Enum.HorizontalAlignment.Center; RailList.SortOrder = Enum.SortOrder.LayoutOrder; RailList.Parent = Rail
+local RailList = Instance.new("UIListLayout"); RailList.Padding = UDim.new(0,6)
+RailList.HorizontalAlignment = Enum.HorizontalAlignment.Center; RailList.Parent = Rail
 local RailPad = Instance.new("UIPadding"); RailPad.PaddingTop = UDim.new(0,8); RailPad.Parent = Rail
 
 local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1,-84,1,-60); Content.Position = UDim2.new(0,78,0,56)
+Content.Size = UDim2.new(1,-84,1,-96); Content.Position = UDim2.new(0,78,0,56)
 Content.BackgroundTransparency = 1; Content.ZIndex = 5; Content.Parent = Win
-
 local PageTitle = Instance.new("TextLabel")
-PageTitle.Size = UDim2.new(1,-10,0,22); PageTitle.Position = UDim2.new(0,4,0,0)
-PageTitle.BackgroundTransparency = 1; PageTitle.Text = "Welcome"
-PageTitle.Font = Enum.Font.GothamBlack; PageTitle.TextSize = 18
-PageTitle.TextColor3 = THEME.text; PageTitle.TextXAlignment = Enum.TextXAlignment.Left
-PageTitle.ZIndex = 6; PageTitle.Parent = Content
-
+PageTitle.Size = UDim2.new(1,0,0,22); PageTitle.BackgroundTransparency = 1
+PageTitle.Text = "Welcome"; PageTitle.Font = Enum.Font.GothamBold; PageTitle.TextSize = 16
+PageTitle.TextColor3 = THEME.text; PageTitle.TextXAlignment = Enum.TextXAlignment.Left; PageTitle.ZIndex = 6; PageTitle.Parent = Content
 local PageSub = Instance.new("TextLabel")
-PageSub.Size = UDim2.new(1,-10,0,16); PageSub.Position = UDim2.new(0,4,0,22)
-PageSub.BackgroundTransparency = 1; PageSub.Text = "KHUB · Blade Ball"
-PageSub.Font = Enum.Font.Gotham; PageSub.TextSize = 12
-PageSub.TextColor3 = THEME.dim; PageSub.TextXAlignment = Enum.TextXAlignment.Left
-PageSub.ZIndex = 6; PageSub.Parent = Content
-
+PageSub.Size = UDim2.new(1,0,0,16); PageSub.Position = UDim2.new(0,0,0,20)
+PageSub.BackgroundTransparency = 1; PageSub.Text = "KHUB Blade Ball"; PageSub.Font = Enum.Font.Gotham
+PageSub.TextSize = 12; PageSub.TextColor3 = THEME.dim; PageSub.TextXAlignment = Enum.TextXAlignment.Left; PageSub.ZIndex = 6; PageSub.Parent = Content
 local Pages = Instance.new("Frame")
 Pages.Size = UDim2.new(1,0,1,-44); Pages.Position = UDim2.new(0,0,0,42)
-Pages.BackgroundTransparency = 1; Pages.ClipsDescendants = true; Pages.ZIndex = 5; Pages.Parent = Content
+Pages.BackgroundTransparency = 1; Pages.ZIndex = 5; Pages.Parent = Content
 
 local Tabs, ActiveId = {}, nil
 local TAB_ICONS = {
-	Welcome  = "rbxassetid://6023426926",
-	Combat   = "rbxassetid://6031094678",
-	Skin     = "rbxassetid://6034503373",
-	Misc     = "rbxassetid://6031280882",
+	Welcome = "rbxassetid://10723407389",
+	Combat = "rbxassetid://10734975692",
+	Spam = "rbxassetid://10734920149",
+	Detection = "rbxassetid://10723346959",
+	Visual = "rbxassetid://10734941499",
+	Misc = "rbxassetid://10709818534",
+	World = "rbxassetid://10734950309",
+	Unlock = "rbxassetid://6034503373",
 	Settings = "rbxassetid://6031280882",
-	Config   = "rbxassetid://6031229361",
+	Config = "rbxassetid://6031229361",
 }
 
 local function createPage(id)
@@ -753,7 +1261,7 @@ local function switchPage(id, title, subtitle)
 			local isActive = (tid == id)
 			if bar then
 				bar.BackgroundTransparency = isActive and 0 or 1
-				bar.Size = isActive and UDim2.new(0, 3, 0.6, 0) or UDim2.new(0, 3, 0.3, 0)
+				bar.Size = isActive and UDim2.new(0,3,0.6,0) or UDim2.new(0,3,0.3,0)
 			end
 			if iconF then
 				iconF.BackgroundColor3 = isActive and THEME.accent2 or Color3.fromRGB(24,30,60)
@@ -768,31 +1276,23 @@ local function createTabButton(id, label, order, pageTitle, pageSub)
 	local b = Instance.new("TextButton")
 	b.Name = id; b.Size = UDim2.new(0,58,0,54); b.BackgroundTransparency = 1
 	b.Text = ""; b.LayoutOrder = order; b.ZIndex = 8; b.Parent = Rail
-
 	local iconFrame = Instance.new("Frame")
 	iconFrame.Name = "IconFrame"; iconFrame.Size = UDim2.new(0,40,0,40)
 	iconFrame.Position = UDim2.new(0.5,-20,0,4)
 	iconFrame.BackgroundColor3 = Color3.fromRGB(24,30,60); iconFrame.BackgroundTransparency = 0.15
-	iconFrame.ZIndex = 9; iconFrame.Parent = b
-	corner(iconFrame, 10); mkstroke(iconFrame, THEME.accent2, 1.2, 0.5)
-
+	iconFrame.ZIndex = 9; iconFrame.Parent = b; corner(iconFrame, 10); mkstroke(iconFrame, THEME.accent2, 1.2, 0.5)
 	local icon = Instance.new("ImageLabel")
-	icon.Size = UDim2.new(0,26,0,26); icon.Position = UDim2.new(0.5,-13,0.5,-13)
+	icon.Size = UDim2.new(0,24,0,24); icon.Position = UDim2.new(0.5,-12,0.5,-12)
 	icon.BackgroundTransparency = 1; icon.Image = TAB_ICONS[id] or TAB_ICONS.Welcome
-	icon.ImageColor3 = Color3.fromRGB(255,255,255); icon.ImageTransparency = 0; icon.ZIndex = 10; icon.Parent = iconFrame
-
+	icon.ImageColor3 = Color3.new(1,1,1); icon.ScaleType = Enum.ScaleType.Fit; icon.ZIndex = 10; icon.Parent = iconFrame
 	local activeBar = Instance.new("Frame")
 	activeBar.Name = "ActiveBar"; activeBar.Size = UDim2.new(0,3,0.3,0)
-	activeBar.Position = UDim2.new(1,-3,0.2,0)
-	activeBar.BackgroundColor3 = THEME.white; activeBar.BackgroundTransparency = 1
-	activeBar.BorderSizePixel = 0; activeBar.ZIndex = 11; activeBar.Parent = b
+	activeBar.Position = UDim2.new(1,-3,0.2,0); activeBar.BackgroundColor3 = THEME.white
+	activeBar.BackgroundTransparency = 1; activeBar.BorderSizePixel = 0; activeBar.ZIndex = 11; activeBar.Parent = b
 	corner(activeBar, 2)
-
 	b.MouseButton1Click:Connect(function()
-		TweenService:Create(iconFrame, TweenInfo.new(0.12, Enum.EasingStyle.Back), {Size = UDim2.new(0,44,0,44)}):Play()
-		task.delay(0.12, function()
-			TweenService:Create(iconFrame, TweenInfo.new(0.15), {Size = UDim2.new(0,40,0,40)}):Play()
-		end)
+		TweenService:Create(iconFrame, TweenInfo.new(0.12, Enum.EasingStyle.Back), {Size=UDim2.new(0,44,0,44)}):Play()
+		task.delay(0.12, function() TweenService:Create(iconFrame, TweenInfo.new(0.15), {Size=UDim2.new(0,40,0,40)}):Play() end)
 		switchPage(id, pageTitle or label, pageSub or "")
 	end)
 	Tabs[id] = b
@@ -802,8 +1302,7 @@ end
 local function card(parent, title)
 	local f = Instance.new("Frame")
 	f.Size = UDim2.new(1,-4,0,0); f.AutomaticSize = Enum.AutomaticSize.Y
-	f.BackgroundColor3 = THEME.card; f.BackgroundTransparency = 0.25
-	f.BorderSizePixel = 0; f.ZIndex = 7; f.Parent = parent
+	f.BackgroundColor3 = THEME.card; f.BackgroundTransparency = 0.25; f.BorderSizePixel = 0; f.ZIndex = 7; f.Parent = parent
 	corner(f, 12); mkstroke(f, THEME.stroke, 1, 0.5)
 	local lay = Instance.new("UIListLayout"); lay.Padding = UDim.new(0,6); lay.SortOrder = Enum.SortOrder.LayoutOrder; lay.Parent = f
 	local pad = Instance.new("UIPadding")
@@ -813,517 +1312,428 @@ local function card(parent, title)
 		local t = Instance.new("TextLabel")
 		t.Size = UDim2.new(1,0,0,18); t.BackgroundTransparency = 1; t.Text = title
 		t.Font = Enum.Font.GothamBold; t.TextSize = 13; t.TextColor3 = THEME.gold
-		t.TextXAlignment = Enum.TextXAlignment.Left; t.ZIndex = 8; t.LayoutOrder = 0; t.Parent = f
+		t.TextXAlignment = Enum.TextXAlignment.Left; t.ZIndex = 8; t.Parent = f
 	end
 	return f
 end
 
+local function toggle(parent, text, get, set)
+	local row = Instance.new("TextButton")
+	row.Size = UDim2.new(1,0,0,30); row.BackgroundTransparency = 1; row.Text = ""; row.ZIndex = 8; row.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1,-54,1,0); lbl.BackgroundTransparency = 1; lbl.Text = text
+	lbl.Font = Enum.Font.Gotham; lbl.TextSize = 13; lbl.TextColor3 = THEME.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.ZIndex = 9; lbl.Parent = row
+	local sw = Instance.new("Frame")
+	sw.Size = UDim2.new(0,42,0,22); sw.Position = UDim2.new(1,-42,0.5,-11)
+	sw.BackgroundColor3 = get() and THEME.green or THEME.off; sw.BorderSizePixel = 0; sw.ZIndex = 9; sw.Parent = row
+	corner(sw, 11)
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.new(0,18,0,18); knob.Position = get() and UDim2.new(1,-20,0.5,-9) or UDim2.new(0,2,0.5,-9)
+	knob.BackgroundColor3 = THEME.white; knob.ZIndex = 10; knob.Parent = sw; corner(knob, 9)
+	row.MouseButton1Click:Connect(function()
+		local v = not get(); set(v)
+		sw.BackgroundColor3 = v and THEME.green or THEME.off
+		TweenService:Create(knob, TweenInfo.new(0.15), {Position = v and UDim2.new(1,-20,0.5,-9) or UDim2.new(0,2,0.5,-9)}):Play()
+	end)
+end
+
 local function btn(parent, text, callback, color)
 	local b = Instance.new("TextButton")
-	b.Size = UDim2.new(1,0,0,36); b.BackgroundColor3 = color or Color3.fromRGB(34,44,84)
+	b.Size = UDim2.new(1,0,0,32); b.BackgroundColor3 = color or THEME.inner
 	b.Text = text; b.Font = Enum.Font.GothamBold; b.TextSize = 13; b.TextColor3 = THEME.text
-	b.ZIndex = 8; b.Parent = parent; corner(b, 8)
+	b.BorderSizePixel = 0; b.ZIndex = 8; b.Parent = parent; corner(b, 8)
 	b.MouseButton1Click:Connect(function() pcall(callback) end)
 	return b
 end
 
-local function toggle(parent, text, get, set)
+local function slider(parent, text, min, max, get, set)
 	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1,0,0,34); row.BackgroundTransparency = 1; row.ZIndex = 8; row.Parent = parent
+	row.Size = UDim2.new(1,0,0,44); row.BackgroundTransparency = 1; row.ZIndex = 8; row.Parent = parent
 	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1,-56,1,0); lbl.BackgroundTransparency = 1; lbl.Text = text
-	lbl.Font = Enum.Font.GothamMedium; lbl.TextSize = 13; lbl.TextColor3 = THEME.text
-	lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.ZIndex = 9; lbl.Parent = row
-	local sw = Instance.new("TextButton")
-	sw.Size = UDim2.new(0,48,0,24); sw.Position = UDim2.new(1,-48,0.5,-12)
-	sw.BackgroundColor3 = get() and THEME.green or THEME.off; sw.Text = ""; sw.ZIndex = 9; sw.Parent = row
-	corner(sw, 12)
-	local knob = Instance.new("Frame")
-	knob.Size = UDim2.new(0,18,0,18)
-	knob.Position = get() and UDim2.new(1,-21,0.5,-9) or UDim2.new(0,3,0.5,-9)
-	knob.BackgroundColor3 = THEME.white; knob.ZIndex = 10; knob.Parent = sw; corner(knob, 9)
-	sw.MouseButton1Click:Connect(function()
-		local v = not get(); set(v)
-		sw.BackgroundColor3 = v and THEME.green or THEME.off
-		TweenService:Create(knob, TweenInfo.new(0.15), {
-			Position = v and UDim2.new(1,-21,0.5,-9) or UDim2.new(0,3,0.5,-9)
-		}):Play()
-	end)
-	return row
-end
-
-local function textBox(parent, placeholder)
-	local tb = Instance.new("TextBox")
-	tb.Size = UDim2.new(1,0,0,34); tb.BackgroundColor3 = THEME.inner; tb.Text = ""
-	tb.PlaceholderText = placeholder or ""; tb.Font = Enum.Font.Gotham; tb.TextSize = 13
-	tb.TextColor3 = THEME.text; tb.PlaceholderColor3 = THEME.mute
-	tb.ClearTextOnFocus = false; tb.ZIndex = 8; tb.Parent = parent; corner(tb, 8)
-	return tb
-end
-
--- ========== WELCOME (first) ==========
-local PageWelcome = createPage("Welcome")
-createTabButton("Welcome", "Welcome", 1, "Welcome", "KHUB · Blade Ball")
-do
-	-- Big KHUB hero
-	local Hero = Instance.new("Frame")
-	Hero.Size = UDim2.new(1, -4, 0, 146)
-	Hero.BackgroundColor3 = THEME.card
-	Hero.BackgroundTransparency = 0.15
-	Hero.BorderSizePixel = 0
-	Hero.ZIndex = 9
-	Hero.LayoutOrder = 1
-	Hero.Parent = PageWelcome
-	corner(Hero, 16)
-	mkstroke(Hero, THEME.accent2, 1.4, 0.3)
-
-	local HeroText = Instance.new("TextLabel")
-	HeroText.Size = UDim2.new(1, -36, 0, 60)
-	HeroText.Position = UDim2.fromOffset(24, 18)
-	HeroText.BackgroundTransparency = 1
-	HeroText.Text = "KHUB"
-	HeroText.Font = Enum.Font.GothamBlack
-	HeroText.TextSize = 58
-	HeroText.TextColor3 = Color3.new(1, 1, 1)
-	HeroText.TextXAlignment = Enum.TextXAlignment.Left
-	HeroText.ZIndex = 12
-	HeroText.Parent = Hero
-
-	local HeroGrad = Instance.new("UIGradient")
-	HeroGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0.00, THEME.accent),
-		ColorSequenceKeypoint.new(0.35, Color3.new(1, 1, 1)),
-		ColorSequenceKeypoint.new(0.60, THEME.accent2),
-		ColorSequenceKeypoint.new(1.00, THEME.gold),
-	})
-	HeroGrad.Offset = Vector2.new(-1.4, 0)
-	HeroGrad.Parent = HeroText
-	task.spawn(function()
-		while HeroText.Parent do
-			local t = (tick() % 3) / 3
-			HeroGrad.Offset = Vector2.new(-1.4 + t * 2.8, 0)
-			task.wait(0.03)
-		end
-	end)
-
-	local HeroBy = Instance.new("TextLabel")
-	HeroBy.Size = UDim2.new(1, -36, 0, 22)
-	HeroBy.Position = UDim2.fromOffset(26, 82)
-	HeroBy.BackgroundTransparency = 1
-	HeroBy.Text = "by Kyiel Pambid"
-	HeroBy.Font = Enum.Font.GothamBold
-	HeroBy.TextSize = 17
-	HeroBy.TextColor3 = THEME.gold
-	HeroBy.TextXAlignment = Enum.TextXAlignment.Left
-	HeroBy.ZIndex = 12
-	HeroBy.Parent = Hero
-
-	-- Typewriter moving text under KHUB
-	local HeroType = Instance.new("TextLabel")
-	HeroType.Size = UDim2.new(1, -36, 0, 18)
-	HeroType.Position = UDim2.fromOffset(26, 110)
-	HeroType.BackgroundTransparency = 1
-	HeroType.Text = ""
-	HeroType.Font = Enum.Font.Code
-	HeroType.TextSize = 12
-	HeroType.TextColor3 = THEME.dim
-	HeroType.TextXAlignment = Enum.TextXAlignment.Left
-	HeroType.ZIndex = 12
-	HeroType.Parent = Hero
-
-	task.spawn(function()
-		local phrases = {
-			"Join Discord for more scripts",
-			"Subscribe on my channel",
-			"Toggle: RightShift / RightCtrl / K",
-			"KHUB · smooth like butter",
-		}
-		while HeroType.Parent do
-			for _, phrase in ipairs(phrases) do
-				if not HeroType.Parent then break end
-				HeroType.Text = ""
-				for i = 1, #phrase do
-					if not HeroType.Parent then break end
-					HeroType.Text = string.sub(phrase, 1, i)
-					task.wait(0.028)
-				end
-				task.wait(1.8)
-				for i = #phrase, 1, -1 do
-					if not HeroType.Parent then break end
-					HeroType.Text = string.sub(phrase, 1, i)
-					task.wait(0.012)
-				end
-				task.wait(0.2)
-			end
-		end
-	end)
-
-	-- Profile card
-	local ProfileCard = card(PageWelcome, "Player")
-	ProfileCard.LayoutOrder = 2
-
-	local PF = Instance.new("Frame")
-	PF.Size = UDim2.new(1, 0, 0, 100)
-	PF.BackgroundColor3 = THEME.inner
-	PF.BackgroundTransparency = 0.1
-	PF.BorderSizePixel = 0
-	PF.ZIndex = 10
-	PF.Parent = ProfileCard
-	corner(PF, 10)
-	mkstroke(PF, THEME.stroke, 1, 0.35)
-
-	local Avatar = Instance.new("ImageLabel")
-	Avatar.Size = UDim2.fromOffset(72, 72)
-	Avatar.Position = UDim2.new(0, 14, 0.5, -36)
-	Avatar.BackgroundColor3 = Color3.fromRGB(30, 38, 70)
-	Avatar.BackgroundTransparency = 0.05
-	Avatar.ZIndex = 12
-	Avatar.Parent = PF
-	corner(Avatar, 36)
-	mkstroke(Avatar, THEME.accent, 1.5, 0.3)
-	pcall(function()
-		local content, isReady = Players:GetUserThumbnailAsync(
-			player.UserId,
-			Enum.ThumbnailType.HeadShot,
-			Enum.ThumbnailSize.Size150x150
-		)
-		if isReady then Avatar.Image = content end
-	end)
-
-	local function profRow(y, txt, col, font, size)
-		local l = Instance.new("TextLabel")
-		l.Size = UDim2.new(1, -110, 0, 22)
-		l.Position = UDim2.new(0, 100, 0, y)
-		l.BackgroundTransparency = 1
-		l.Text = txt
-		l.Font = font or Enum.Font.GothamBold
-		l.TextSize = size or 14
-		l.TextColor3 = col or THEME.text
-		l.TextXAlignment = Enum.TextXAlignment.Left
-		l.ZIndex = 12
-		l.Parent = PF
-		return l
+	lbl.Size = UDim2.new(1,0,0,16); lbl.BackgroundTransparency = 1
+	lbl.Text = text .. ": " .. tostring(get()); lbl.Font = Enum.Font.Gotham; lbl.TextSize = 12
+	lbl.TextColor3 = THEME.dim; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.ZIndex = 9; lbl.Parent = row
+	local track = Instance.new("Frame")
+	track.Size = UDim2.new(1,0,0,8); track.Position = UDim2.new(0,0,0,24)
+	track.BackgroundColor3 = THEME.off; track.BorderSizePixel = 0; track.ZIndex = 9; track.Parent = row; corner(track, 4)
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new(math.clamp((get()-min)/(max-min),0,1),0,1,0)
+	fill.BackgroundColor3 = THEME.accent; fill.BorderSizePixel = 0; fill.ZIndex = 10; fill.Parent = track; corner(fill, 4)
+	local dragging = false
+	local function apply(x)
+		local rel = math.clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+		local val = math.floor(min + (max - min) * rel + 0.5)
+		set(val); lbl.Text = text .. ": " .. tostring(val)
+		fill.Size = UDim2.new(rel, 0, 1, 0)
 	end
-	profRow(16, "hey, " .. (player.DisplayName or player.Name) .. " :)", THEME.gold, Enum.Font.GothamBold, 17)
-	profRow(42, "@" .. player.Name, THEME.dim, Enum.Font.Gotham, 13)
-	profRow(64, "user id · " .. tostring(player.UserId), THEME.mute, Enum.Font.Code, 12)
-
-	-- Links
-	local sc = card(PageWelcome, "Join & Subscribe")
-	sc.LayoutOrder = 3
-	btn(sc, "JOIN DISCORD FOR MORE SCRIPTS", function() openLink(DISCORD) end, Color3.fromRGB(45, 70, 160))
-	btn(sc, "SUBSCRIBE ON YOUTUBE", function() openLink(YOUTUBE) end, Color3.fromRGB(150, 40, 50))
-
-	-- Status
-	local StatusCard = card(PageWelcome, "Status")
-	StatusCard.LayoutOrder = 4
-	local StatusLbl = Instance.new("TextLabel")
-	StatusLbl.Size = UDim2.new(1, 0, 0, 20)
-	StatusLbl.BackgroundTransparency = 1
-	StatusLbl.Text = "KHUB online · everything ready"
-	StatusLbl.Font = Enum.Font.Gotham
-	StatusLbl.TextSize = 12
-	StatusLbl.TextColor3 = THEME.green
-	StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
-	StatusLbl.ZIndex = 8
-	StatusLbl.Parent = StatusCard
-	task.spawn(function()
-		local statusList = {
-			"KHUB online · everything ready",
-			"Join Discord for more scripts",
-			"Toggle: RightShift / RightCtrl / K",
-		}
-		local i = 1
-		while StatusLbl.Parent do
-			StatusLbl.Text = statusList[i]
-			StatusLbl.TextTransparency = 1
-			TweenService:Create(StatusLbl, TweenInfo.new(0.5), { TextTransparency = 0 }):Play()
-			i = i % #statusList + 1
-			task.wait(3.5)
+	track.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true; apply(i.Position.X)
 		end
 	end)
-
-	-- Keybinds
-	local info = card(PageWelcome, "Keybinds")
-	info.LayoutOrder = 5
-	local tip = Instance.new("TextLabel")
-	tip.Size = UDim2.new(1, 0, 0, 50)
-	tip.BackgroundTransparency = 1
-	tip.Text = "• RightShift — Toggle UI\n• RightCtrl — Toggle UI\n• K — Toggle UI\n• Drag header to move window"
-	tip.Font = Enum.Font.Gotham
-	tip.TextSize = 12
-	tip.TextColor3 = THEME.dim
-	tip.TextXAlignment = Enum.TextXAlignment.Left
-	tip.TextYAlignment = Enum.TextYAlignment.Top
-	tip.ZIndex = 8
-	tip.Parent = info
+	UserInputService.InputChanged:Connect(function(i)
+		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+			apply(i.Position.X)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = false end
+	end)
 end
 
+-- Dropdown: click to open options, hide list when closed
+local function dropdown(parent, title, options, get, set)
+	local wrap = Instance.new("Frame")
+	wrap.Size = UDim2.new(1,0,0,0); wrap.AutomaticSize = Enum.AutomaticSize.Y
+	wrap.BackgroundTransparency = 1; wrap.ZIndex = 8; wrap.Parent = parent
+	local lay = Instance.new("UIListLayout"); lay.Padding = UDim.new(0,4); lay.Parent = wrap
+	local openBtn = Instance.new("TextButton")
+	openBtn.Size = UDim2.new(1,0,0,30); openBtn.BackgroundColor3 = THEME.inner
+	openBtn.Text = title .. ": " .. tostring(get()); openBtn.Font = Enum.Font.GothamBold
+	openBtn.TextSize = 12; openBtn.TextColor3 = THEME.text; openBtn.BorderSizePixel = 0
+	openBtn.ZIndex = 9; openBtn.Parent = wrap; corner(openBtn, 8)
+	local list = Instance.new("Frame")
+	list.Size = UDim2.new(1,0,0,0); list.AutomaticSize = Enum.AutomaticSize.Y
+	list.BackgroundColor3 = THEME.panel; list.BorderSizePixel = 0; list.Visible = false
+	list.ZIndex = 12; list.Parent = wrap; corner(list, 8)
+	local listLay = Instance.new("UIListLayout"); listLay.Padding = UDim.new(0,2); listLay.Parent = list
+	local listPad = Instance.new("UIPadding"); listPad.PaddingTop = UDim.new(0,4); listPad.PaddingBottom = UDim.new(0,4); listPad.Parent = list
+	for _, opt in ipairs(options) do
+		local ob = Instance.new("TextButton")
+		ob.Size = UDim2.new(1,-8,0,26); ob.BackgroundColor3 = THEME.inner
+		ob.Text = tostring(opt); ob.Font = Enum.Font.Gotham; ob.TextSize = 12
+		ob.TextColor3 = THEME.text; ob.BorderSizePixel = 0; ob.ZIndex = 13; ob.Parent = list; corner(ob, 6)
+		ob.MouseButton1Click:Connect(function()
+			set(opt)
+			openBtn.Text = title .. ": " .. tostring(opt)
+			list.Visible = false
+		end)
+	end
+	openBtn.MouseButton1Click:Connect(function()
+		list.Visible = not list.Visible
+	end)
+end
 
-
-
-
-
-
-
-
-
--- ========== SETTINGS ==========
-local PageSettings = createPage("Settings")
-
--- ========== COMBAT ==========
-local PageCombat = createPage("Combat")
-createTabButton("Combat", "Combat", 2, "Combat", "parry · spam · trigger")
+-- Pages
+local pWelcome = createPage("Welcome")
+createTabButton("Welcome", "Welcome", 1, "Welcome", "KHUB Blade Ball")
 do
-	local c = card(PageCombat, "Auto Parry")
+	local c = card(pWelcome, "PROFILE")
+	local nameL = Instance.new("TextLabel")
+	nameL.Size = UDim2.new(1,0,0,20); nameL.BackgroundTransparency = 1
+	nameL.Text = LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")"
+	nameL.Font = Enum.Font.GothamBold; nameL.TextSize = 14; nameL.TextColor3 = THEME.text
+	nameL.TextXAlignment = Enum.TextXAlignment.Left; nameL.ZIndex = 8; nameL.Parent = c
+	local c2 = card(pWelcome, "KHUB")
+	local big = Instance.new("TextLabel")
+	big.Size = UDim2.new(1,0,0,36); big.BackgroundTransparency = 1; big.Text = "KHUB"
+	big.Font = Enum.Font.GothamBlack; big.TextSize = 32; big.TextColor3 = THEME.accent; big.ZIndex = 8; big.Parent = c2
+	local moveTxt = Instance.new("TextLabel")
+	moveTxt.Size = UDim2.new(1,0,0,18); moveTxt.BackgroundTransparency = 1
+	moveTxt.Text = "Join Discord - Subscribe"; moveTxt.Font = Enum.Font.Gotham; moveTxt.TextSize = 12
+	moveTxt.TextColor3 = THEME.dim; moveTxt.ZIndex = 8; moveTxt.Parent = c2
+	local msgs = {"Join Discord", "Subscribe on my channel", "KHUB - Blade Ball", "Toggle: RightShift / K", "Auto Parry ready"}
+	local mi = 1
+	task.spawn(function()
+		while moveTxt.Parent do moveTxt.Text = msgs[mi]; mi = mi % #msgs + 1; task.wait(2.5) end
+	end)
+	btn(c2, "Copy Discord", function() if setclipboard then setclipboard(DISCORD) end end, Color3.fromRGB(88,101,242))
+	btn(c2, "Copy YouTube", function() if setclipboard then setclipboard(YOUTUBE) end end, Color3.fromRGB(200,40,40))
+end
+
+local pCombat = createPage("Combat")
+createTabButton("Combat", "Combat", 2, "Combat", "Auto Parry - Curve - Trigger")
+do
+	local c = card(pCombat, "AUTO PARRY")
 	toggle(c, "Auto Parry", function() return System.__properties.__autoparry_enabled end, function(v)
 		System.__properties.__autoparry_enabled = v
+		System.__properties.__play_animation = v
 		if v then System.autoparry.start() else System.autoparry.stop() end
 	end)
-	toggle(c, "Triggerbot", function() return System.__triggerbot.__enabled end, function(v)
-		System.__triggerbot.__enabled = v
-		if v then System.triggerbot.start() else System.triggerbot.stop() end
+	dropdown(c, "Parry Mode", {"Remote", "Keypress"}, function() return S.AutoParryMode end, function(v)
+		S.AutoParryMode = v; getgenv().AutoParryMode = v
 	end)
-
-	local s = card(PageCombat, "Spam")
-	toggle(s, "Auto Spam", function() return System.__properties.__auto_spam_enabled end, function(v)
-		System.__properties.__auto_spam_enabled = v
-		if v then System.auto_spam.start() else System.auto_spam.stop() end
+	slider(c, "Accuracy", 1, 100, function() return System.__properties.__accuracy end, function(v)
+		System.__properties.__accuracy = v; update_divisor()
 	end)
-	toggle(s, "Manual Spam", function() return System.__properties.__manual_spam_enabled end, function(v)
-		System.__properties.__manual_spam_enabled = v
-		if v then System.manual_spam.start() else System.manual_spam.stop() end
+	toggle(c, "Randomize Accuracy", function() return System.__properties.__randomized_accuracy_enabled end, function(v)
+		System.__properties.__randomized_accuracy_enabled = v
 	end)
-
-	local d = card(PageCombat, "Detections")
-	toggle(d, "Infinity Detection", function() return getgenv().InfinityDetection == true end, function(v) getgenv().InfinityDetection = v end)
-	toggle(d, "Death Slash Detection", function() return getgenv().DeathSlashDetection == true end, function(v) getgenv().DeathSlashDetection = v end)
-	toggle(d, "Time Hole Detection", function() return getgenv().TimeHoleDetection == true end, function(v) getgenv().TimeHoleDetection = v end)
-	toggle(d, "Slashes of Fury Detection", function() return getgenv().SlashesOfFuryDetection == true end, function(v) getgenv().SlashesOfFuryDetection = v end)
-	toggle(d, "Phantom Detection", function() return System.__config.__detections.__phantom end, function(v) System.__config.__detections.__phantom = v end)
-
-	local a = card(PageCombat, "Animation")
-	toggle(a, "Disable Animation", function() return AnimationFixService.DisableRunning end, function(v)
-		if v then System.animation.startdisable() else System.animation.stopdisable() end
+	toggle(c, "Auto Ability", function() return S.AutoAbility end, function(v)
+		S.AutoAbility = v; getgenv().AutoAbility = v
 	end)
-	toggle(a, "Disable VFX", function() return AnimationFixService.VFXRunning end, function(v)
-		System.animation.togglevfx(v)
+	local c2 = card(pCombat, "CURVE")
+	dropdown(c2, "Curve Type", CURVE_NAMES, function() return S.CurveType end, function(v) S.CurveType = v end)
+	toggle(c2, "Random Curve (cycle)", function() return S.RandomCurve end, function(v) S.RandomCurve = v end)
+	local c3 = card(pCombat, "TRIGGERBOT")
+	toggle(c3, "Triggerbot", function() return System.__triggerbot.__enabled end, function(v)
+		System.triggerbot.enable(v)
 	end)
-end
-
--- ========== SKIN ==========
-local PageSkin = createPage("Skin")
-createTabButton("Skin", "Skin", 3, "Skin Changer", "model · anim · fx")
-do
-	local c = card(PageSkin, "Skin Changer")
-	toggle(c, "Enable Skin Changer", function() return skinchangerSystem.skinChangerEnabled end, function(v)
-		skinchangerSystem.skinChangerEnabled = v
+	toggle(c3, "Show Trigger Button", function() return S.ShowTriggerBtn end, function(v)
+		S.ShowTriggerBtn = v
 		if v then
-			skinchangerSystem.changeSwordModel = true
-			skinchangerSystem.changeSwordAnimation = true
-			skinchangerSystem.changeSwordFX = true
-			if skinchangerSystem.updateSword then skinchangerSystem.updateSword() end
-		end
-	end)
-	toggle(c, "Change Model", function() return skinchangerSystem.changeSwordModel end, function(v)
-		skinchangerSystem.changeSwordModel = v
-		if skinchangerSystem.updateSword then skinchangerSystem.updateSword() end
-	end)
-	toggle(c, "Change Animation", function() return skinchangerSystem.changeSwordAnimation end, function(v)
-		skinchangerSystem.changeSwordAnimation = v
-		if skinchangerSystem.updateSword then skinchangerSystem.updateSword() end
-	end)
-	toggle(c, "Change FX", function() return skinchangerSystem.changeSwordFX end, function(v)
-		skinchangerSystem.changeSwordFX = v
-		if skinchangerSystem.updateSword then skinchangerSystem.updateSword() end
-	end)
-
-	local tb = textBox(c, "Sword name (model / anim / fx)...")
-	if skinchangerSystem.swordModel then tb.Text = tostring(skinchangerSystem.swordModel) end
-	btn(c, "Apply Sword Name", function()
-		local text = tb.Text
-		skinchangerSystem.swordModel = text
-		skinchangerSystem.swordAnimations = text
-		skinchangerSystem.swordFX = text
-		if skinchangerSystem.skinChangerEnabled and skinchangerSystem.updateSword then
-			skinchangerSystem.updateSword()
-		end
-	end)
-	local tip = Instance.new("TextLabel")
-	tip.Size = UDim2.new(1,0,0,40); tip.BackgroundTransparency = 1
-	tip.Text = "Type exact sword name from the game (e.g. skin id string). Enable Skin Changer then Apply."
-	tip.Font = Enum.Font.Gotham; tip.TextSize = 11; tip.TextColor3 = THEME.dim
-	tip.TextWrapped = true; tip.TextXAlignment = Enum.TextXAlignment.Left; tip.ZIndex = 8; tip.Parent = c
-end
-
--- ========== MISC ==========
-local PageMisc = createPage("Misc")
-createTabButton("Misc", "Misc", 4, "Misc", "stats · fov · potato")
-do
-	local c = card(PageMisc, "Stats")
-	toggle(c, "Ball Stats HUD", function() return ball_velocity.__state.active end, function(v)
-		if v then ball_velocity.start() else ball_velocity.stop() end
-	end)
-
-	local f = card(PageMisc, "Camera FOV")
-	local fovOn = false
-	local fovVal = 70
-	toggle(f, "Custom FOV", function() return fovOn end, function(v)
-		fovOn = v
-		if v then
-			workspace.CurrentCamera.FieldOfView = fovVal
-			if not getgenv().FOVLoop then
-				getgenv().FOVLoop = RunService.RenderStepped:Connect(function()
-					if fovOn then workspace.CurrentCamera.FieldOfView = fovVal end
+			if not ScreenGui:FindFirstChild("KHUB_TriggerBtn") then
+				local g = makeFloatBtn("KHUB_TriggerBtn", "TRIGGER", UDim2.new(0.5, -50, 0.7, 0), function()
+					local state = not System.__triggerbot.__enabled
+					System.triggerbot.enable(state)
+					notify("Trigger " .. (state and "ON" or "OFF"))
 				end)
+				g.Name = "KHUB_TriggerBtn"; g.Parent = ScreenGui
 			end
 		else
-			workspace.CurrentCamera.FieldOfView = 70
-			if getgenv().FOVLoop then getgenv().FOVLoop:Disconnect(); getgenv().FOVLoop = nil end
+			local g = ScreenGui:FindFirstChild("KHUB_TriggerBtn"); if g then g:Destroy() end
 		end
 	end)
-	local fovLabel = Instance.new("TextLabel")
-	fovLabel.Size = UDim2.new(1,0,0,16); fovLabel.BackgroundTransparency = 1
-	fovLabel.Text = "FOV: 70"; fovLabel.Font = Enum.Font.Gotham; fovLabel.TextSize = 12
-	fovLabel.TextColor3 = THEME.dim; fovLabel.TextXAlignment = Enum.TextXAlignment.Left; fovLabel.ZIndex = 8; fovLabel.Parent = f
-	local row = Instance.new("Frame"); row.Size = UDim2.new(1,0,0,30); row.BackgroundTransparency = 1; row.ZIndex = 8; row.Parent = f
-	local m = Instance.new("TextButton"); m.Size = UDim2.new(0,40,0,28); m.BackgroundColor3 = THEME.inner; m.Text = "-"
-	m.Font = Enum.Font.GothamBold; m.TextSize = 16; m.TextColor3 = THEME.text; m.ZIndex = 9; m.Parent = row; corner(m, 8)
-	local p = Instance.new("TextButton"); p.Size = UDim2.new(0,40,0,28); p.Position = UDim2.new(1,-40,0,0)
-	p.BackgroundColor3 = THEME.inner; p.Text = "+"; p.Font = Enum.Font.GothamBold; p.TextSize = 16
-	p.TextColor3 = THEME.text; p.ZIndex = 9; p.Parent = row; corner(p, 8)
-	m.MouseButton1Click:Connect(function()
-		fovVal = math.clamp(fovVal - 5, 50, 120); fovLabel.Text = "FOV: "..fovVal
-		if fovOn then workspace.CurrentCamera.FieldOfView = fovVal end
-	end)
-	p.MouseButton1Click:Connect(function()
-		fovVal = math.clamp(fovVal + 5, 50, 120); fovLabel.Text = "FOV: "..fovVal
-		if fovOn then workspace.CurrentCamera.FieldOfView = fovVal end
-	end)
-
-	local g = card(PageMisc, "Graphics")
-	toggle(g, "Potato Graphics", function() return System.__properties.potatographics == true end, function(v)
-		if System.graphics and System.graphics.enablepotato then System.graphics.enablepotato(v) end
-	end)
 end
 
-
-createTabButton("Settings", "Settings", 12, "Settings", "UI options · keybinds")
+local pSpam = createPage("Spam")
+createTabButton("Spam", "Spam", 3, "Spam", "Auto - Manual")
 do
-	local uiOpt = { ShowOrb = true, RainbowTitle = true }
-	local c = card(PageSettings, "UI Options")
-	toggle(c, "Show floating orb when minimized", function() return uiOpt.ShowOrb end, function(v)
-		uiOpt.ShowOrb = v; OrbState.visible = v
+	local c = card(pSpam, "AUTO SPAM")
+	toggle(c, "Auto Spam", function() return System.__properties.__auto_spam_enabled end, function(v)
+		if v then System.auto_spam.start() else System.auto_spam.stop() end
 	end)
-	toggle(c, "Rainbow title gradient", function() return uiOpt.RainbowTitle end, function(v)
-		uiOpt.RainbowTitle = v; TG.Enabled = v
+	dropdown(c, "Spam Mode", {"Remote", "Keypress"}, function() return S.AutoSpamMode end, function(v)
+		S.AutoSpamMode = v; getgenv().AutoSpamMode = v
 	end)
-	local k = card(PageSettings, "Keybinds")
-	local tip = Instance.new("TextLabel")
-	tip.Size = UDim2.new(1,0,0,55); tip.BackgroundTransparency = 1
-	tip.Text = "PC: RightShift / RightCtrl / K\nMobile: Tap floating orb to reopen"
-	tip.Font = Enum.Font.Gotham; tip.TextSize = 12; tip.TextColor3 = THEME.dim
-	tip.TextXAlignment = Enum.TextXAlignment.Left; tip.TextYAlignment = Enum.TextYAlignment.Top
-	tip.ZIndex = 8; tip.Parent = k
-end
-
--- ========== SAVE CONFIG (last) ==========
-local PageConfig = createPage("Config")
-createTabButton("Config", "Config", 99, "Save Config", "create · load · delete")
-do
-	local c = card(PageConfig, "Config Manager")
-	local nameBox = textBox(c, "Config name...")
-	local statusCfg = Instance.new("TextLabel")
-	statusCfg.Size = UDim2.new(1,0,0,18); statusCfg.BackgroundTransparency = 1
-	statusCfg.Text = "Ready"; statusCfg.Font = Enum.Font.Gotham; statusCfg.TextSize = 12
-	statusCfg.TextColor3 = THEME.dim; statusCfg.TextXAlignment = Enum.TextXAlignment.Left
-	statusCfg.ZIndex = 8; statusCfg.Parent = c
-
-	local function ensureFolder()
-		if isfolder and not isfolder(ConfigFolder) then pcall(function() makefolder(ConfigFolder) end) end
-	end
-	local function listConfigs()
-		ensureFolder(); if not listfiles then return {} end
-		local out = {}
-		pcall(function()
-			for _, f in ipairs(listfiles(ConfigFolder)) do
-				local n = f:match("([^/\\]+)%.json$"); if n then table.insert(out, n) end
+	toggle(c, "Animation Fix", function() return S.AutoSpamAnimFix end, function(v) S.AutoSpamAnimFix = v end)
+	local c2 = card(pSpam, "MANUAL SPAM")
+	toggle(c2, "Manual Spam", function() return System.__properties.__manual_spam_enabled end, function(v)
+		if v then System.manual_spam.start() else System.manual_spam.stop() end
+	end)
+	dropdown(c2, "Manual Mode", {"Remote", "Keypress"}, function() return S.ManualSpamMode end, function(v)
+		S.ManualSpamMode = v; getgenv().ManualSpamMode = v
+	end)
+	toggle(c2, "Show Spam Button", function() return S.ShowSpamBtn end, function(v)
+		S.ShowSpamBtn = v
+		if v then
+			if not ScreenGui:FindFirstChild("KHUB_SpamBtn") then
+				local g = makeFloatBtn("KHUB_SpamBtn", "SPAM", UDim2.new(0.5, -50, 0.8, 0), function()
+					local state = not System.__properties.__manual_spam_enabled
+					if state then System.manual_spam.start() else System.manual_spam.stop() end
+					notify("Manual Spam " .. (state and "ON" or "OFF"))
+				end)
+				g.Name = "KHUB_SpamBtn"; g.Parent = ScreenGui
 			end
-		end)
-		return out
-	end
-
-	local listFrame = Instance.new("Frame")
-	listFrame.Size = UDim2.new(1,0,0,100); listFrame.BackgroundColor3 = THEME.inner
-	listFrame.ZIndex = 8; listFrame.Parent = c; corner(listFrame, 8)
-	local listScroll = Instance.new("ScrollingFrame")
-	listScroll.Size = UDim2.new(1,-4,1,-4); listScroll.Position = UDim2.new(0,2,0,2)
-	listScroll.BackgroundTransparency = 1; listScroll.ScrollBarThickness = 3
-	listScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; listScroll.CanvasSize = UDim2.new(0,0,0,0)
-	listScroll.ZIndex = 9; listScroll.Parent = listFrame
-	local listLay = Instance.new("UIListLayout"); listLay.Padding = UDim.new(0,3); listLay.Parent = listScroll
-	local selectedCfg = nil
-
-	local function refreshCfg()
-		for _, ch in ipairs(listScroll:GetChildren()) do if ch:IsA("TextButton") then ch:Destroy() end end
-		for _, n in ipairs(listConfigs()) do
-			local b = Instance.new("TextButton")
-			b.Size = UDim2.new(1,-6,0,26)
-			b.BackgroundColor3 = selectedCfg == n and THEME.accent2 or Color3.fromRGB(22,28,56)
-			b.Text = n; b.Font = Enum.Font.Gotham; b.TextSize = 12; b.TextColor3 = THEME.text
-			b.ZIndex = 10; b.Parent = listScroll; corner(b, 6)
-			b.MouseButton1Click:Connect(function() selectedCfg = n; nameBox.Text = n; refreshCfg() end)
+		else
+			local g = ScreenGui:FindFirstChild("KHUB_SpamBtn"); if g then g:Destroy() end
+			System.manual_spam.stop()
 		end
-	end
-
-	btn(c, "Save Config", function()
-		local n = nameBox.Text:gsub("%s+", "")
-		if n == "" then statusCfg.Text = "Enter a name"; return end
-		ensureFolder()
-		local ok = pcall(function()
-			writefile(ConfigFolder.."/"..n..".json", HttpService:JSONEncode({savedAt = os.date("%Y-%m-%d %H:%M:%S")}))
-		end)
-		statusCfg.Text = ok and ("Saved: "..n) or "Save failed"
-		refreshCfg()
-	end, Color3.fromRGB(40,80,50))
-
-	btn(c, "Load Config", function()
-		local n = selectedCfg or nameBox.Text:gsub("%s+", "")
-		if n == "" then statusCfg.Text = "Select a config"; return end
-		local ok, raw = pcall(function() return readfile(ConfigFolder.."/"..n..".json") end)
-		if not ok or not raw then statusCfg.Text = "Load failed"; return end
-		statusCfg.Text = "Loaded: "..n
-	end, Color3.fromRGB(40,50,90))
-
-	btn(c, "Delete Config", function()
-		local n = selectedCfg or nameBox.Text:gsub("%s+", "")
-		if n == "" then statusCfg.Text = "Select a config"; return end
-		pcall(function() delfile(ConfigFolder.."/"..n..".json") end)
-		selectedCfg = nil; statusCfg.Text = "Deleted: "..n; refreshCfg()
-	end, Color3.fromRGB(90,30,40))
-
-	btn(c, "Refresh List", refreshCfg)
-	task.defer(refreshCfg)
+	end)
 end
 
--- ORB
+local pDet = createPage("Detection")
+createTabButton("Detection", "Detection", 4, "Detection", "Ability skips")
+do
+	local c = card(pDet, "ABILITY DETECTION")
+	toggle(c, "Infinity", function() return System.__config.__detections.__infinity end, function(v) System.__config.__detections.__infinity = v end)
+	toggle(c, "Death Slash", function() return System.__config.__detections.__deathslash end, function(v) System.__config.__detections.__deathslash = v end)
+	toggle(c, "Time Hole", function() return System.__config.__detections.__timehole end, function(v) System.__config.__detections.__timehole = v end)
+	toggle(c, "Slashes Of Fury", function() return System.__config.__detections.__slashesoffury end, function(v) System.__config.__detections.__slashesoffury = v end)
+	toggle(c, "Phantom", function() return System.__config.__detections.__phantom end, function(v) System.__config.__detections.__phantom = v end)
+end
+
+local pVis = createPage("Visual")
+createTabButton("Visual", "Visual", 5, "Visual", "ESP - Ball stats")
+do
+	local c = card(pVis, "ESP")
+	toggle(c, "Ability ESP", function() return S.AbilityESP end, function(v)
+		if v then startAbilityESP() else stopAbilityESP() end
+	end)
+	local c2 = card(pVis, "BALL")
+	toggle(c2, "Ball Statistic", function() return S.BallStats end, function(v)
+		S.BallStats = v
+		if v then createBallStats() else destroyBallStats() end
+	end)
+end
+
+local pMisc = createPage("Misc")
+createTabButton("Misc", "Misc", 6, "Misc", "Character - FOV - Emotes")
+do
+	local c = card(pMisc, "NO RENDER")
+	toggle(c, "No Render", function() return S.NoRender end, function(v) setNoRender(v) end)
+	local c2 = card(pMisc, "FOV")
+	toggle(c2, "Custom FOV", function() return S.FOVEnabled end, function(v)
+		S.FOVEnabled = v
+		if not v and Workspace.CurrentCamera then Workspace.CurrentCamera.FieldOfView = 70 end
+	end)
+	slider(c2, "FOV Value", 50, 120, function() return S.FOV end, function(v) S.FOV = v end)
+	local c3 = card(pMisc, "CHARACTER")
+	toggle(c3, "Character Mods", function() return S.CharacterMod end, function(v) S.CharacterMod = v end)
+	toggle(c3, "Walk Speed", function() return S.EnableSpeed end, function(v) S.EnableSpeed = v end)
+	slider(c3, "Walk Speed Value", 16, 200, function() return S.WalkSpeed end, function(v) S.WalkSpeed = v end)
+	toggle(c3, "Jump Power", function() return S.EnableJump end, function(v) S.EnableJump = v end)
+	slider(c3, "Jump Power Value", 50, 200, function() return S.JumpPower end, function(v) S.JumpPower = v end)
+	toggle(c3, "Infinite Jump", function() return S.InfJump end, function(v) S.InfJump = v end)
+	toggle(c3, "Spin", function() return S.Spin end, function(v) S.Spin = v end)
+	slider(c3, "Spin Speed", 1, 50, function() return S.SpinSpeed end, function(v) S.SpinSpeed = v end)
+	toggle(c3, "Gravity", function() return S.EnableGravity end, function(v)
+		S.EnableGravity = v; if not v then Workspace.Gravity = 196.2 end
+	end)
+	slider(c3, "Gravity Value", 0, 400, function() return math.floor(S.Gravity) end, function(v) S.Gravity = v end)
+	toggle(c3, "Hip Height", function() return S.EnableHip end, function(v) S.EnableHip = v end)
+	slider(c3, "Hip Height Value", -5, 20, function() return S.HipHeight end, function(v) S.HipHeight = v end)
+	local c4 = card(pMisc, "EMOTES")
+	toggle(c4, "Emotes", function() return S.Emotes end, function(v)
+		S.Emotes = v
+		if v and S.SelectedEmote ~= "" then animation_system.play(S.SelectedEmote)
+		elseif not v then animation_system.stop() end
+	end)
+	toggle(c4, "Auto Stop when moving", function() return S.AutoStopEmote end, function(v) S.AutoStopEmote = v end)
+	if #emotes_data > 0 then
+		dropdown(c4, "Emote", emotes_data, function() return S.SelectedEmote ~= "" and S.SelectedEmote or emotes_data[1] end, function(v)
+			S.SelectedEmote = v
+			if S.Emotes then animation_system.play(v) end
+		end)
+		S.SelectedEmote = emotes_data[1]
+	end
+end
+
+local pWorld = createPage("World")
+createTabButton("World", "World", 7, "World", "Sky presets")
+do
+	local c = card(pWorld, "SKY CHANGER")
+	local names = {}
+	for _, p in ipairs(WorldPresets) do table.insert(names, p.Name) end
+	toggle(c, "Sky Changer", function() return S.SkyEnabled end, function(v)
+		S.SkyEnabled = v
+		if v then
+			for _, p in ipairs(WorldPresets) do
+				if p.Name == S.SkyPreset then ApplyWorld(p); break end
+			end
+		else ClearWorld() end
+	end)
+	dropdown(c, "Preset", names, function() return S.SkyPreset end, function(v)
+		S.SkyPreset = v
+		if S.SkyEnabled then
+			for _, p in ipairs(WorldPresets) do if p.Name == v then ApplyWorld(p); break end end
+		end
+	end)
+	local c2 = card(pWorld, "IMMORTAL")
+	toggle(c2, "Immortal (Orbit Desync)", function() return S.Immortal end, function(v)
+		S.Immortal = v
+		if v then startImmortal() else stopImmortal() end
+	end)
+end
+
+local pUnlock = createPage("Unlock")
+createTabButton("Unlock", "Unlock", 8, "Unlock", "Skins - names")
+do
+	local c = card(pUnlock, "SKIN CHANGER")
+	local swordBox = Instance.new("TextBox")
+	swordBox.Size = UDim2.new(1,0,0,30); swordBox.BackgroundColor3 = THEME.inner
+	swordBox.PlaceholderText = "Sword name..."; swordBox.Text = tostring(getgenv().swordModel or "")
+	swordBox.Font = Enum.Font.Gotham; swordBox.TextSize = 13; swordBox.TextColor3 = THEME.text
+	swordBox.ClearTextOnFocus = false; swordBox.BorderSizePixel = 0; swordBox.ZIndex = 8; swordBox.Parent = c; corner(swordBox, 8)
+	toggle(c, "Enable Skin Changer", function() return getgenv().skinChanger == true end, function(v)
+		getgenv().skinChanger = v
+		if v and swordBox.Text ~= "" then
+			getgenv().swordModel = swordBox.Text
+			getgenv().swordAnimations = swordBox.Text
+			getgenv().swordFX = swordBox.Text
+		end
+	end)
+	btn(c, "Apply Sword Name", function()
+		local t = swordBox.Text
+		getgenv().swordModel = t; getgenv().swordAnimations = t; getgenv().swordFX = t
+		getgenv().skinChanger = true
+		notify("Sword set: " .. t)
+	end, THEME.green)
+	local expBox = Instance.new("TextBox")
+	expBox.Size = UDim2.new(1,0,0,30); expBox.BackgroundColor3 = THEME.inner
+	expBox.PlaceholderText = "Explosion name..."; expBox.Text = tostring(getgenv().explosionFX or "")
+	expBox.Font = Enum.Font.Gotham; expBox.TextSize = 13; expBox.TextColor3 = THEME.text
+	expBox.ClearTextOnFocus = false; expBox.BorderSizePixel = 0; expBox.ZIndex = 8; expBox.Parent = c; corner(expBox, 8)
+	btn(c, "Apply Explosion", function()
+		getgenv().explosionFX = expBox.Text; getgenv().explosionChanger = true
+		notify("Explosion set: " .. expBox.Text)
+	end, THEME.accent)
+	local c2 = card(pUnlock, "NOTE")
+	local note = Instance.new("TextLabel")
+	note.Size = UDim2.new(1,0,0,48); note.BackgroundTransparency = 1
+	note.Text = "Full shop unlock / emote wheel from Kittylol needs their unlock backend. Skin names still apply via getgenv."
+	note.Font = Enum.Font.Gotham; note.TextSize = 11; note.TextColor3 = THEME.dim
+	note.TextWrapped = true; note.TextXAlignment = Enum.TextXAlignment.Left; note.ZIndex = 8; note.Parent = c2
+end
+
+local pSettings = createPage("Settings")
+createTabButton("Settings", "Settings", 9, "Settings", "Keybinds")
+do
+	local c = card(pSettings, "KEYBINDS")
+	local info = Instance.new("TextLabel")
+	info.Size = UDim2.new(1,0,0,60); info.BackgroundTransparency = 1
+	info.Text = "UI Toggle: RightShift / RightCtrl / K\nAuto Parry: enable in Combat tab\nManual Spam: floating SPAM button or toggle"
+	info.Font = Enum.Font.Gotham; info.TextSize = 12; info.TextColor3 = THEME.dim
+	info.TextXAlignment = Enum.TextXAlignment.Left; info.TextYAlignment = Enum.TextYAlignment.Top
+	info.TextWrapped = true; info.ZIndex = 8; info.Parent = c
+end
+
+local pConfig = createPage("Config")
+createTabButton("Config", "Config", 99, "Save Config", "Create - Load")
+do
+	local c = card(pConfig, "CONFIG")
+	local nameBox = Instance.new("TextBox")
+	nameBox.Size = UDim2.new(1,0,0,30); nameBox.BackgroundColor3 = THEME.inner
+	nameBox.PlaceholderText = "Config name..."; nameBox.Text = "default"
+	nameBox.Font = Enum.Font.Gotham; nameBox.TextSize = 13; nameBox.TextColor3 = THEME.text
+	nameBox.ClearTextOnFocus = false; nameBox.BorderSizePixel = 0; nameBox.ZIndex = 8; nameBox.Parent = c; corner(nameBox, 8)
+	local function collect()
+		return {
+			accuracy = System.__properties.__accuracy,
+			curve = S.CurveType,
+			parryMode = S.AutoParryMode,
+			fov = S.FOV,
+			walk = S.WalkSpeed,
+			jump = S.JumpPower,
+		}
+	end
+	local function apply(data)
+		if type(data) ~= "table" then return end
+		if data.accuracy then System.__properties.__accuracy = data.accuracy; update_divisor() end
+		if data.curve then S.CurveType = data.curve end
+		if data.parryMode then S.AutoParryMode = data.parryMode end
+		if data.fov then S.FOV = data.fov end
+		if data.walk then S.WalkSpeed = data.walk end
+		if data.jump then S.JumpPower = data.jump end
+	end
+	btn(c, "Save Config", function()
+		local name = nameBox.Text ~= "" and nameBox.Text or "default"
+		pcall(function()
+			if not isfolder then return end
+			if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
+			writefile(ConfigFolder .. "/" .. name .. ".json", HttpService:JSONEncode(collect()))
+			notify("Saved " .. name)
+		end)
+	end, THEME.green)
+	btn(c, "Load Config", function()
+		local name = nameBox.Text ~= "" and nameBox.Text or "default"
+		pcall(function()
+			local path = ConfigFolder .. "/" .. name .. ".json"
+			if isfile and isfile(path) then
+				apply(HttpService:JSONDecode(readfile(path)))
+				notify("Loaded " .. name)
+			else notify("Config not found") end
+		end)
+	end, THEME.accent)
+end
+
+-- Orb
 local OrbRoot = Instance.new("Frame")
-OrbRoot.Size = UDim2.new(0,100,0,100); OrbRoot.Position = UDim2.new(0, 16, 0.5, -50)
+OrbRoot.Size = UDim2.new(0,64,0,64); OrbRoot.Position = UDim2.new(0, 16, 0.5, -32)
 OrbRoot.BackgroundTransparency = 1; OrbRoot.Visible = false; OrbRoot.ZIndex = 50; OrbRoot.Parent = ScreenGui
 local Orb = Instance.new("ImageButton")
-Orb.Size = UDim2.new(0,90,0,90); Orb.Position = UDim2.new(0.5,-45,0.5,-45)
-Orb.BackgroundColor3 = THEME.panel; Orb.Image = LOGO_ID; Orb.ScaleType = Enum.ScaleType.Crop
-Orb.ZIndex = 51; Orb.Parent = OrbRoot; corner(Orb, 45); mkstroke(Orb, THEME.accent2, 2.5, 0.15)
-task.spawn(function()
-	local halo = Instance.new("UIStroke"); halo.Color = THEME.accent; halo.Thickness = 2; halo.Parent = Orb
-	while Orb.Parent do halo.Color = Color3.fromHSV((tick()%4)/4, 0.7, 1); task.wait(0.05) end
-end)
+Orb.Size = UDim2.new(1,0,1,0); Orb.BackgroundColor3 = THEME.panel; Orb.Image = LOGO_ID
+Orb.BorderSizePixel = 0; Orb.ZIndex = 51; Orb.Parent = OrbRoot; corner(Orb, 32)
+mkstroke(Orb, THEME.accent, 2, 0.2)
 do
 	local draggingOrb, dragStartOrb, startPosOrb
 	Orb.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			draggingOrb = true; dragStartOrb = input.Position; startPosOrb = OrbRoot.Position
-			input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then draggingOrb = false end end)
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then draggingOrb = false end
+			end)
 		end
 	end)
 	UserInputService.InputChanged:Connect(function(input)
@@ -1342,7 +1752,7 @@ local function setVisible(on)
 			Size = UDim2.new(0, BASE_W, 0, BASE_H),
 		}):Play()
 	else
-		Win.Visible = false; OrbRoot.Visible = OrbState.visible
+		Win.Visible = false; OrbRoot.Visible = true
 	end
 end
 MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
@@ -1356,6 +1766,6 @@ UserInputService.InputBegan:Connect(function(i, gp)
 	end
 end)
 
-task.delay(1.7, function() switchPage("Welcome", "Welcome", "KHUB · Blade Ball") end)
-print("[KHUB] Blade Ball loaded · Welcome · Settings · Save Config")
+task.delay(1.7, function() switchPage("Welcome", "Welcome", "KHUB - Blade Ball") end)
+print("[KHUB] Blade Ball loaded - Kittylol systems + KHUB UI")
 print("[KHUB] Toggle: RightShift / RightCtrl / K")
