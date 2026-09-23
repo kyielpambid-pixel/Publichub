@@ -1,0 +1,1152 @@
+--[[ Made By Khub ]]
+
+repeat task.wait() until game:IsLoaded()
+
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
+local CoreGui           = game:GetService("CoreGui")
+local Workspace         = game:GetService("Workspace")
+local HttpService       = game:GetService("HttpService")
+local Lighting          = game:GetService("Lighting")
+local VirtualInputManager = nil
+pcall(function() VirtualInputManager = game:GetService("VirtualInputManager") end)
+
+local LocalPlayer = Players.LocalPlayer
+local player = LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+local LOGO_ID  = "rbxassetid://127230219966945"
+local BG_ID    = "rbxassetid://127230219966945"
+local DISCORD  = "https://discord.gg/EKPb7BRDH8"
+local YOUTUBE  = "https://www.youtube.com/@kyielpambid"
+local ConfigFolder = "KHUB_CluckOrHide_Configs"
+
+print("[KHUB] Cluck or Hide starting...")
+
+pcall(function()
+	for _, parent in ipairs({CoreGui, player:FindFirstChild("PlayerGui")}) do
+		if parent then
+			for _, n in ipairs({"KHUB_CluckOrHide", "KHUB_CluckOrHide_Orb", "FloatingToggleGui", "KHUB_MobileActions"}) do
+				local o = parent:FindFirstChild(n)
+				if o then o:Destroy() end
+			end
+		end
+	end
+	if gethui then
+		local h = gethui()
+		if h then
+			local o = h:FindFirstChild("KHUB_CluckOrHide")
+			if o then o:Destroy() end
+		end
+	end
+end)
+
+local S = {
+	AutoKillAll = false,
+	InstantKillAll = false,
+	AutoHelp = false,
+	AutoNoise = false,
+	Hitbox = false,
+	HitboxSize = 5,
+	Fullbright = false,
+	Noclip = false,
+	Fly = false,
+	FlySpeed = 50,
+	WalkSpeedOn = false,
+	WalkSpeed = 16,
+	PlayerESP = true,
+	-- Mobile bottom auto-clickers
+	AutoClickNoise = false,
+	AutoClickDuck = false,
+	AutoClickAction3 = false,
+	AutoClickAction4 = false,
+}
+
+local espBoxes = {}
+local OrbState = { visible = true }
+
+local function GetUIParent()
+	local ok, res = pcall(function()
+		if gethui then return gethui() end
+	end)
+	if ok and res then return res end
+	return CoreGui
+end
+
+-- ===================== FEATURES =====================
+local function firePrompt(prompt)
+	if not prompt then return end
+	pcall(function()
+		if fireproximityprompt then
+			fireproximityprompt(prompt)
+		end
+	end)
+end
+
+-- Auto noise: all proximity prompts
+task.spawn(function()
+	while true do
+		if S.AutoNoise then
+			for _, obj in ipairs(Workspace:GetDescendants()) do
+				if obj:IsA("ProximityPrompt") then
+					firePrompt(obj)
+				end
+			end
+		end
+		task.wait(0.3)
+	end
+end)
+
+-- Instant kill all
+task.spawn(function()
+	while true do
+		if S.InstantKillAll then
+			local char = LocalPlayer.Character
+			if char then
+				local tool = char:FindFirstChildOfClass("Tool")
+				if tool then pcall(function() tool:Activate() end) end
+			end
+		end
+		task.wait(0.1)
+	end
+end)
+
+-- Auto help frozen hiders
+task.spawn(function()
+	while true do
+		if S.AutoHelp then
+			local localChar = LocalPlayer.Character
+			local hrp = localChar and localChar:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local originalPos = hrp.CFrame
+				for _, plr in ipairs(Players:GetPlayers()) do
+					if not S.AutoHelp then break end
+					if plr ~= LocalPlayer and plr.Character then
+						local char = plr.Character
+						local humanoid = char:FindFirstChildOfClass("Humanoid")
+						local rootPart = char:FindFirstChild("HumanoidRootPart")
+						local isFrozen = (humanoid and humanoid.WalkSpeed == 0)
+							or char:GetAttribute("Frozen")
+							or char:GetAttribute("Stunned")
+							or (char:FindFirstChild("Frozen") ~= nil)
+						if isFrozen and rootPart then
+							local killerNearby = false
+							for _, other in ipairs(Players:GetPlayers()) do
+								if other ~= LocalPlayer and other ~= plr and other.Character then
+									local oroot = other.Character:FindFirstChild("HumanoidRootPart")
+									if oroot and (oroot.Position - rootPart.Position).Magnitude < 15 then
+										killerNearby = true
+										break
+									end
+								end
+							end
+							if not killerNearby then
+								hrp.CFrame = rootPart.CFrame + Vector3.new(0, 3, 0)
+								task.wait(0.05)
+								for _, obj in ipairs(Workspace:GetDescendants()) do
+									if obj:IsA("ProximityPrompt") then
+										local parent = obj.Parent
+										local pos = parent and (parent:IsA("BasePart") and parent.Position or (parent:IsA("Model") and parent:GetPivot().Position))
+										if pos and (pos - rootPart.Position).Magnitude < 15 then
+											firePrompt(obj)
+										end
+									end
+								end
+								hrp.CFrame = originalPos
+								task.wait(0.2)
+								break
+							end
+						end
+					end
+				end
+			end
+		end
+		task.wait(0.5)
+	end
+end)
+
+-- Auto kill all (TP + activate)
+task.spawn(function()
+	while true do
+		if S.AutoKillAll then
+			local localChar = LocalPlayer.Character
+			local hrp = localChar and localChar:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				for _, plr in ipairs(Players:GetPlayers()) do
+					if not S.AutoKillAll then break end
+					if plr ~= LocalPlayer and plr.Character then
+						local target = plr.Character:FindFirstChild("HumanoidRootPart")
+						if target then
+							hrp.CFrame = target.CFrame + Vector3.new(0, 0, 2)
+							local tool = localChar:FindFirstChildOfClass("Tool")
+							if tool then pcall(function() tool:Activate() end) end
+							task.wait(0.25)
+						end
+					end
+				end
+			end
+		end
+		task.wait(0.1)
+	end
+end)
+
+-- Stepped: walkspeed, noclip, fly, hitbox
+RunService.Stepped:Connect(function()
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+
+	if hum then
+		if S.WalkSpeedOn then
+			hum.WalkSpeed = S.WalkSpeed
+		end
+	end
+
+	if S.Noclip then
+		for _, part in pairs(char:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end
+
+	if S.Fly and hrp then
+		local camCF = Camera.CFrame
+		local moveDir = Vector3.zero
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Up) then
+			moveDir = moveDir + camCF.LookVector
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) or UserInputService:IsKeyDown(Enum.KeyCode.Down) then
+			moveDir = moveDir - camCF.LookVector
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Left) then
+			moveDir = moveDir - camCF.RightVector
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) or UserInputService:IsKeyDown(Enum.KeyCode.Right) then
+			moveDir = moveDir + camCF.RightVector
+		end
+		-- mobile: use MoveDirection
+		if moveDir.Magnitude < 0.1 and hum then
+			local md = hum.MoveDirection
+			if md.Magnitude > 0.1 then
+				moveDir = Vector3.new(md.X, 0, md.Z)
+				if moveDir.Magnitude > 0 then
+					moveDir = (camCF.LookVector * md.Z + camCF.RightVector * md.X)
+				end
+			end
+		end
+		if moveDir.Magnitude > 0 then
+			moveDir = moveDir.Unit * S.FlySpeed
+			hrp.AssemblyLinearVelocity = moveDir
+		else
+			hrp.AssemblyLinearVelocity = Vector3.zero
+		end
+	end
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and plr.Character then
+			local thrp = plr.Character:FindFirstChild("HumanoidRootPart")
+			if thrp then
+				if S.Hitbox then
+					thrp.Size = Vector3.new(S.HitboxSize, S.HitboxSize, S.HitboxSize)
+					thrp.Transparency = 0.7
+					thrp.CanCollide = false
+				else
+					if thrp.Size.X > 3 then
+						thrp.Size = Vector3.new(2, 2, 1)
+						thrp.Transparency = 1
+					end
+				end
+			end
+		end
+	end
+end)
+
+-- Fullbright
+local function applyFullbright(on)
+	if on then
+		Lighting.Brightness = 2
+		Lighting.ClockTime = 14
+		Lighting.FogEnd = 100000
+		Lighting.GlobalShadows = false
+	else
+		Lighting.Brightness = 1
+		Lighting.GlobalShadows = true
+	end
+end
+
+-- ESP
+local function addESP(plr)
+	if plr == LocalPlayer then return end
+	local function apply(char)
+		if not char or char:FindFirstChild("HighlightESP") then return end
+		local highlight = Instance.new("Highlight")
+		highlight.Name = "HighlightESP"
+		highlight.Adornee = char
+		highlight.FillColor = Color3.fromRGB(138, 43, 226)
+		highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+		highlight.FillTransparency = 0.5
+		highlight.OutlineTransparency = 0
+		highlight.Enabled = S.PlayerESP
+		highlight.Parent = char
+		table.insert(espBoxes, highlight)
+	end
+	if plr.Character then apply(plr.Character) end
+	plr.CharacterAdded:Connect(apply)
+end
+for _, p in ipairs(Players:GetPlayers()) do addESP(p) end
+Players.PlayerAdded:Connect(addESP)
+
+local function setESPEnabled(on)
+	S.PlayerESP = on
+	for _, h in pairs(espBoxes) do
+		if h and h.Parent then h.Enabled = on end
+	end
+end
+
+-- ===================== MOBILE BOTTOM AUTO-CLICK =====================
+-- Taps fixed screen positions at the bottom (Noise / Duck / extra actions)
+-- Positions are ratios of viewport (works mobile + PC)
+local MobileClick = {
+	Noise = { x = 0.20, y = 0.92 },  -- bottom-left-ish
+	Duck  = { x = 0.40, y = 0.92 },
+	Act3  = { x = 0.60, y = 0.92 },
+	Act4  = { x = 0.80, y = 0.92 },
+}
+
+local function screenTap(nx, ny)
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	local vs = cam.ViewportSize
+	local x = math.floor(vs.X * nx)
+	local y = math.floor(vs.Y * ny)
+	if VirtualInputManager then
+		pcall(function()
+			VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+			VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+		end)
+	end
+	-- also try clicking GuiButtons near that area
+	pcall(function()
+		local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+		if not pg then return end
+		for _, gui in ipairs(pg:GetDescendants()) do
+			if gui:IsA("GuiButton") and gui.Visible and gui.AbsoluteSize.X > 20 then
+				local pos = gui.AbsolutePosition
+				local size = gui.AbsoluteSize
+				local cx = pos.X + size.X / 2
+				local cy = pos.Y + size.Y / 2
+				if math.abs(cx - x) < 80 and math.abs(cy - y) < 80 then
+					pcall(function()
+						if firesignal then
+							firesignal(gui.MouseButton1Click)
+						end
+						gui:Activate()
+					end)
+				end
+			end
+		end
+	end)
+end
+
+task.spawn(function()
+	while true do
+		if S.AutoClickNoise then screenTap(MobileClick.Noise.x, MobileClick.Noise.y) end
+		if S.AutoClickDuck then screenTap(MobileClick.Duck.x, MobileClick.Duck.y) end
+		if S.AutoClickAction3 then screenTap(MobileClick.Act3.x, MobileClick.Act3.y) end
+		if S.AutoClickAction4 then screenTap(MobileClick.Act4.x, MobileClick.Act4.y) end
+		task.wait(0.12)
+	end
+end)
+
+-- (No floating bottom bar — auto-click only via Mobile tab toggles)
+
+-- ===================== KHUB UI =====================
+local THEME = {
+	bg = Color3.fromRGB(5, 7, 18), panel = Color3.fromRGB(10, 14, 32),
+	card = Color3.fromRGB(17, 23, 48), inner = Color3.fromRGB(10, 14, 30),
+	accent = Color3.fromRGB(70, 225, 255), accent2 = Color3.fromRGB(175, 110, 255),
+	gold = Color3.fromRGB(255, 216, 140), text = Color3.fromRGB(238, 242, 255),
+	dim = Color3.fromRGB(150, 160, 205), mute = Color3.fromRGB(100, 112, 158),
+	stroke = Color3.fromRGB(80, 120, 210), green = Color3.fromRGB(80, 220, 140),
+	red = Color3.fromRGB(255, 90, 110), off = Color3.fromRGB(45, 50, 75),
+	white = Color3.fromRGB(255, 255, 255),
+}
+
+local function corner(o, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 10)
+	c.Parent = o
+end
+local function mkstroke(o, col, th, tr)
+	local s = Instance.new("UIStroke")
+	s.Color = col or THEME.stroke
+	s.Thickness = th or 1
+	s.Transparency = tr or 0.4
+	s.Parent = o
+	return s
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_CluckOrHide"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = GetUIParent()
+
+-- Splash
+local Splash = Instance.new("Frame")
+Splash.Size = UDim2.new(1, 0, 1, 0)
+Splash.BackgroundColor3 = THEME.bg
+Splash.BorderSizePixel = 0
+Splash.ZIndex = 200
+Splash.Parent = ScreenGui
+local SpTitle = Instance.new("TextLabel")
+SpTitle.Size = UDim2.new(1, 0, 0, 40)
+SpTitle.Position = UDim2.new(0, 0, 0.42, 0)
+SpTitle.BackgroundTransparency = 1
+SpTitle.Text = "KHUB"
+SpTitle.Font = Enum.Font.GothamBlack
+SpTitle.TextSize = 42
+SpTitle.TextColor3 = THEME.accent
+SpTitle.ZIndex = 201
+SpTitle.Parent = Splash
+local SpSub = Instance.new("TextLabel")
+SpSub.Size = UDim2.new(1, 0, 0, 24)
+SpSub.Position = UDim2.new(0, 0, 0.42, 44)
+SpSub.BackgroundTransparency = 1
+SpSub.Text = "CLUCK OR HIDE"
+SpSub.Font = Enum.Font.GothamBold
+SpSub.TextSize = 16
+SpSub.TextColor3 = THEME.gold
+SpSub.ZIndex = 201
+SpSub.Parent = Splash
+task.spawn(function()
+	task.wait(1.4)
+	TweenService:Create(Splash, TweenInfo.new(0.45), { BackgroundTransparency = 1 }):Play()
+	task.wait(0.5)
+	pcall(function() Splash:Destroy() end)
+end)
+
+local BASE_W, BASE_H = 640, 440
+local Scale = Instance.new("UIScale")
+Scale.Parent = ScreenGui
+local function updateScale()
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	local vs = cam.ViewportSize
+	Scale.Scale = math.clamp(math.min(vs.X / 900, vs.Y / 600), 0.55, 1.15)
+end
+updateScale()
+pcall(function()
+	Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+end)
+
+local Win = Instance.new("Frame")
+Win.Name = "Win"
+Win.Size = UDim2.new(0, BASE_W, 0, BASE_H)
+Win.Position = UDim2.new(0.5, -BASE_W / 2, 0.5, -BASE_H / 2)
+Win.BackgroundColor3 = THEME.bg
+Win.BorderSizePixel = 0
+Win.ClipsDescendants = true
+Win.Visible = true
+Win.Parent = ScreenGui
+corner(Win, 20)
+mkstroke(Win, THEME.accent2, 2, 0.3)
+
+local WinBG = Instance.new("ImageLabel")
+WinBG.Size = UDim2.new(1, 0, 1, 0)
+WinBG.BackgroundTransparency = 1
+WinBG.Image = BG_ID
+WinBG.ScaleType = Enum.ScaleType.Crop
+WinBG.ImageTransparency = 0.35
+WinBG.ZIndex = 0
+WinBG.Parent = Win
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 52)
+Header.BackgroundColor3 = THEME.panel
+Header.BackgroundTransparency = 0.55
+Header.BorderSizePixel = 0
+Header.ZIndex = 5
+Header.Parent = Win
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.new(0, 36, 0, 36)
+Logo.Position = UDim2.new(0, 12, 0.5, -18)
+Logo.BackgroundTransparency = 1
+Logo.Image = LOGO_ID
+Logo.ZIndex = 6
+Logo.Parent = Header
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0, 380, 1, 0)
+Title.Position = UDim2.new(0, 56, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "KHUB - Cluck or Hide"
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 18
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 6
+Title.Parent = Header
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 32, 0, 32)
+MinBtn.Position = UDim2.new(1, -76, 0.5, -16)
+MinBtn.BackgroundColor3 = THEME.inner
+MinBtn.Text = "-"
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 18
+MinBtn.TextColor3 = THEME.text
+MinBtn.ZIndex = 7
+MinBtn.Parent = Header
+corner(MinBtn, 8)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 32, 0, 32)
+CloseBtn.Position = UDim2.new(1, -40, 0.5, -16)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(66, 22, 36)
+CloseBtn.Text = "X"
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.TextColor3 = THEME.text
+CloseBtn.ZIndex = 7
+CloseBtn.Parent = Header
+corner(CloseBtn, 8)
+
+do
+	local dragging, dragStart, startPos
+	Header.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = i.Position
+			startPos = Win.Position
+			i.Changed:Connect(function()
+				if i.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+			local d = i.Position - dragStart
+			Win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+		end
+	end)
+end
+
+local Rail = Instance.new("ScrollingFrame")
+Rail.Size = UDim2.new(0, 72, 1, -52)
+Rail.Position = UDim2.new(0, 0, 0, 52)
+Rail.BackgroundColor3 = THEME.panel
+Rail.BackgroundTransparency = 0.35
+Rail.BorderSizePixel = 0
+Rail.ScrollBarThickness = 2
+Rail.CanvasSize = UDim2.new(0, 0, 0, 0)
+Rail.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Rail.ZIndex = 5
+Rail.Parent = Win
+local RailList = Instance.new("UIListLayout")
+RailList.Padding = UDim.new(0, 6)
+RailList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+RailList.Parent = Rail
+local RailPad = Instance.new("UIPadding")
+RailPad.PaddingTop = UDim.new(0, 8)
+RailPad.Parent = Rail
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -84, 1, -96)
+Content.Position = UDim2.new(0, 78, 0, 56)
+Content.BackgroundTransparency = 1
+Content.ZIndex = 5
+Content.Parent = Win
+
+local PageTitle = Instance.new("TextLabel")
+PageTitle.Size = UDim2.new(1, 0, 0, 22)
+PageTitle.BackgroundTransparency = 1
+PageTitle.Text = "Welcome"
+PageTitle.Font = Enum.Font.GothamBold
+PageTitle.TextSize = 16
+PageTitle.TextColor3 = THEME.text
+PageTitle.TextXAlignment = Enum.TextXAlignment.Left
+PageTitle.ZIndex = 6
+PageTitle.Parent = Content
+
+local PageSub = Instance.new("TextLabel")
+PageSub.Size = UDim2.new(1, 0, 0, 16)
+PageSub.Position = UDim2.new(0, 0, 0, 20)
+PageSub.BackgroundTransparency = 1
+PageSub.Text = "KHUB Cluck or Hide"
+PageSub.Font = Enum.Font.Gotham
+PageSub.TextSize = 12
+PageSub.TextColor3 = THEME.dim
+PageSub.TextXAlignment = Enum.TextXAlignment.Left
+PageSub.ZIndex = 6
+PageSub.Parent = Content
+
+local Pages = Instance.new("Frame")
+Pages.Size = UDim2.new(1, 0, 1, -44)
+Pages.Position = UDim2.new(0, 0, 0, 42)
+Pages.BackgroundTransparency = 1
+Pages.ZIndex = 5
+Pages.Parent = Content
+
+local Tabs, ActiveId = {}, nil
+local TAB_ICONS = {
+	Welcome  = "rbxassetid://10723407389",
+	Main     = "rbxassetid://10734975692",
+	Movement = "rbxassetid://10734920149",
+	Visuals  = "rbxassetid://10734941499",
+	Mobile   = "rbxassetid://10709818534",
+	Settings = "rbxassetid://6031280882",
+	Config   = "rbxassetid://6031229361",
+}
+
+local function createPage(id)
+	local sc = Instance.new("ScrollingFrame")
+	sc.Name = id
+	sc.Size = UDim2.new(1, 0, 1, 0)
+	sc.BackgroundTransparency = 1
+	sc.BorderSizePixel = 0
+	sc.ScrollBarThickness = 3
+	sc.ScrollBarImageColor3 = THEME.accent2
+	sc.CanvasSize = UDim2.new(0, 0, 0, 0)
+	sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	sc.Visible = false
+	sc.ZIndex = 6
+	sc.Parent = Pages
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0, 8)
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Parent = sc
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingBottom = UDim.new(0, 12)
+	pad.PaddingLeft = UDim.new(0, 4)
+	pad.PaddingRight = UDim.new(0, 8)
+	pad.Parent = sc
+	return sc
+end
+
+local function switchPage(id, title, subtitle)
+	ActiveId = id
+	PageTitle.Text = title or id
+	PageSub.Text = subtitle or ""
+	for _, pg in ipairs(Pages:GetChildren()) do
+		if pg:IsA("ScrollingFrame") then pg.Visible = (pg.Name == id) end
+	end
+	for tid, btnRef in pairs(Tabs) do
+		if typeof(btnRef) == "Instance" then
+			local bar = btnRef:FindFirstChild("ActiveBar")
+			local iconF = btnRef:FindFirstChild("IconFrame")
+			local isActive = (tid == id)
+			if bar then
+				bar.BackgroundTransparency = isActive and 0 or 1
+				bar.Size = isActive and UDim2.new(0, 3, 0.6, 0) or UDim2.new(0, 3, 0.3, 0)
+			end
+			if iconF then
+				iconF.BackgroundColor3 = isActive and THEME.accent2 or Color3.fromRGB(24, 30, 60)
+				local stroke = iconF:FindFirstChildOfClass("UIStroke")
+				if stroke then stroke.Transparency = isActive and 0.1 or 0.5 end
+			end
+		end
+	end
+end
+
+local function createTabButton(id, label, order, pageTitle, pageSub)
+	local b = Instance.new("TextButton")
+	b.Name = id
+	b.Size = UDim2.new(0, 58, 0, 54)
+	b.BackgroundTransparency = 1
+	b.Text = ""
+	b.LayoutOrder = order
+	b.ZIndex = 8
+	b.Parent = Rail
+
+	local iconFrame = Instance.new("Frame")
+	iconFrame.Name = "IconFrame"
+	iconFrame.Size = UDim2.new(0, 40, 0, 40)
+	iconFrame.Position = UDim2.new(0.5, -20, 0, 4)
+	iconFrame.BackgroundColor3 = Color3.fromRGB(24, 30, 60)
+	iconFrame.BackgroundTransparency = 0.15
+	iconFrame.ZIndex = 9
+	iconFrame.Parent = b
+	corner(iconFrame, 10)
+	mkstroke(iconFrame, THEME.accent2, 1.2, 0.5)
+
+	local icon = Instance.new("ImageLabel")
+	icon.Size = UDim2.new(0, 24, 0, 24)
+	icon.Position = UDim2.new(0.5, -12, 0.5, -12)
+	icon.BackgroundTransparency = 1
+	icon.Image = TAB_ICONS[id] or TAB_ICONS.Welcome
+	icon.ImageColor3 = Color3.new(1, 1, 1)
+	icon.ScaleType = Enum.ScaleType.Fit
+	icon.ZIndex = 10
+	icon.Parent = iconFrame
+
+	local activeBar = Instance.new("Frame")
+	activeBar.Name = "ActiveBar"
+	activeBar.Size = UDim2.new(0, 3, 0.3, 0)
+	activeBar.Position = UDim2.new(1, -3, 0.2, 0)
+	activeBar.BackgroundColor3 = THEME.white
+	activeBar.BackgroundTransparency = 1
+	activeBar.BorderSizePixel = 0
+	activeBar.ZIndex = 11
+	activeBar.Parent = b
+	corner(activeBar, 2)
+
+	b.MouseButton1Click:Connect(function()
+		TweenService:Create(iconFrame, TweenInfo.new(0.12, Enum.EasingStyle.Back), {
+			Size = UDim2.new(0, 44, 0, 44)
+		}):Play()
+		task.delay(0.12, function()
+			TweenService:Create(iconFrame, TweenInfo.new(0.15), {
+				Size = UDim2.new(0, 40, 0, 40)
+			}):Play()
+		end)
+		switchPage(id, pageTitle or label, pageSub or "")
+	end)
+	Tabs[id] = b
+	return b
+end
+
+local function card(parent, title)
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1, -4, 0, 0)
+	f.AutomaticSize = Enum.AutomaticSize.Y
+	f.BackgroundColor3 = THEME.card
+	f.BackgroundTransparency = 0.25
+	f.BorderSizePixel = 0
+	f.ZIndex = 7
+	f.Parent = parent
+	corner(f, 12)
+	mkstroke(f, THEME.stroke, 1, 0.5)
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0, 6)
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Parent = f
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 10)
+	pad.PaddingBottom = UDim.new(0, 10)
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.Parent = f
+	if title then
+		local t = Instance.new("TextLabel")
+		t.Size = UDim2.new(1, 0, 0, 18)
+		t.BackgroundTransparency = 1
+		t.Text = title
+		t.Font = Enum.Font.GothamBold
+		t.TextSize = 13
+		t.TextColor3 = THEME.gold
+		t.TextXAlignment = Enum.TextXAlignment.Left
+		t.ZIndex = 8
+		t.Parent = f
+	end
+	return f
+end
+
+local function toggle(parent, text, get, set)
+	local row = Instance.new("TextButton")
+	row.Size = UDim2.new(1, 0, 0, 30)
+	row.BackgroundTransparency = 1
+	row.Text = ""
+	row.ZIndex = 8
+	row.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -54, 1, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 13
+	lbl.TextColor3 = THEME.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 9
+	lbl.Parent = row
+	local sw = Instance.new("Frame")
+	sw.Size = UDim2.new(0, 42, 0, 22)
+	sw.Position = UDim2.new(1, -42, 0.5, -11)
+	sw.BackgroundColor3 = get() and THEME.green or THEME.off
+	sw.BorderSizePixel = 0
+	sw.ZIndex = 9
+	sw.Parent = row
+	corner(sw, 11)
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.new(0, 18, 0, 18)
+	knob.Position = get() and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+	knob.BackgroundColor3 = THEME.white
+	knob.ZIndex = 10
+	knob.Parent = sw
+	corner(knob, 9)
+	row.MouseButton1Click:Connect(function()
+		local v = not get()
+		set(v)
+		sw.BackgroundColor3 = v and THEME.green or THEME.off
+		TweenService:Create(knob, TweenInfo.new(0.15), {
+			Position = v and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+		}):Play()
+	end)
+end
+
+-- Working slider (drag + touch)
+local function slider(parent, text, min, max, get, set)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 48)
+	row.BackgroundTransparency = 1
+	row.ZIndex = 8
+	row.Parent = parent
+
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, 0, 0, 16)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text .. ": " .. tostring(math.floor(get() + 0.5))
+	lbl.Font = Enum.Font.Gotham
+	lbl.TextSize = 12
+	lbl.TextColor3 = THEME.dim
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 9
+	lbl.Parent = row
+
+	local track = Instance.new("Frame")
+	track.Name = "Track"
+	track.Size = UDim2.new(1, 0, 0, 10)
+	track.Position = UDim2.new(0, 0, 0, 26)
+	track.BackgroundColor3 = THEME.off
+	track.BorderSizePixel = 0
+	track.ZIndex = 9
+	track.Parent = row
+	corner(track, 5)
+
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.Size = UDim2.new(math.clamp((get() - min) / (max - min), 0, 1), 0, 1, 0)
+	fill.BackgroundColor3 = THEME.accent
+	fill.BorderSizePixel = 0
+	fill.ZIndex = 10
+	fill.Parent = track
+	corner(fill, 5)
+
+	local knob = Instance.new("Frame")
+	knob.Name = "Knob"
+	knob.Size = UDim2.new(0, 16, 0, 16)
+	knob.AnchorPoint = Vector2.new(0.5, 0.5)
+	knob.Position = UDim2.new(math.clamp((get() - min) / (max - min), 0, 1), 0, 0.5, 0)
+	knob.BackgroundColor3 = THEME.white
+	knob.BorderSizePixel = 0
+	knob.ZIndex = 11
+	knob.Parent = track
+	corner(knob, 8)
+	mkstroke(knob, THEME.accent, 1, 0.2)
+
+	local dragging = false
+	local function applyFromX(x)
+		local absPos = track.AbsolutePosition.X
+		local absSize = math.max(track.AbsoluteSize.X, 1)
+		local rel = math.clamp((x - absPos) / absSize, 0, 1)
+		local val = min + (max - min) * rel
+		val = math.floor(val + 0.5)
+		set(val)
+		lbl.Text = text .. ": " .. tostring(val)
+		fill.Size = UDim2.new(rel, 0, 1, 0)
+		knob.Position = UDim2.new(rel, 0, 0.5, 0)
+	end
+
+	track.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			applyFromX(i.Position.X)
+		end
+	end)
+	knob.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if not dragging then return end
+		if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+			applyFromX(i.Position.X)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+end
+
+local function btn(parent, text, callback, color)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, 0, 0, 32)
+	b.BackgroundColor3 = color or THEME.inner
+	b.Text = text
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 13
+	b.TextColor3 = THEME.text
+	b.BorderSizePixel = 0
+	b.ZIndex = 8
+	b.Parent = parent
+	corner(b, 8)
+	b.MouseButton1Click:Connect(function() pcall(callback) end)
+	return b
+end
+
+-- ===== PAGES =====
+local pWelcome = createPage("Welcome")
+createTabButton("Welcome", "Welcome", 1, "Welcome", "KHUB Cluck or Hide")
+do
+	local c = card(pWelcome, "PROFILE")
+	local nameL = Instance.new("TextLabel")
+	nameL.Size = UDim2.new(1, 0, 0, 20)
+	nameL.BackgroundTransparency = 1
+	nameL.Text = LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")"
+	nameL.Font = Enum.Font.GothamBold
+	nameL.TextSize = 14
+	nameL.TextColor3 = THEME.text
+	nameL.TextXAlignment = Enum.TextXAlignment.Left
+	nameL.ZIndex = 8
+	nameL.Parent = c
+	local c2 = card(pWelcome, "KHUB")
+	local big = Instance.new("TextLabel")
+	big.Size = UDim2.new(1, 0, 0, 36)
+	big.BackgroundTransparency = 1
+	big.Text = "KHUB"
+	big.Font = Enum.Font.GothamBlack
+	big.TextSize = 32
+	big.TextColor3 = THEME.accent
+	big.ZIndex = 8
+	big.Parent = c2
+	local moveTxt = Instance.new("TextLabel")
+	moveTxt.Size = UDim2.new(1, 0, 0, 18)
+	moveTxt.BackgroundTransparency = 1
+	moveTxt.Text = "Join Discord"
+	moveTxt.Font = Enum.Font.Gotham
+	moveTxt.TextSize = 12
+	moveTxt.TextColor3 = THEME.dim
+	moveTxt.ZIndex = 8
+	moveTxt.Parent = c2
+	local msgs = { "Join Discord", "Subscribe on my channel", "Cluck or Hide", "Toggle: RightShift / K", "Mobile bar at bottom" }
+	local mi = 1
+	task.spawn(function()
+		while moveTxt.Parent do
+			moveTxt.Text = msgs[mi]
+			mi = mi % #msgs + 1
+			task.wait(2.5)
+		end
+	end)
+	btn(c2, "Copy Discord", function()
+		if setclipboard then setclipboard(DISCORD) end
+	end, Color3.fromRGB(88, 101, 242))
+end
+
+local pMain = createPage("Main")
+createTabButton("Main", "Main", 2, "Main", "Kill · Help · Noise · Hitbox")
+do
+	local c = card(pMain, "COMBAT")
+	toggle(c, "Auto Kill All", function() return S.AutoKillAll end, function(v) S.AutoKillAll = v end)
+	toggle(c, "Instant Kill All", function() return S.InstantKillAll end, function(v) S.InstantKillAll = v end)
+	toggle(c, "Auto Help Frozen Hiders", function() return S.AutoHelp end, function(v) S.AutoHelp = v end)
+	toggle(c, "Auto Noise Clicker (prompts)", function() return S.AutoNoise end, function(v) S.AutoNoise = v end)
+	local c2 = card(pMain, "HITBOX")
+	toggle(c2, "Enable Hitbox", function() return S.Hitbox end, function(v) S.Hitbox = v end)
+	slider(c2, "Hitbox Size", 2, 30, function() return S.HitboxSize end, function(v) S.HitboxSize = v end)
+end
+
+local pMove = createPage("Movement")
+createTabButton("Movement", "Move", 3, "Movement", "Fly · Speed · Noclip")
+do
+	local c = card(pMove, "MOVEMENT")
+	toggle(c, "Fullbright", function() return S.Fullbright end, function(v)
+		S.Fullbright = v
+		applyFullbright(v)
+	end)
+	toggle(c, "Noclip", function() return S.Noclip end, function(v) S.Noclip = v end)
+	toggle(c, "Fly", function() return S.Fly end, function(v) S.Fly = v end)
+	slider(c, "Fly Speed", 10, 300, function() return S.FlySpeed end, function(v) S.FlySpeed = v end)
+	toggle(c, "Custom WalkSpeed", function() return S.WalkSpeedOn end, function(v) S.WalkSpeedOn = v end)
+	slider(c, "WalkSpeed", 16, 150, function() return S.WalkSpeed end, function(v) S.WalkSpeed = v end)
+end
+
+local pVis = createPage("Visuals")
+createTabButton("Visuals", "Visual", 4, "Visuals", "Player ESP")
+do
+	local c = card(pVis, "ESP")
+	toggle(c, "Player ESP", function() return S.PlayerESP end, function(v) setESPEnabled(v) end)
+end
+
+local pMobile = createPage("Mobile")
+createTabButton("Mobile", "Mobile", 5, "Mobile Auto-Click", "Bottom screen buttons")
+do
+	local c = card(pMobile, "BOTTOM SCREEN AUTO-CLICK")
+	local info = Instance.new("TextLabel")
+	info.Size = UDim2.new(1, 0, 0, 48)
+	info.BackgroundTransparency = 1
+	info.Text = "Auto-taps bottom UI slots (Noise / Duck / extra actions). Use toggles below — no extra bar on screen."
+	info.Font = Enum.Font.Gotham
+	info.TextSize = 12
+	info.TextColor3 = THEME.dim
+	info.TextWrapped = true
+	info.TextXAlignment = Enum.TextXAlignment.Left
+	info.ZIndex = 8
+	info.Parent = c
+	toggle(c, "Auto Click NOISE", function() return S.AutoClickNoise end, function(v) S.AutoClickNoise = v end)
+	toggle(c, "Auto Click DUCK", function() return S.AutoClickDuck end, function(v) S.AutoClickDuck = v end)
+	toggle(c, "Auto Click ACT 3", function() return S.AutoClickAction3 end, function(v) S.AutoClickAction3 = v end)
+	toggle(c, "Auto Click ACT 4", function() return S.AutoClickAction4 end, function(v) S.AutoClickAction4 = v end)
+end
+
+local pSettings = createPage("Settings")
+createTabButton("Settings", "Settings", 6, "Settings", "Keybinds")
+do
+	local c = card(pSettings, "KEYBINDS")
+	local info = Instance.new("TextLabel")
+	info.Size = UDim2.new(1, 0, 0, 50)
+	info.BackgroundTransparency = 1
+	info.Text = "UI Toggle: RightShift / RightCtrl / K\nSliders: drag on track or knob (touch OK)\nMobile tab: Auto Click Noise / Duck / Act 3 / Act 4"
+	info.Font = Enum.Font.Gotham
+	info.TextSize = 12
+	info.TextColor3 = THEME.dim
+	info.TextXAlignment = Enum.TextXAlignment.Left
+	info.TextYAlignment = Enum.TextYAlignment.Top
+	info.TextWrapped = true
+	info.ZIndex = 8
+	info.Parent = c
+end
+
+local pConfig = createPage("Config")
+createTabButton("Config", "Config", 99, "Save Config", "Save · Load")
+do
+	local c = card(pConfig, "CONFIG")
+	local nameBox = Instance.new("TextBox")
+	nameBox.Size = UDim2.new(1, 0, 0, 30)
+	nameBox.BackgroundColor3 = THEME.inner
+	nameBox.PlaceholderText = "Config name..."
+	nameBox.Text = "default"
+	nameBox.Font = Enum.Font.Gotham
+	nameBox.TextSize = 13
+	nameBox.TextColor3 = THEME.text
+	nameBox.ClearTextOnFocus = false
+	nameBox.BorderSizePixel = 0
+	nameBox.ZIndex = 8
+	nameBox.Parent = c
+	corner(nameBox, 8)
+	local function collect()
+		return {
+			HitboxSize = S.HitboxSize,
+			FlySpeed = S.FlySpeed,
+			WalkSpeed = S.WalkSpeed,
+		}
+	end
+	local function apply(data)
+		if type(data) ~= "table" then return end
+		if data.HitboxSize then S.HitboxSize = data.HitboxSize end
+		if data.FlySpeed then S.FlySpeed = data.FlySpeed end
+		if data.WalkSpeed then S.WalkSpeed = data.WalkSpeed end
+	end
+	btn(c, "Save Config", function()
+		local name = nameBox.Text ~= "" and nameBox.Text or "default"
+		pcall(function()
+			if not isfolder then return end
+			if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
+			writefile(ConfigFolder .. "/" .. name .. ".json", HttpService:JSONEncode(collect()))
+			print("[KHUB] Saved", name)
+		end)
+	end, THEME.green)
+	btn(c, "Load Config", function()
+		local name = nameBox.Text ~= "" and nameBox.Text or "default"
+		pcall(function()
+			local path = ConfigFolder .. "/" .. name .. ".json"
+			if isfile and isfile(path) then
+				apply(HttpService:JSONDecode(readfile(path)))
+				print("[KHUB] Loaded", name)
+			end
+		end)
+	end, THEME.accent)
+end
+
+-- Orb
+local OrbRoot = Instance.new("Frame")
+OrbRoot.Size = UDim2.new(0, 64, 0, 64)
+OrbRoot.Position = UDim2.new(0, 16, 0.5, -32)
+OrbRoot.BackgroundTransparency = 1
+OrbRoot.Visible = false
+OrbRoot.ZIndex = 50
+OrbRoot.Parent = ScreenGui
+
+local Orb = Instance.new("ImageButton")
+Orb.Size = UDim2.new(1, 0, 1, 0)
+Orb.BackgroundColor3 = THEME.panel
+Orb.Image = LOGO_ID
+Orb.BorderSizePixel = 0
+Orb.ZIndex = 51
+Orb.Parent = OrbRoot
+corner(Orb, 32)
+mkstroke(Orb, THEME.accent, 2, 0.2)
+
+do
+	local draggingOrb, dragStartOrb, startPosOrb
+	Orb.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			draggingOrb = true
+			dragStartOrb = input.Position
+			startPosOrb = OrbRoot.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then draggingOrb = false end
+			end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if draggingOrb and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStartOrb
+			OrbRoot.Position = UDim2.new(startPosOrb.X.Scale, startPosOrb.X.Offset + delta.X, startPosOrb.Y.Scale, startPosOrb.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+local function setVisible(on)
+	if on then
+		Win.Visible = true
+		OrbRoot.Visible = false
+		Win.Position = UDim2.new(0.5, -BASE_W / 2, 0.5, -BASE_H / 2)
+		TweenService:Create(Win, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = UDim2.new(0, BASE_W, 0, BASE_H),
+		}):Play()
+	else
+		Win.Visible = false
+		OrbRoot.Visible = OrbState.visible
+	end
+end
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+CloseBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function() setVisible(true) end)
+
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.RightShift
+		or i.KeyCode == Enum.KeyCode.RightControl
+		or i.KeyCode == Enum.KeyCode.K then
+		setVisible(not Win.Visible)
+	end
+end)
+
+-- Anti AFK
+pcall(function()
+	local VU = game:GetService("VirtualUser")
+	LocalPlayer.Idled:Connect(function()
+		pcall(function()
+			VU:CaptureController()
+			VU:ClickButton2(Vector2.new())
+		end)
+	end)
+end)
+
+-- Create mobile bar by default
+task.delay(1.7, function()
+	switchPage("Welcome", "Welcome", "KHUB - Cluck or Hide")
+end)
+
+print("[KHUB] Cluck or Hide loaded")
+print("[KHUB] Toggle: RightShift / RightCtrl / K")
+print("[KHUB] Mobile auto-click: use Mobile tab toggles")
