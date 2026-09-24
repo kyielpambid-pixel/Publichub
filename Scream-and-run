@@ -1,0 +1,1734 @@
+--[[
+	KHUB UI · Template
+	Welcome + Settings + Save Config
+	Toggle: RightShift / RightCtrl / K
+]]
+repeat task.wait() until game:IsLoaded()
+
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
+local CoreGui           = game:GetService("CoreGui")
+local Workspace         = game:GetService("Workspace")
+local HttpService       = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local player            = Players.LocalPlayer
+
+local LOGO_ID  = "rbxassetid://127230219966945"
+local BG_ID    = "rbxassetid://127230219966945"
+local DISCORD  = "https://discord.gg/EKPb7BRDH8"
+local YOUTUBE  = "https://www.youtube.com/@kyielpambid"
+
+print("[KHUB] Scream and Run starting...")
+
+-- ========== SCREAM AND RUN ENGINE (full) ==========
+local Config = {
+	ESP = { MonsterHighlight = false, MonsterDistance = false, MonsterBox = false, LockESP = false },
+	Auto = { InstantPrompts = false, SearchBackpacks = false, AutoSafety = false, AutoPlaceKeys = false },
+	Player = { WalkSpeedEnabled = false, WalkSpeed = 24, JumpEnabled = false, JumpHeight = 12 },
+	MonsterNames = { "CatInTheHat", "CatInTheHat2" },
+	Search = {
+		Attempts = 2, TeleportDelay = 0.11, PressTime = 0.03, AfterPrompt = 0.09,
+		BetweenBackpacks = 0.045, Radius = 2.5, Height = 2.2, MinimumCatDistance = 25,
+		DangerRetryDelay = 0.20, MaxDangerRounds = 20,
+	},
+	Safety = { DangerDistance = 45, RecordDistance = 65, SaveInterval = 0.25, Cooldown = 0.75 },
+}
+local Searching = false
+local SearchStartCFrame = nil
+local LastSafeCFrame = nil
+local LastSafeSave = 0
+local LastSafetyTeleport = 0
+local SafetyBusy = false
+local FullbrightOn = false
+local KeyBusy = false
+
+local function GetCharacter()
+	return player.Character
+end
+local function GetRoot()
+	local character = GetCharacter()
+	if not character then return nil end
+	return character:FindFirstChild("HumanoidRootPart")
+end
+local function GetHumanoid()
+	local character = GetCharacter()
+	if not character then return nil end
+	return character:FindFirstChildOfClass("Humanoid")
+end
+local function StopVelocity()
+	local root = GetRoot()
+	if not root then return end
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
+end
+local function TeleportCharacter(targetCFrame)
+	local character = GetCharacter()
+	if not character then return false end
+	StopVelocity()
+	character:PivotTo(targetCFrame)
+	StopVelocity()
+	return true
+end
+
+local function IsMonsterName(name)
+	for _, wanted in ipairs(Config.MonsterNames) do
+		if name == wanted then return true end
+	end
+	return false
+end
+local function GetMonsterPart(monster)
+	if not monster then return nil end
+	return monster:FindFirstChild("HumanoidRootPart")
+		or monster.PrimaryPart
+		or monster:FindFirstChildWhichIsA("BasePart", true)
+end
+local function GetMonsters()
+	local result = {}
+	for _, object in ipairs(Workspace:GetDescendants()) do
+		if object:IsA("Model") and IsMonsterName(object.Name) then
+			table.insert(result, object)
+		end
+	end
+	return result
+end
+local function DistanceFromClosestMonster(position)
+	local closest, found = math.huge, false
+	for _, monster in ipairs(GetMonsters()) do
+		local part = GetMonsterPart(monster)
+		if part then
+			found = true
+			local distance = (position - part.Position).Magnitude
+			if distance < closest then closest = distance end
+		end
+	end
+	if not found then return math.huge end
+	return closest
+end
+local function GetNearestMonster()
+	local root = GetRoot()
+	if not root then return nil, math.huge end
+	local nearest, bestDistance = nil, math.huge
+	for _, monster in ipairs(GetMonsters()) do
+		local part = GetMonsterPart(monster)
+		if part then
+			local distance = (root.Position - part.Position).Magnitude
+			if distance < bestDistance then
+				bestDistance = distance
+				nearest = monster
+			end
+		end
+	end
+	return nearest, bestDistance
+end
+
+local function FaceTarget(position, targetPosition)
+	local target = Vector3.new(targetPosition.X, position.Y, targetPosition.Z)
+	if (target - position).Magnitude < 0.1 then
+		target = position + Vector3.new(0, 0, -1)
+	end
+	return CFrame.lookAt(position, target)
+end
+
+local function FindSafestCirclePosition(part, radius, height, samples)
+	if not part or not part.Parent then return nil, -math.huge end
+	local bestPosition, bestMonsterDistance = nil, -math.huge
+	samples = samples or 12
+	for i = 1, samples do
+		local angle = ((i - 1) / samples) * math.pi * 2
+		local position = part.Position + Vector3.new(math.cos(angle) * radius, height, math.sin(angle) * radius)
+		local monsterDistance = DistanceFromClosestMonster(position)
+		if monsterDistance > bestMonsterDistance then
+			bestMonsterDistance = monsterDistance
+			bestPosition = position
+		end
+	end
+	return bestPosition, bestMonsterDistance
+end
+
+local function GetBackpacks()
+	local folder = Workspace:FindFirstChild("BackPack")
+	if not folder then return {} end
+	local result = {}
+	for _, backpack in ipairs(folder:GetChildren()) do
+		local handle = backpack:FindFirstChild("Handle")
+		if handle and handle:IsA("BasePart") then
+			local prompt = handle:FindFirstChild("SearchBackpack")
+			if prompt and prompt:IsA("ProximityPrompt") then
+				table.insert(result, { Model = backpack, Handle = handle, Prompt = prompt })
+			end
+		end
+	end
+	return result
+end
+
+local LockNames = { "GreenLock", "RedLock", "WhiteLock" }
+local function GetLockMainPart(container)
+	if not container then return nil end
+	local directLock = container:FindFirstChild("Lock")
+	if directLock and directLock:IsA("BasePart") then return directLock end
+	if container:IsA("BasePart") then return container end
+	return container:FindFirstChildWhichIsA("BasePart", true)
+end
+local function GetLocks()
+	local result = {}
+	for _, name in ipairs(LockNames) do
+		local container = Workspace:FindFirstChild(name)
+		if container then
+			local part = GetLockMainPart(container)
+			if part then
+				table.insert(result, { Name = name, Container = container, Part = part })
+			end
+		end
+	end
+	return result
+end
+
+local function GetLockTeleportCFrame(lockInfo)
+	if not lockInfo or not lockInfo.Part then return nil end
+	local part = lockInfo.Part
+	local character = GetCharacter()
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	local exclude = {}
+	if character then table.insert(exclude, character) end
+	if lockInfo.Container then table.insert(exclude, lockInfo.Container) end
+	rayParams.FilterDescendantsInstances = exclude
+	local bestPosition, bestScore = nil, -math.huge
+	for i = 1, 16 do
+		local angle = ((i - 1) / 16) * math.pi * 2
+		local candidate = part.Position + Vector3.new(math.cos(angle) * 4, 0, math.sin(angle) * 4)
+		local result = Workspace:Raycast(candidate + Vector3.new(0, 7, 0), Vector3.new(0, -18, 0), rayParams)
+		if result and result.Instance and result.Normal.Y > 0.55 then
+			if not result.Instance:IsA("BasePart") or result.Instance.CanCollide then
+				local position = result.Position + Vector3.new(0, 3, 0)
+				local monsterDistance = DistanceFromClosestMonster(position)
+				if monsterDistance > bestScore then
+					bestScore = monsterDistance
+					bestPosition = position
+				end
+			end
+		end
+	end
+	if not bestPosition then
+		bestPosition = part.Position + Vector3.new(0, 2.5, 4)
+	end
+	return FaceTarget(bestPosition, part.Position)
+end
+
+local function FindNearestLock()
+	local root = GetRoot()
+	if not root then return nil end
+	local best, bestDistance = nil, math.huge
+	for _, lockInfo in ipairs(GetLocks()) do
+		local distance = (root.Position - lockInfo.Part.Position).Magnitude
+		if distance < bestDistance then
+			bestDistance = distance
+			best = lockInfo
+		end
+	end
+	return best
+end
+local function FindSafestLock()
+	local best, bestDistance = nil, -math.huge
+	for _, lockInfo in ipairs(GetLocks()) do
+		local distance = DistanceFromClosestMonster(lockInfo.Part.Position)
+		if distance > bestDistance then
+			bestDistance = distance
+			best = lockInfo
+		end
+	end
+	return best
+end
+local function TeleportToLock(lockInfo)
+	if not lockInfo then return false end
+	local cframe = GetLockTeleportCFrame(lockInfo)
+	if not cframe then return false end
+	return TeleportCharacter(cframe)
+end
+
+local function GetExitTouchPart()
+	local exit = Workspace:FindFirstChild("Exit")
+	if not exit then return nil end
+	if exit:IsA("BasePart") then return exit end
+	for _, object in ipairs(exit:GetDescendants()) do
+		if object:IsA("BasePart") and object:FindFirstChildWhichIsA("TouchTransmitter") then
+			return object
+		end
+	end
+	for _, object in ipairs(exit:GetDescendants()) do
+		if object:IsA("BasePart") and object:FindFirstChild("TouchInterest") then
+			return object
+		end
+	end
+	return exit:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function InstaWin()
+	local root = GetRoot()
+	local character = GetCharacter()
+	local exitPart = GetExitTouchPart()
+	if not root or not character then return end
+	if not exitPart then
+		print("[KHUB] Insta Win: workspace.Exit not found")
+		return
+	end
+	local oldCFrame = root.CFrame
+	StopVelocity()
+	if type(firetouchinterest) == "function" then
+		for _ = 1, 5 do
+			pcall(firetouchinterest, root, exitPart, 0)
+			task.wait(0.03)
+			pcall(firetouchinterest, root, exitPart, 1)
+			task.wait(0.03)
+		end
+	end
+	local exitCF = exitPart.CFrame
+	local positions = {
+		exitCF * CFrame.new(0, 2, 5),
+		exitCF * CFrame.new(0, 2, 1),
+		exitCF * CFrame.new(0, 2, 0),
+		exitCF * CFrame.new(0, 2, -1),
+		exitCF * CFrame.new(0, 2, -5),
+	}
+	for pass = 1, 3 do
+		for _, cframe in ipairs(positions) do
+			if not character.Parent then return end
+			StopVelocity()
+			character:PivotTo(cframe)
+			StopVelocity()
+			RunService.Heartbeat:Wait()
+			RunService.Heartbeat:Wait()
+		end
+	end
+	character:PivotTo(exitPart.CFrame)
+	StopVelocity()
+	task.wait(0.35)
+	if character.Parent and root.Parent then
+		local distanceFromExit = (root.Position - exitPart.Position).Magnitude
+		if distanceFromExit < 20 then
+			character:PivotTo(oldCFrame)
+			StopVelocity()
+		end
+	end
+end
+
+local OriginalPromptTimes = {}
+local PromptConnection = nil
+local function MakePromptInstant(prompt)
+	if not prompt:IsA("ProximityPrompt") then return end
+	if OriginalPromptTimes[prompt] == nil then
+		OriginalPromptTimes[prompt] = prompt.HoldDuration
+	end
+	prompt.HoldDuration = 0
+end
+local function SetInstantPrompts(enabled)
+	Config.Auto.InstantPrompts = enabled
+	if enabled then
+		for _, object in ipairs(Workspace:GetDescendants()) do
+			if object:IsA("ProximityPrompt") then MakePromptInstant(object) end
+		end
+		if PromptConnection then PromptConnection:Disconnect() end
+		PromptConnection = Workspace.DescendantAdded:Connect(function(object)
+			if Config.Auto.InstantPrompts and object:IsA("ProximityPrompt") then
+				task.defer(function()
+					if object.Parent then MakePromptInstant(object) end
+				end)
+			end
+		end)
+	else
+		if PromptConnection then PromptConnection:Disconnect(); PromptConnection = nil end
+		for prompt, oldTime in pairs(OriginalPromptTimes) do
+			if prompt.Parent then prompt.HoldDuration = oldTime end
+		end
+		table.clear(OriginalPromptTimes)
+	end
+end
+
+local function TriggerPrompt(prompt)
+	if not prompt or not prompt.Parent or not prompt.Enabled then return false end
+	if type(fireproximityprompt) == "function" then
+		local success = pcall(fireproximityprompt, prompt)
+		if success then return true end
+	end
+	local success = pcall(function()
+		prompt:InputHoldBegin()
+		if Config.Auto.InstantPrompts then
+			task.wait(Config.Search.PressTime)
+		else
+			task.wait(math.max(prompt.HoldDuration, Config.Search.PressTime))
+		end
+		prompt:InputHoldEnd()
+	end)
+	return success
+end
+
+local function TeleportToBackpack(info)
+	if not info or not info.Handle or not info.Handle.Parent then return false, 0 end
+	local position, monsterDistance = FindSafestCirclePosition(info.Handle, Config.Search.Radius, Config.Search.Height, 12)
+	if not position then return false, 0 end
+	if monsterDistance < Config.Search.MinimumCatDistance then return false, monsterDistance end
+	return TeleportCharacter(FaceTarget(position, info.Handle.Position)), monsterDistance
+end
+
+local function SearchBackpack(info)
+	if not info or not info.Handle.Parent or not info.Prompt.Parent then return true end
+	local moved, monsterDistance = TeleportToBackpack(info)
+	if not moved then return false, monsterDistance end
+	task.wait(Config.Search.TeleportDelay)
+	local root = GetRoot()
+	if root then
+		local newDistance = DistanceFromClosestMonster(root.Position)
+		if newDistance < Config.Search.MinimumCatDistance then return false, newDistance end
+	end
+	StopVelocity()
+	for _ = 1, Config.Search.Attempts do
+		if not Config.Auto.SearchBackpacks then return false, 0 end
+		if not info.Prompt.Parent or not info.Handle.Parent then return true, math.huge end
+		TriggerPrompt(info.Prompt)
+		task.wait(Config.Search.AfterPrompt)
+		if not info.Prompt.Parent or not info.Prompt.Enabled then return true, math.huge end
+	end
+	return true, math.huge
+end
+
+local function UpdateSafeLocation()
+	if Searching or SafetyBusy then return end
+	local root = GetRoot()
+	if not root then return end
+	local now = os.clock()
+	if now - LastSafeSave < Config.Safety.SaveInterval then return end
+	LastSafeSave = now
+	local monsterDistance = DistanceFromClosestMonster(root.Position)
+	if monsterDistance >= Config.Safety.RecordDistance then
+		LastSafeCFrame = root.CFrame
+	end
+end
+
+local function ReturnAfterSearch()
+	local root = GetRoot()
+	if not root then return end
+	if SearchStartCFrame then
+		local distance = DistanceFromClosestMonster(SearchStartCFrame.Position)
+		if distance >= 35 then
+			TeleportCharacter(SearchStartCFrame)
+			return
+		end
+	end
+	if LastSafeCFrame then
+		local distance = DistanceFromClosestMonster(LastSafeCFrame.Position)
+		if distance >= 35 then
+			TeleportCharacter(LastSafeCFrame)
+			return
+		end
+	end
+	if DistanceFromClosestMonster(root.Position) >= 35 then return end
+	local safestLock = FindSafestLock()
+	if safestLock then TeleportToLock(safestLock) end
+end
+
+local function AutoSearchBackpacks()
+	if Searching then return end
+	local root = GetRoot()
+	if not root then return end
+	Searching = true
+	SearchStartCFrame = root.CFrame
+	local waiting = GetBackpacks()
+	local total, searched, dangerRounds = #waiting, 0, 0
+	while Config.Auto.SearchBackpacks and #waiting > 0 do
+		local madeProgress = false
+		local nextRound = {}
+		for _, info in ipairs(waiting) do
+			if not Config.Auto.SearchBackpacks then break end
+			local success, monsterDistance = SearchBackpack(info)
+			if success then
+				searched = searched + 1
+				madeProgress = true
+			else
+				table.insert(nextRound, info)
+				if monsterDistance and monsterDistance < Config.Search.MinimumCatDistance then
+					task.wait(0.03)
+				end
+			end
+			task.wait(Config.Search.BetweenBackpacks)
+		end
+		waiting = nextRound
+		if #waiting == 0 then break end
+		dangerRounds = dangerRounds + 1
+		if dangerRounds >= Config.Search.MaxDangerRounds then break end
+		if not madeProgress then
+			task.wait(Config.Search.DangerRetryDelay)
+		else
+			task.wait(0.08)
+		end
+	end
+	Config.Auto.SearchBackpacks = false
+	Searching = false
+	ReturnAfterSearch()
+	print("[KHUB] Auto Search finished", searched, "/", total)
+end
+
+local function AutoSafetyUpdate()
+	UpdateSafeLocation()
+	if not Config.Auto.AutoSafety then return end
+	if Searching or SafetyBusy then return end
+	local monster, distance = GetNearestMonster()
+	if not monster then return end
+	if distance > Config.Safety.DangerDistance then return end
+	if os.clock() - LastSafetyTeleport < Config.Safety.Cooldown then return end
+	SafetyBusy = true
+	LastSafetyTeleport = os.clock()
+	if LastSafeCFrame then
+		local currentSafety = DistanceFromClosestMonster(LastSafeCFrame.Position)
+		if currentSafety >= Config.Safety.DangerDistance then
+			TeleportCharacter(LastSafeCFrame)
+			task.wait(0.05)
+			SafetyBusy = false
+			return
+		end
+	end
+	local lock = FindSafestLock()
+	if lock then
+		TeleportToLock(lock)
+		task.wait(0.05)
+		local _, afterDistance = GetNearestMonster()
+		if afterDistance > Config.Safety.DangerDistance then
+			SafetyBusy = false
+			return
+		end
+	end
+	local bestBackpack, bestDistance = nil, -math.huge
+	for _, info in ipairs(GetBackpacks()) do
+		local position, distance = FindSafestCirclePosition(info.Handle, Config.Search.Radius, Config.Search.Height, 12)
+		if position and distance > bestDistance then
+			bestDistance = distance
+			bestBackpack = { Info = info, Position = position }
+		end
+	end
+	if bestBackpack and bestDistance > Config.Safety.DangerDistance then
+		TeleportCharacter(FaceTarget(bestBackpack.Position, bestBackpack.Info.Handle.Position))
+	end
+	SafetyBusy = false
+end
+
+-- ========== AUTO PLACE KEYS ON LOCK ==========
+-- When player has keys: go to matching lock, place, then stop when done
+
+local PlaceBusy = false
+
+local function IsKeyName(name)
+	name = string.lower(tostring(name or ""))
+	return name:find("key") ~= nil
+end
+
+local function GetPlayerKeys()
+	local keys = {}
+	local function scan(container)
+		if not container then return end
+		for _, obj in ipairs(container:GetChildren()) do
+			if obj:IsA("Tool") and IsKeyName(obj.Name) then
+				table.insert(keys, obj)
+			end
+		end
+	end
+	scan(player:FindFirstChild("Backpack"))
+	scan(player.Character)
+	return keys
+end
+
+local function GetKeyColorHint(key)
+	local n = string.lower(key.Name)
+	if n:find("green") then return "green" end
+	if n:find("red") then return "red" end
+	if n:find("white") or n:find("silver") then return "white" end
+	if n:find("blue") then return "blue" end
+	if n:find("yellow") or n:find("gold") then return "yellow" end
+	return nil
+end
+
+local function MatchLockForKey(key)
+	local hint = GetKeyColorHint(key)
+	local locks = GetLocks()
+	if #locks == 0 then return nil end
+	if hint then
+		for _, lockInfo in ipairs(locks) do
+			if string.lower(lockInfo.Name):find(hint) then
+				return lockInfo
+			end
+		end
+	end
+	-- fallback nearest lock
+	local root = GetRoot()
+	if not root then return locks[1] end
+	local best, bestD = nil, math.huge
+	for _, lockInfo in ipairs(locks) do
+		local d = (root.Position - lockInfo.Part.Position).Magnitude
+		if d < bestD then bestD = d; best = lockInfo end
+	end
+	return best
+end
+
+local function FindLockPrompt(lockInfo)
+	if not lockInfo or not lockInfo.Container then return nil end
+	for _, d in ipairs(lockInfo.Container:GetDescendants()) do
+		if d:IsA("ProximityPrompt") then
+			local action = string.lower(tostring(d.ActionText) .. " " .. tostring(d.ObjectText) .. " " .. d.Name)
+			if action:find("key") or action:find("unlock") or action:find("insert") or action:find("use") or action:find("lock") or true then
+				return d
+			end
+		end
+	end
+	if lockInfo.Part then
+		for _, d in ipairs(lockInfo.Part:GetDescendants()) do
+			if d:IsA("ProximityPrompt") then return d end
+		end
+		local p = lockInfo.Part:FindFirstChildOfClass("ProximityPrompt")
+		if p then return p end
+	end
+	return nil
+end
+
+local function EquipKey(key)
+	local character = GetCharacter()
+	if not character or not key then return false end
+	pcall(function()
+		-- unequip others
+		for _, t in ipairs(character:GetChildren()) do
+			if t:IsA("Tool") and t ~= key then
+				t.Parent = player.Backpack
+			end
+		end
+		key.Parent = character
+	end)
+	return key.Parent == character
+end
+
+local function PlaceOneKey(key)
+	if not key or not key.Parent then return false end
+	local lockInfo = MatchLockForKey(key)
+	if not lockInfo then
+		print("[KHUB] No lock found for", key.Name)
+		return false
+	end
+	EquipKey(key)
+	task.wait(0.15)
+	TeleportToLock(lockInfo)
+	task.wait(0.2)
+	StopVelocity()
+	local prompt = FindLockPrompt(lockInfo)
+	if prompt then
+		TriggerPrompt(prompt)
+		task.wait(0.15)
+		TriggerPrompt(prompt)
+	end
+	-- also try activating tool
+	pcall(function()
+		if key.Parent == GetCharacter() then
+			key:Activate()
+		end
+	end)
+	-- click detectors on lock
+	for _, d in ipairs(lockInfo.Container:GetDescendants()) do
+		if d:IsA("ClickDetector") and type(fireclickdetector) == "function" then
+			pcall(fireclickdetector, d)
+		end
+	end
+	task.wait(0.35)
+	-- success if key left inventory (consumed) or still try next
+	local stillHas = false
+	for _, k in ipairs(GetPlayerKeys()) do
+		if k == key then stillHas = true break end
+	end
+	print("[KHUB] Placed key", key.Name, "on", lockInfo.Name, stillHas and "(still holding)" or "(consumed)")
+	return not stillHas
+end
+
+local function AutoPlaceKeysOnce()
+	if PlaceBusy then return end
+	local keys = GetPlayerKeys()
+	if #keys == 0 then
+		-- no keys — stop feature
+		if Config.Auto.AutoPlaceKeys then
+			Config.Auto.AutoPlaceKeys = false
+			print("[KHUB] Auto Place Keys stopped — no keys left / all placed")
+		end
+		return
+	end
+	PlaceBusy = true
+	for _, key in ipairs(keys) do
+		if not Config.Auto.AutoPlaceKeys then break end
+		pcall(PlaceOneKey, key)
+		task.wait(0.4)
+	end
+	-- if no keys remain, stop
+	if #GetPlayerKeys() == 0 then
+		Config.Auto.AutoPlaceKeys = false
+		print("[KHUB] Auto Place Keys done — all keys placed, stopped")
+	end
+	PlaceBusy = false
+end
+
+task.spawn(function()
+	while true do
+		task.wait(0.5)
+		if Config.Auto.AutoPlaceKeys and not Searching and not SafetyBusy then
+			pcall(AutoPlaceKeysOnce)
+		end
+	end
+end)
+
+-- ESP
+local MonsterESP = {}
+local function CreateMonsterESP(monster)
+	if MonsterESP[monster] then return end
+	local rootPart = GetMonsterPart(monster)
+	if not rootPart then return end
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "_MonsterHighlight"
+	highlight.Adornee = monster
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.FillTransparency = 0.55
+	highlight.OutlineTransparency = 0
+	highlight.Enabled = false
+	highlight.Parent = monster
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "_MonsterDistance"
+	gui.Adornee = rootPart
+	gui.Size = UDim2.fromOffset(220, 38)
+	gui.StudsOffset = Vector3.new(0, 3.5, 0)
+	gui.AlwaysOnTop = true
+	gui.Enabled = false
+	gui.Parent = rootPart
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.TextScaled = true
+	label.TextStrokeTransparency = 0
+	label.Font = Enum.Font.GothamBold
+	label.Parent = gui
+	local box = Instance.new("SelectionBox")
+	box.Name = "_MonsterBox"
+	box.Adornee = monster
+	box.SurfaceTransparency = 1
+	box.LineThickness = 0.04
+	box.Visible = false
+	box.Parent = monster
+	MonsterESP[monster] = { Highlight = highlight, Gui = gui, Label = label, Box = box }
+end
+local function UpdateMonsterESP()
+	local root = GetRoot()
+	for monster, data in pairs(MonsterESP) do
+		if not monster.Parent then
+			MonsterESP[monster] = nil
+		else
+			data.Highlight.Enabled = Config.ESP.MonsterHighlight
+			data.Gui.Enabled = Config.ESP.MonsterDistance
+			data.Box.Visible = Config.ESP.MonsterBox
+			if Config.ESP.MonsterDistance and root then
+				local monsterPart = GetMonsterPart(monster)
+				if monsterPart then
+					local distance = (root.Position - monsterPart.Position).Magnitude
+					data.Label.Text = string.format("%s [%.0f studs]", monster.Name, distance)
+				end
+			end
+		end
+	end
+end
+
+local LockESP = {}
+local function CreateLockESP(lockInfo)
+	if not lockInfo then return end
+	local key = lockInfo.Container
+	if LockESP[key] then return end
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "_LockESP"
+	highlight.Adornee = lockInfo.Container
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.FillTransparency = 0.55
+	highlight.OutlineTransparency = 0
+	highlight.Enabled = false
+	highlight.Parent = lockInfo.Container
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "_LockDistance"
+	gui.Adornee = lockInfo.Part
+	gui.Size = UDim2.fromOffset(180, 36)
+	gui.StudsOffset = Vector3.new(0, 2.5, 0)
+	gui.AlwaysOnTop = true
+	gui.Enabled = false
+	gui.Parent = lockInfo.Part
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.TextScaled = true
+	label.TextStrokeTransparency = 0
+	label.Font = Enum.Font.GothamBold
+	label.Parent = gui
+	LockESP[key] = { Info = lockInfo, Highlight = highlight, Gui = gui, Label = label }
+end
+local function ScanLocks()
+	for _, lockInfo in ipairs(GetLocks()) do
+		CreateLockESP(lockInfo)
+	end
+end
+local function UpdateLockESP()
+	local root = GetRoot()
+	for container, data in pairs(LockESP) do
+		if not container.Parent then
+			LockESP[container] = nil
+		else
+			data.Highlight.Enabled = Config.ESP.LockESP
+			data.Gui.Enabled = Config.ESP.LockESP
+			if Config.ESP.LockESP and root and data.Info.Part and data.Info.Part.Parent then
+				local distance = (root.Position - data.Info.Part.Position).Magnitude
+				data.Label.Text = string.format("%s [%.0f studs]", data.Info.Name, distance)
+			end
+		end
+	end
+end
+
+local OriginalLighting = {
+	Brightness = Lighting.Brightness,
+	ClockTime = Lighting.ClockTime,
+	Ambient = Lighting.Ambient,
+	OutdoorAmbient = Lighting.OutdoorAmbient,
+	GlobalShadows = Lighting.GlobalShadows,
+}
+local EffectStates, AtmosphereStates = {}, {}
+local function SetFullbright(enabled)
+	FullbrightOn = enabled
+	if enabled then
+		Lighting.Brightness = 3
+		Lighting.ClockTime = 14
+		Lighting.Ambient = Color3.fromRGB(185, 185, 185)
+		Lighting.OutdoorAmbient = Color3.fromRGB(185, 185, 185)
+		Lighting.GlobalShadows = false
+		for _, object in ipairs(Lighting:GetChildren()) do
+			if object:IsA("BloomEffect") or object:IsA("DepthOfFieldEffect")
+				or object:IsA("ColorCorrectionEffect") or object:IsA("SunRaysEffect")
+				or object:IsA("BlurEffect") then
+				if EffectStates[object] == nil then EffectStates[object] = object.Enabled end
+				object.Enabled = false
+			elseif object:IsA("Atmosphere") then
+				if AtmosphereStates[object] == nil then
+					AtmosphereStates[object] = { Density = object.Density, Haze = object.Haze, Glare = object.Glare }
+				end
+				object.Density = 0
+				object.Haze = 0
+				object.Glare = 0
+			end
+		end
+	else
+		Lighting.Brightness = OriginalLighting.Brightness
+		Lighting.ClockTime = OriginalLighting.ClockTime
+		Lighting.Ambient = OriginalLighting.Ambient
+		Lighting.OutdoorAmbient = OriginalLighting.OutdoorAmbient
+		Lighting.GlobalShadows = OriginalLighting.GlobalShadows
+		for object, state in pairs(EffectStates) do
+			if object.Parent then object.Enabled = state end
+		end
+		for object, state in pairs(AtmosphereStates) do
+			if object.Parent then
+				object.Density = state.Density
+				object.Haze = state.Haze
+				object.Glare = state.Glare
+			end
+		end
+		table.clear(EffectStates)
+		table.clear(AtmosphereStates)
+	end
+end
+
+local OriginalHumanoid = setmetatable({}, { __mode = "k" })
+local function SaveHumanoid(humanoid)
+	if OriginalHumanoid[humanoid] then return end
+	OriginalHumanoid[humanoid] = {
+		WalkSpeed = humanoid.WalkSpeed,
+		JumpHeight = humanoid.JumpHeight,
+		UseJumpPower = humanoid.UseJumpPower,
+	}
+end
+local function ApplyPlayerMods()
+	local humanoid = GetHumanoid()
+	if not humanoid then return end
+	SaveHumanoid(humanoid)
+	if Config.Player.WalkSpeedEnabled then
+		humanoid.WalkSpeed = Config.Player.WalkSpeed
+	end
+	if Config.Player.JumpEnabled then
+		humanoid.UseJumpPower = false
+		humanoid.JumpHeight = Config.Player.JumpHeight
+	end
+end
+local function RestoreWalkSpeed()
+	local humanoid = GetHumanoid()
+	if not humanoid then return end
+	local state = OriginalHumanoid[humanoid]
+	if state then humanoid.WalkSpeed = state.WalkSpeed end
+end
+local function RestoreJump()
+	local humanoid = GetHumanoid()
+	if not humanoid then return end
+	local state = OriginalHumanoid[humanoid]
+	if state then
+		humanoid.UseJumpPower = state.UseJumpPower
+		humanoid.JumpHeight = state.JumpHeight
+	end
+end
+
+for _, monster in ipairs(GetMonsters()) do
+	CreateMonsterESP(monster)
+end
+ScanLocks()
+task.delay(0.5, function()
+	local root = GetRoot()
+	if root then
+		local distance = DistanceFromClosestMonster(root.Position)
+		if distance >= Config.Safety.DangerDistance then
+			LastSafeCFrame = root.CFrame
+		end
+	end
+end)
+
+local LastScan = 0
+RunService.RenderStepped:Connect(function()
+	local now = os.clock()
+	if now - LastScan >= 0.5 then
+		LastScan = now
+		for _, monster in ipairs(GetMonsters()) do
+			CreateMonsterESP(monster)
+		end
+		ScanLocks()
+	end
+	UpdateMonsterESP()
+	UpdateLockESP()
+	AutoSafetyUpdate()
+	ApplyPlayerMods()
+end)
+
+pcall(function()
+	local VU = game:GetService("VirtualUser")
+	player.Idled:Connect(function()
+		pcall(function()
+			VU:CaptureController()
+			VU:ClickButton2(Vector2.new())
+		end)
+	end)
+end)
+
+print("[KHUB] Scream and Run engine ready")
+
+
+local OrbState = { visible = true }
+local ConfigFolder = "KHUB_ScreamAndRun_Configs"
+
+local THEME = {
+	bg = Color3.fromRGB(5, 7, 18), panel = Color3.fromRGB(10, 14, 32),
+	card = Color3.fromRGB(17, 23, 48), inner = Color3.fromRGB(10, 14, 30),
+	accent = Color3.fromRGB(70, 225, 255), accent2 = Color3.fromRGB(175, 110, 255),
+	gold = Color3.fromRGB(255, 216, 140), text = Color3.fromRGB(238, 242, 255),
+	dim = Color3.fromRGB(150, 160, 205), mute = Color3.fromRGB(100, 112, 158),
+	stroke = Color3.fromRGB(80, 120, 210), green = Color3.fromRGB(95, 235, 165),
+	red = Color3.fromRGB(255, 100, 120), off = Color3.fromRGB(38, 44, 80),
+	white = Color3.fromRGB(255, 255, 255),
+}
+
+local function corner(p, r)
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, r or 10); c.Parent = p; return c
+end
+local function mkstroke(p, col, th, tr)
+	local s = Instance.new("UIStroke"); s.Color = col or THEME.stroke; s.Thickness = th or 1.2; s.Transparency = tr or 0.35; s.Parent = p; return s
+end
+local function openLink(url)
+	pcall(function() if openlink then openlink(url) elseif setclipboard then setclipboard(url) end end)
+end
+
+local Parent = CoreGui
+pcall(function() if gethui then Parent = gethui() end end)
+pcall(function()
+	for _, n in ipairs({"KHUB_ScreamAndRun", "KHUB_UI"}) do
+		local o = Parent:FindFirstChild(n); if o then o:Destroy() end
+		local pg = player:FindFirstChild("PlayerGui")
+		if pg then local o2 = pg:FindFirstChild(n); if o2 then o2:Destroy() end end
+	end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_ScreamAndRun"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999999
+pcall(function() if gethui then ScreenGui.Parent = gethui() end end)
+if not ScreenGui.Parent then pcall(function() ScreenGui.Parent = CoreGui end) end
+if not ScreenGui.Parent then ScreenGui.Parent = player:WaitForChild("PlayerGui") end
+
+-- Splash
+local Splash = Instance.new("Frame")
+Splash.Size = UDim2.new(1,0,1,0); Splash.BackgroundColor3 = Color3.fromRGB(4,5,14)
+Splash.BorderSizePixel = 0; Splash.ZIndex = 200; Splash.Parent = ScreenGui
+local SpTitle = Instance.new("TextLabel")
+SpTitle.Size = UDim2.new(1,0,0,60); SpTitle.Position = UDim2.new(0,0,0.42,0)
+SpTitle.BackgroundTransparency = 1; SpTitle.Text = "KHUB"
+SpTitle.Font = Enum.Font.GothamBlack; SpTitle.TextSize = 54
+SpTitle.TextColor3 = Color3.new(1,1,1); SpTitle.ZIndex = 201; SpTitle.Parent = Splash
+local SpG = Instance.new("UIGradient")
+SpG.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, THEME.accent), ColorSequenceKeypoint.new(0.4, Color3.new(1,1,1)),
+	ColorSequenceKeypoint.new(0.7, THEME.accent2), ColorSequenceKeypoint.new(1, THEME.gold),
+})
+SpG.Parent = SpTitle
+local SpSub = Instance.new("TextLabel")
+SpSub.Size = UDim2.new(1,0,0,24); SpSub.Position = UDim2.new(0,0,0.52,0)
+SpSub.BackgroundTransparency = 1; SpSub.Text = "Scream and Run"
+SpSub.Font = Enum.Font.GothamBold; SpSub.TextSize = 16; SpSub.TextColor3 = THEME.gold
+SpSub.ZIndex = 201; SpSub.Parent = Splash
+task.spawn(function()
+	task.wait(1.5)
+	TweenService:Create(Splash, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+	task.wait(0.55); pcall(function() Splash:Destroy() end)
+end)
+
+local BASE_W, BASE_H = 620, 420
+local Scale = Instance.new("UIScale"); Scale.Parent = ScreenGui
+local function updateScale()
+	local cam = Workspace.CurrentCamera; if not cam then return end
+	local vs = cam.ViewportSize
+	Scale.Scale = math.clamp(math.min(vs.X / 900, vs.Y / 600), 0.55, 1.15)
+end
+updateScale()
+pcall(function() Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale) end)
+
+local Win = Instance.new("Frame")
+Win.Name = "Win"; Win.Size = UDim2.new(0, BASE_W, 0, BASE_H)
+Win.Position = UDim2.new(0.5, -BASE_W/2, 0.5, -BASE_H/2)
+Win.BackgroundColor3 = THEME.bg; Win.BorderSizePixel = 0
+Win.ClipsDescendants = true; Win.Visible = true; Win.Parent = ScreenGui
+corner(Win, 20); mkstroke(Win, THEME.accent2, 2, 0.3)
+
+local WinBG = Instance.new("ImageLabel")
+WinBG.Size = UDim2.new(1,0,1,0); WinBG.BackgroundTransparency = 1
+WinBG.Image = BG_ID; WinBG.ScaleType = Enum.ScaleType.Crop
+WinBG.ImageTransparency = 0.3; WinBG.ZIndex = 0; WinBG.Parent = Win
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1,0,0,52); Header.BackgroundColor3 = THEME.panel
+Header.BackgroundTransparency = 0.55; Header.BorderSizePixel = 0; Header.ZIndex = 5; Header.Parent = Win
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.new(0,36,0,36); Logo.Position = UDim2.new(0,12,0.5,-18)
+Logo.BackgroundTransparency = 1; Logo.Image = LOGO_ID; Logo.ZIndex = 6; Logo.Parent = Header
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0,280,1,0); Title.Position = UDim2.new(0,56,0,0)
+Title.BackgroundTransparency = 1; Title.Text = "KHUB · Scream and Run"
+Title.Font = Enum.Font.GothamBlack; Title.TextSize = 22
+Title.TextColor3 = Color3.new(1,1,1); Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 6; Title.Parent = Header
+local TG = Instance.new("UIGradient")
+TG.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120,190,255)),
+	ColorSequenceKeypoint.new(0.5, Color3.new(1,1,1)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(180,130,255)),
+})
+TG.Parent = Title
+task.spawn(function()
+	while Title.Parent do TG.Offset = Vector2.new(math.sin(tick()*1.2)*0.5, 0); task.wait(0.03) end
+end)
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0,32,0,28); MinBtn.Position = UDim2.new(1,-78,0.5,-14)
+MinBtn.BackgroundColor3 = Color3.fromRGB(30,38,70); MinBtn.Text = "-"
+MinBtn.Font = Enum.Font.GothamBold; MinBtn.TextSize = 16; MinBtn.TextColor3 = THEME.text
+MinBtn.ZIndex = 7; MinBtn.Parent = Header; corner(MinBtn, 8)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0,32,0,28); CloseBtn.Position = UDim2.new(1,-40,0.5,-14)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(66,22,36); CloseBtn.Text = "X"
+CloseBtn.Font = Enum.Font.GothamBold; CloseBtn.TextSize = 14; CloseBtn.TextColor3 = THEME.text
+CloseBtn.ZIndex = 7; CloseBtn.Parent = Header; corner(CloseBtn, 8)
+
+do
+	local dragging, dragStart, startPos
+	Header.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true; dragStart = i.Position; startPos = Win.Position
+			i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+			local d = i.Position - dragStart
+			Win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset+d.X, startPos.Y.Scale, startPos.Y.Offset+d.Y)
+		end
+	end)
+end
+
+local Rail = Instance.new("ScrollingFrame")
+Rail.Size = UDim2.new(0,72,1,-52); Rail.Position = UDim2.new(0,0,0,52)
+Rail.BackgroundColor3 = THEME.panel; Rail.BackgroundTransparency = 0.35
+Rail.BorderSizePixel = 0; Rail.ScrollBarThickness = 2
+Rail.CanvasSize = UDim2.new(0,0,0,0); Rail.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Rail.ZIndex = 5; Rail.Parent = Win
+local RailList = Instance.new("UIListLayout")
+RailList.Padding = UDim.new(0,6); RailList.HorizontalAlignment = Enum.HorizontalAlignment.Center; RailList.SortOrder = Enum.SortOrder.LayoutOrder; RailList.Parent = Rail
+local RailPad = Instance.new("UIPadding"); RailPad.PaddingTop = UDim.new(0,8); RailPad.Parent = Rail
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1,-84,1,-60); Content.Position = UDim2.new(0,78,0,56)
+Content.BackgroundTransparency = 1; Content.ZIndex = 5; Content.Parent = Win
+
+local PageTitle = Instance.new("TextLabel")
+PageTitle.Size = UDim2.new(1,-10,0,22); PageTitle.Position = UDim2.new(0,4,0,0)
+PageTitle.BackgroundTransparency = 1; PageTitle.Text = "Welcome"
+PageTitle.Font = Enum.Font.GothamBlack; PageTitle.TextSize = 18
+PageTitle.TextColor3 = THEME.text; PageTitle.TextXAlignment = Enum.TextXAlignment.Left
+PageTitle.ZIndex = 6; PageTitle.Parent = Content
+
+local PageSub = Instance.new("TextLabel")
+PageSub.Size = UDim2.new(1,-10,0,16); PageSub.Position = UDim2.new(0,4,0,22)
+PageSub.BackgroundTransparency = 1; PageSub.Text = "KHUB · Scream and Run"
+PageSub.Font = Enum.Font.Gotham; PageSub.TextSize = 12
+PageSub.TextColor3 = THEME.dim; PageSub.TextXAlignment = Enum.TextXAlignment.Left
+PageSub.ZIndex = 6; PageSub.Parent = Content
+
+local Pages = Instance.new("Frame")
+Pages.Size = UDim2.new(1,0,1,-44); Pages.Position = UDim2.new(0,0,0,42)
+Pages.BackgroundTransparency = 1; Pages.ClipsDescendants = true; Pages.ZIndex = 5; Pages.Parent = Content
+
+local Tabs, ActiveId = {}, nil
+local TAB_ICONS = {
+	Welcome  = "rbxassetid://7733960981",
+	ESP      = "rbxassetid://7733993369",
+	Auto     = "rbxassetid://7734053495",
+	Player   = "rbxassetid://7733774602",
+	Settings = "rbxassetid://7734056607",
+	Config   = "rbxassetid://7734053495",
+}
+
+local function createPage(id)
+	local sc = Instance.new("ScrollingFrame")
+	sc.Name = id; sc.Size = UDim2.new(1,0,1,0); sc.BackgroundTransparency = 1
+	sc.BorderSizePixel = 0; sc.ScrollBarThickness = 3; sc.ScrollBarImageColor3 = THEME.accent2
+	sc.CanvasSize = UDim2.new(0,0,0,0); sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	sc.Visible = false; sc.ZIndex = 6; sc.Parent = Pages
+	local lay = Instance.new("UIListLayout"); lay.Padding = UDim.new(0,8); lay.SortOrder = Enum.SortOrder.LayoutOrder; lay.Parent = sc
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0,4); pad.PaddingBottom = UDim.new(0,12)
+	pad.PaddingLeft = UDim.new(0,4); pad.PaddingRight = UDim.new(0,8); pad.Parent = sc
+	return sc
+end
+
+local function switchPage(id, title, subtitle)
+	ActiveId = id
+	PageTitle.Text = title or id
+	PageSub.Text = subtitle or ""
+	for _, pg in ipairs(Pages:GetChildren()) do
+		if pg:IsA("ScrollingFrame") then pg.Visible = (pg.Name == id) end
+	end
+	for tid, btnRef in pairs(Tabs) do
+		if typeof(btnRef) == "Instance" then
+			local bar = btnRef:FindFirstChild("ActiveBar")
+			local iconF = btnRef:FindFirstChild("IconFrame")
+			local isActive = (tid == id)
+			if bar then
+				bar.BackgroundTransparency = isActive and 0 or 1
+				bar.Size = isActive and UDim2.new(0, 3, 0.6, 0) or UDim2.new(0, 3, 0.3, 0)
+			end
+			if iconF then
+				iconF.BackgroundColor3 = isActive and THEME.accent2 or Color3.fromRGB(24,30,60)
+				local stroke = iconF:FindFirstChildOfClass("UIStroke")
+				if stroke then stroke.Transparency = isActive and 0.1 or 0.5 end
+			end
+		end
+	end
+end
+
+local function createTabButton(id, label, order, pageTitle, pageSub)
+	local b = Instance.new("TextButton")
+	b.Name = id; b.Size = UDim2.new(0,58,0,54); b.BackgroundTransparency = 1
+	b.Text = ""; b.LayoutOrder = order; b.ZIndex = 8; b.Parent = Rail
+
+	local iconFrame = Instance.new("Frame")
+	iconFrame.Name = "IconFrame"; iconFrame.Size = UDim2.new(0,40,0,40)
+	iconFrame.Position = UDim2.new(0.5,-20,0,4)
+	iconFrame.BackgroundColor3 = Color3.fromRGB(24,30,60); iconFrame.BackgroundTransparency = 0.15
+	iconFrame.ZIndex = 9; iconFrame.Parent = b
+	corner(iconFrame, 10); mkstroke(iconFrame, THEME.accent2, 1.2, 0.5)
+
+	local icon = Instance.new("ImageLabel")
+	icon.Size = UDim2.new(0,22,0,22); icon.Position = UDim2.new(0.5,-11,0.5,-11)
+	icon.BackgroundTransparency = 1; icon.Image = TAB_ICONS[id] or TAB_ICONS.Welcome
+	icon.ImageColor3 = Color3.fromRGB(200,215,250); icon.ZIndex = 10; icon.Parent = iconFrame
+
+	local activeBar = Instance.new("Frame")
+	activeBar.Name = "ActiveBar"; activeBar.Size = UDim2.new(0,3,0.3,0)
+	activeBar.Position = UDim2.new(1,-3,0.2,0)
+	activeBar.BackgroundColor3 = THEME.white; activeBar.BackgroundTransparency = 1
+	activeBar.BorderSizePixel = 0; activeBar.ZIndex = 11; activeBar.Parent = b
+	corner(activeBar, 2)
+
+	b.MouseButton1Click:Connect(function()
+		TweenService:Create(iconFrame, TweenInfo.new(0.12, Enum.EasingStyle.Back), {Size = UDim2.new(0,44,0,44)}):Play()
+		task.delay(0.12, function()
+			TweenService:Create(iconFrame, TweenInfo.new(0.15), {Size = UDim2.new(0,40,0,40)}):Play()
+		end)
+		switchPage(id, pageTitle or label, pageSub or "")
+	end)
+	Tabs[id] = b
+	return b
+end
+
+local function card(parent, title)
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1,-4,0,0); f.AutomaticSize = Enum.AutomaticSize.Y
+	f.BackgroundColor3 = THEME.card; f.BackgroundTransparency = 0.25
+	f.BorderSizePixel = 0; f.ZIndex = 7; f.Parent = parent
+	corner(f, 12); mkstroke(f, THEME.stroke, 1, 0.5)
+	local lay = Instance.new("UIListLayout"); lay.Padding = UDim.new(0,6); lay.SortOrder = Enum.SortOrder.LayoutOrder; lay.Parent = f
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0,10); pad.PaddingBottom = UDim.new(0,10)
+	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10); pad.Parent = f
+	if title then
+		local t = Instance.new("TextLabel")
+		t.Size = UDim2.new(1,0,0,18); t.BackgroundTransparency = 1; t.Text = title
+		t.Font = Enum.Font.GothamBold; t.TextSize = 13; t.TextColor3 = THEME.gold
+		t.TextXAlignment = Enum.TextXAlignment.Left; t.ZIndex = 8; t.LayoutOrder = 0; t.Parent = f
+	end
+	return f
+end
+
+local function btn(parent, text, callback, color)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1,0,0,36); b.BackgroundColor3 = color or Color3.fromRGB(34,44,84)
+	b.Text = text; b.Font = Enum.Font.GothamBold; b.TextSize = 13; b.TextColor3 = THEME.text
+	b.ZIndex = 8; b.Parent = parent; corner(b, 8)
+	b.MouseButton1Click:Connect(function() pcall(callback) end)
+	return b
+end
+
+local function toggle(parent, text, get, set)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1,0,0,34); row.BackgroundTransparency = 1; row.ZIndex = 8; row.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1,-56,1,0); lbl.BackgroundTransparency = 1; lbl.Text = text
+	lbl.Font = Enum.Font.GothamMedium; lbl.TextSize = 13; lbl.TextColor3 = THEME.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.ZIndex = 9; lbl.Parent = row
+	local sw = Instance.new("TextButton")
+	sw.Size = UDim2.new(0,48,0,24); sw.Position = UDim2.new(1,-48,0.5,-12)
+	sw.BackgroundColor3 = get() and THEME.green or THEME.off; sw.Text = ""; sw.ZIndex = 9; sw.Parent = row
+	corner(sw, 12)
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.new(0,18,0,18)
+	knob.Position = get() and UDim2.new(1,-21,0.5,-9) or UDim2.new(0,3,0.5,-9)
+	knob.BackgroundColor3 = THEME.white; knob.ZIndex = 10; knob.Parent = sw; corner(knob, 9)
+	sw.MouseButton1Click:Connect(function()
+		local v = not get(); set(v)
+		sw.BackgroundColor3 = v and THEME.green or THEME.off
+		TweenService:Create(knob, TweenInfo.new(0.15), {
+			Position = v and UDim2.new(1,-21,0.5,-9) or UDim2.new(0,3,0.5,-9)
+		}):Play()
+	end)
+	return row
+end
+
+
+local function slider(parent, text, min, max, get, set)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1,0,0,48); row.BackgroundTransparency = 1; row.ZIndex = 8; row.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1,0,0,16); lbl.BackgroundTransparency = 1
+	lbl.Text = text .. ": " .. tostring(math.floor(get()+0.5))
+	lbl.Font = Enum.Font.Gotham; lbl.TextSize = 12; lbl.TextColor3 = THEME.dim
+	lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.ZIndex = 9; lbl.Parent = row
+	local track = Instance.new("Frame")
+	track.Size = UDim2.new(1,0,0,10); track.Position = UDim2.new(0,0,0,26)
+	track.BackgroundColor3 = THEME.off; track.BorderSizePixel = 0; track.ZIndex = 9; track.Parent = row
+	corner(track, 5)
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new(math.clamp((get()-min)/(max-min),0,1),0,1,0)
+	fill.BackgroundColor3 = THEME.accent; fill.BorderSizePixel = 0; fill.ZIndex = 10; fill.Parent = track
+	corner(fill, 5)
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.new(0,16,0,16); knob.AnchorPoint = Vector2.new(0.5,0.5)
+	knob.Position = UDim2.new(math.clamp((get()-min)/(max-min),0,1),0,0.5,0)
+	knob.BackgroundColor3 = THEME.white; knob.BorderSizePixel = 0; knob.ZIndex = 11; knob.Parent = track
+	corner(knob, 8)
+	local dragging = false
+	local function applyFromX(x)
+		local absPos = track.AbsolutePosition.X
+		local absSize = math.max(track.AbsoluteSize.X, 1)
+		local rel = math.clamp((x - absPos) / absSize, 0, 1)
+		local val = math.floor(min + (max - min) * rel + 0.5)
+		set(val)
+		lbl.Text = text .. ": " .. tostring(val)
+		fill.Size = UDim2.new(rel,0,1,0)
+		knob.Position = UDim2.new(rel,0,0.5,0)
+	end
+	track.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true; applyFromX(i.Position.X)
+		end
+	end)
+	knob.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if not dragging then return end
+		if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+			applyFromX(i.Position.X)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+	return row
+end
+
+local function textBox(parent, placeholder)
+	local tb = Instance.new("TextBox")
+	tb.Size = UDim2.new(1,0,0,34); tb.BackgroundColor3 = THEME.inner; tb.Text = ""
+	tb.PlaceholderText = placeholder or ""; tb.Font = Enum.Font.Gotham; tb.TextSize = 13
+	tb.TextColor3 = THEME.text; tb.PlaceholderColor3 = THEME.mute
+	tb.ClearTextOnFocus = false; tb.ZIndex = 8; tb.Parent = parent; corner(tb, 8)
+	return tb
+end
+
+-- ========== WELCOME (first) ==========
+local PageWelcome = createPage("Welcome")
+createTabButton("Welcome", "Welcome", 1, "Welcome", "KHUB · Scream and Run")
+do
+	-- Big KHUB hero
+	local Hero = Instance.new("Frame")
+	Hero.Size = UDim2.new(1, -4, 0, 146)
+	Hero.BackgroundColor3 = THEME.card
+	Hero.BackgroundTransparency = 0.15
+	Hero.BorderSizePixel = 0
+	Hero.ZIndex = 9
+	Hero.LayoutOrder = 1
+	Hero.Parent = PageWelcome
+	corner(Hero, 16)
+	mkstroke(Hero, THEME.accent2, 1.4, 0.3)
+
+	local HeroText = Instance.new("TextLabel")
+	HeroText.Size = UDim2.new(1, -36, 0, 60)
+	HeroText.Position = UDim2.fromOffset(24, 18)
+	HeroText.BackgroundTransparency = 1
+	HeroText.Text = "KHUB"
+	HeroText.Font = Enum.Font.GothamBlack
+	HeroText.TextSize = 58
+	HeroText.TextColor3 = Color3.new(1, 1, 1)
+	HeroText.TextXAlignment = Enum.TextXAlignment.Left
+	HeroText.ZIndex = 12
+	HeroText.Parent = Hero
+
+	local HeroGrad = Instance.new("UIGradient")
+	HeroGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.00, THEME.accent),
+		ColorSequenceKeypoint.new(0.35, Color3.new(1, 1, 1)),
+		ColorSequenceKeypoint.new(0.60, THEME.accent2),
+		ColorSequenceKeypoint.new(1.00, THEME.gold),
+	})
+	HeroGrad.Offset = Vector2.new(-1.4, 0)
+	HeroGrad.Parent = HeroText
+	task.spawn(function()
+		while HeroText.Parent do
+			local t = (tick() % 3) / 3
+			HeroGrad.Offset = Vector2.new(-1.4 + t * 2.8, 0)
+			task.wait(0.03)
+		end
+	end)
+
+	local HeroBy = Instance.new("TextLabel")
+	HeroBy.Size = UDim2.new(1, -36, 0, 22)
+	HeroBy.Position = UDim2.fromOffset(26, 82)
+	HeroBy.BackgroundTransparency = 1
+	HeroBy.Text = "by Kyiel Pambid"
+	HeroBy.Font = Enum.Font.GothamBold
+	HeroBy.TextSize = 17
+	HeroBy.TextColor3 = THEME.gold
+	HeroBy.TextXAlignment = Enum.TextXAlignment.Left
+	HeroBy.ZIndex = 12
+	HeroBy.Parent = Hero
+
+	-- Typewriter moving text under KHUB
+	local HeroType = Instance.new("TextLabel")
+	HeroType.Size = UDim2.new(1, -36, 0, 18)
+	HeroType.Position = UDim2.fromOffset(26, 110)
+	HeroType.BackgroundTransparency = 1
+	HeroType.Text = ""
+	HeroType.Font = Enum.Font.Code
+	HeroType.TextSize = 12
+	HeroType.TextColor3 = THEME.dim
+	HeroType.TextXAlignment = Enum.TextXAlignment.Left
+	HeroType.ZIndex = 12
+	HeroType.Parent = Hero
+
+	task.spawn(function()
+		local phrases = {
+			"Join Discord for more scripts",
+			"Subscribe on my channel",
+			"Toggle: RightShift / RightCtrl / K",
+			"KHUB · smooth like butter",
+		}
+		while HeroType.Parent do
+			for _, phrase in ipairs(phrases) do
+				if not HeroType.Parent then break end
+				HeroType.Text = ""
+				for i = 1, #phrase do
+					if not HeroType.Parent then break end
+					HeroType.Text = string.sub(phrase, 1, i)
+					task.wait(0.028)
+				end
+				task.wait(1.8)
+				for i = #phrase, 1, -1 do
+					if not HeroType.Parent then break end
+					HeroType.Text = string.sub(phrase, 1, i)
+					task.wait(0.012)
+				end
+				task.wait(0.2)
+			end
+		end
+	end)
+
+	-- Profile card
+	local ProfileCard = card(PageWelcome, "Player")
+	ProfileCard.LayoutOrder = 2
+
+	local PF = Instance.new("Frame")
+	PF.Size = UDim2.new(1, 0, 0, 100)
+	PF.BackgroundColor3 = THEME.inner
+	PF.BackgroundTransparency = 0.1
+	PF.BorderSizePixel = 0
+	PF.ZIndex = 10
+	PF.Parent = ProfileCard
+	corner(PF, 10)
+	mkstroke(PF, THEME.stroke, 1, 0.35)
+
+	local Avatar = Instance.new("ImageLabel")
+	Avatar.Size = UDim2.fromOffset(72, 72)
+	Avatar.Position = UDim2.new(0, 14, 0.5, -36)
+	Avatar.BackgroundColor3 = Color3.fromRGB(30, 38, 70)
+	Avatar.BackgroundTransparency = 0.05
+	Avatar.ZIndex = 12
+	Avatar.Parent = PF
+	corner(Avatar, 36)
+	mkstroke(Avatar, THEME.accent, 1.5, 0.3)
+	pcall(function()
+		local content, isReady = Players:GetUserThumbnailAsync(
+			player.UserId,
+			Enum.ThumbnailType.HeadShot,
+			Enum.ThumbnailSize.Size150x150
+		)
+		if isReady then Avatar.Image = content end
+	end)
+
+	local function profRow(y, txt, col, font, size)
+		local l = Instance.new("TextLabel")
+		l.Size = UDim2.new(1, -110, 0, 22)
+		l.Position = UDim2.new(0, 100, 0, y)
+		l.BackgroundTransparency = 1
+		l.Text = txt
+		l.Font = font or Enum.Font.GothamBold
+		l.TextSize = size or 14
+		l.TextColor3 = col or THEME.text
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.ZIndex = 12
+		l.Parent = PF
+		return l
+	end
+	profRow(16, "hey, " .. (player.DisplayName or player.Name) .. " :)", THEME.gold, Enum.Font.GothamBold, 17)
+	profRow(42, "@" .. player.Name, THEME.dim, Enum.Font.Gotham, 13)
+	profRow(64, "user id · " .. tostring(player.UserId), THEME.mute, Enum.Font.Code, 12)
+
+	-- Links
+	local sc = card(PageWelcome, "Join & Subscribe")
+	sc.LayoutOrder = 3
+	btn(sc, "JOIN DISCORD FOR MORE SCRIPTS", function() openLink(DISCORD) end, Color3.fromRGB(45, 70, 160))
+	btn(sc, "SUBSCRIBE ON YOUTUBE", function() openLink(YOUTUBE) end, Color3.fromRGB(150, 40, 50))
+
+	-- Status
+	local StatusCard = card(PageWelcome, "Status")
+	StatusCard.LayoutOrder = 4
+	local StatusLbl = Instance.new("TextLabel")
+	StatusLbl.Size = UDim2.new(1, 0, 0, 20)
+	StatusLbl.BackgroundTransparency = 1
+	StatusLbl.Text = "KHUB online · everything ready"
+	StatusLbl.Font = Enum.Font.Gotham
+	StatusLbl.TextSize = 12
+	StatusLbl.TextColor3 = THEME.green
+	StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+	StatusLbl.ZIndex = 8
+	StatusLbl.Parent = StatusCard
+	task.spawn(function()
+		local statusList = {
+			"KHUB online · everything ready",
+			"Join Discord for more scripts",
+			"Toggle: RightShift / RightCtrl / K",
+		}
+		local i = 1
+		while StatusLbl.Parent do
+			StatusLbl.Text = statusList[i]
+			StatusLbl.TextTransparency = 1
+			TweenService:Create(StatusLbl, TweenInfo.new(0.5), { TextTransparency = 0 }):Play()
+			i = i % #statusList + 1
+			task.wait(3.5)
+		end
+	end)
+
+	-- Keybinds
+	local info = card(PageWelcome, "Keybinds")
+	info.LayoutOrder = 5
+	local tip = Instance.new("TextLabel")
+	tip.Size = UDim2.new(1, 0, 0, 50)
+	tip.BackgroundTransparency = 1
+	tip.Text = "• RightShift  Toggle UI\n• RightCtrl  Toggle UI\n• K  Toggle UI\n• Drag header to move window"
+	tip.Font = Enum.Font.Gotham
+	tip.TextSize = 12
+	tip.TextColor3 = THEME.dim
+	tip.TextXAlignment = Enum.TextXAlignment.Left
+	tip.TextYAlignment = Enum.TextYAlignment.Top
+	tip.ZIndex = 8
+	tip.Parent = info
+end
+
+
+
+local PageESP = createPage("ESP")
+createTabButton("ESP", "ESP", 2, "ESP", "Monster · Lock")
+do
+	local c = card(PageESP, "MONSTER ESP")
+	toggle(c, "Monster Highlight", function() return Config.ESP.MonsterHighlight end, function(v) Config.ESP.MonsterHighlight = v end)
+	toggle(c, "Monster Distance", function() return Config.ESP.MonsterDistance end, function(v) Config.ESP.MonsterDistance = v end)
+	toggle(c, "Monster Box", function() return Config.ESP.MonsterBox end, function(v) Config.ESP.MonsterBox = v end)
+	local c2 = card(PageESP, "LOCK ESP")
+	toggle(c2, "Lock ESP", function() return Config.ESP.LockESP end, function(v) Config.ESP.LockESP = v end)
+	btn(c2, "Teleport To Nearest Lock", function()
+		local target = FindNearestLock()
+		if target then TeleportToLock(target) end
+	end)
+	btn(c2, "Teleport To Safest Lock", function()
+		local target = FindSafestLock()
+		if target then TeleportToLock(target) end
+	end)
+end
+
+local PageAuto = createPage("Auto")
+createTabButton("Auto", "Auto", 3, "Auto Match", "Win · Search · Key · Safety")
+do
+	local c = card(PageAuto, "WIN")
+	btn(c, "INSTA WIN", function() task.spawn(InstaWin) end, THEME.green)
+
+	local c2 = card(PageAuto, "INTERACTION")
+	toggle(c2, "Instant Proximity Prompts", function() return Config.Auto.InstantPrompts end, function(v) SetInstantPrompts(v) end)
+	toggle(c2, "Auto Search Backpacks", function() return Config.Auto.SearchBackpacks end, function(v)
+		Config.Auto.SearchBackpacks = v
+		if v then task.spawn(AutoSearchBackpacks) end
+	end)
+	toggle(c2, "Auto Place Keys on Lock", function() return Config.Auto.AutoPlaceKeys end, function(v)
+		Config.Auto.AutoPlaceKeys = v
+		print("[KHUB] Auto Place Keys", v and "ON" or "OFF")
+		if v then
+			task.spawn(function()
+				AutoPlaceKeysOnce()
+			end)
+		end
+	end)
+	btn(c2, "Place Keys on Lock Once", function()
+		task.spawn(function()
+			local prev = Config.Auto.AutoPlaceKeys
+			Config.Auto.AutoPlaceKeys = true
+			AutoPlaceKeysOnce()
+			if not prev then Config.Auto.AutoPlaceKeys = false end
+		end)
+	end, THEME.accent)
+	toggle(c2, "Auto Safety", function() return Config.Auto.AutoSafety end, function(v)
+		Config.Auto.AutoSafety = v
+		if v then
+			local root = GetRoot()
+			if root then
+				local distance = DistanceFromClosestMonster(root.Position)
+				if distance >= Config.Safety.DangerDistance then
+					LastSafeCFrame = root.CFrame
+				end
+			end
+		end
+	end)
+	toggle(c2, "Fullbright / Clear Darkness", function() return FullbrightOn end, function(v) SetFullbright(v) end)
+end
+
+local PagePlayer = createPage("Player")
+createTabButton("Player", "Player", 4, "Player Mods", "Speed · Jump")
+do
+	local c = card(PagePlayer, "MOVEMENT")
+	toggle(c, "Custom WalkSpeed", function() return Config.Player.WalkSpeedEnabled end, function(v)
+		Config.Player.WalkSpeedEnabled = v
+		if not v then RestoreWalkSpeed() end
+	end)
+	slider(c, "WalkSpeed", 8, 100, function() return Config.Player.WalkSpeed end, function(v) Config.Player.WalkSpeed = v end)
+	toggle(c, "Custom Jump Height", function() return Config.Player.JumpEnabled end, function(v)
+		Config.Player.JumpEnabled = v
+		if not v then RestoreJump() end
+	end)
+	slider(c, "Jump Height", 4, 50, function() return Config.Player.JumpHeight end, function(v) Config.Player.JumpHeight = v end)
+end
+
+
+-- ========== SETTINGS ==========
+local PageSettings = createPage("Settings")
+createTabButton("Settings", "Settings", 5, "Settings", "UI options · keybinds")
+do
+	local uiOpt = { ShowOrb = true, RainbowTitle = true }
+	local c = card(PageSettings, "UI Options")
+	toggle(c, "Show floating orb when minimized", function() return uiOpt.ShowOrb end, function(v)
+		uiOpt.ShowOrb = v; OrbState.visible = v
+	end)
+	toggle(c, "Rainbow title gradient", function() return uiOpt.RainbowTitle end, function(v)
+		uiOpt.RainbowTitle = v; TG.Enabled = v
+	end)
+	local k = card(PageSettings, "Keybinds")
+	local tip = Instance.new("TextLabel")
+	tip.Size = UDim2.new(1,0,0,55); tip.BackgroundTransparency = 1
+	tip.Text = "PC: RightShift / RightCtrl / K\nMobile: Tap floating orb to reopen"
+	tip.Font = Enum.Font.Gotham; tip.TextSize = 12; tip.TextColor3 = THEME.dim
+	tip.TextXAlignment = Enum.TextXAlignment.Left; tip.TextYAlignment = Enum.TextYAlignment.Top
+	tip.ZIndex = 8; tip.Parent = k
+end
+
+-- ========== SAVE CONFIG (last) ==========
+local PageConfig = createPage("Config")
+createTabButton("Config", "Config", 99, "Save Config", "create · load · delete")
+do
+	local c = card(PageConfig, "Config Manager")
+	local nameBox = textBox(c, "Config name...")
+	local statusCfg = Instance.new("TextLabel")
+	statusCfg.Size = UDim2.new(1,0,0,18); statusCfg.BackgroundTransparency = 1
+	statusCfg.Text = "Ready"; statusCfg.Font = Enum.Font.Gotham; statusCfg.TextSize = 12
+	statusCfg.TextColor3 = THEME.dim; statusCfg.TextXAlignment = Enum.TextXAlignment.Left
+	statusCfg.ZIndex = 8; statusCfg.Parent = c
+
+	local function ensureFolder()
+		if isfolder and not isfolder(ConfigFolder) then pcall(function() makefolder(ConfigFolder) end) end
+	end
+	local function listConfigs()
+		ensureFolder(); if not listfiles then return {} end
+		local out = {}
+		pcall(function()
+			for _, f in ipairs(listfiles(ConfigFolder)) do
+				local n = f:match("([^/\\]+)%.json$"); if n then table.insert(out, n) end
+			end
+		end)
+		return out
+	end
+
+	local listFrame = Instance.new("Frame")
+	listFrame.Size = UDim2.new(1,0,0,100); listFrame.BackgroundColor3 = THEME.inner
+	listFrame.ZIndex = 8; listFrame.Parent = c; corner(listFrame, 8)
+	local listScroll = Instance.new("ScrollingFrame")
+	listScroll.Size = UDim2.new(1,-4,1,-4); listScroll.Position = UDim2.new(0,2,0,2)
+	listScroll.BackgroundTransparency = 1; listScroll.ScrollBarThickness = 3
+	listScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; listScroll.CanvasSize = UDim2.new(0,0,0,0)
+	listScroll.ZIndex = 9; listScroll.Parent = listFrame
+	local listLay = Instance.new("UIListLayout"); listLay.Padding = UDim.new(0,3); listLay.Parent = listScroll
+	local selectedCfg = nil
+
+	local function refreshCfg()
+		for _, ch in ipairs(listScroll:GetChildren()) do if ch:IsA("TextButton") then ch:Destroy() end end
+		for _, n in ipairs(listConfigs()) do
+			local b = Instance.new("TextButton")
+			b.Size = UDim2.new(1,-6,0,26)
+			b.BackgroundColor3 = selectedCfg == n and THEME.accent2 or Color3.fromRGB(22,28,56)
+			b.Text = n; b.Font = Enum.Font.Gotham; b.TextSize = 12; b.TextColor3 = THEME.text
+			b.ZIndex = 10; b.Parent = listScroll; corner(b, 6)
+			b.MouseButton1Click:Connect(function() selectedCfg = n; nameBox.Text = n; refreshCfg() end)
+		end
+	end
+
+	btn(c, "Save Config", function()
+		local n = nameBox.Text:gsub("%s+", "")
+		if n == "" then statusCfg.Text = "Enter a name"; return end
+		ensureFolder()
+		local ok = pcall(function()
+			writefile(ConfigFolder.."/"..n..".json", HttpService:JSONEncode({savedAt = os.date("%Y-%m-%d %H:%M:%S")}))
+		end)
+		statusCfg.Text = ok and ("Saved: "..n) or "Save failed"
+		refreshCfg()
+	end, Color3.fromRGB(40,80,50))
+
+	btn(c, "Load Config", function()
+		local n = selectedCfg or nameBox.Text:gsub("%s+", "")
+		if n == "" then statusCfg.Text = "Select a config"; return end
+		local ok, raw = pcall(function() return readfile(ConfigFolder.."/"..n..".json") end)
+		if not ok or not raw then statusCfg.Text = "Load failed"; return end
+		statusCfg.Text = "Loaded: "..n
+	end, Color3.fromRGB(40,50,90))
+
+	btn(c, "Delete Config", function()
+		local n = selectedCfg or nameBox.Text:gsub("%s+", "")
+		if n == "" then statusCfg.Text = "Select a config"; return end
+		pcall(function() delfile(ConfigFolder.."/"..n..".json") end)
+		selectedCfg = nil; statusCfg.Text = "Deleted: "..n; refreshCfg()
+	end, Color3.fromRGB(90,30,40))
+
+	btn(c, "Refresh List", refreshCfg)
+	task.defer(refreshCfg)
+end
+
+-- ORB
+local OrbRoot = Instance.new("Frame")
+OrbRoot.Size = UDim2.new(0,100,0,100); OrbRoot.Position = UDim2.new(0, 16, 0.5, -50)
+OrbRoot.BackgroundTransparency = 1; OrbRoot.Visible = false; OrbRoot.ZIndex = 50; OrbRoot.Parent = ScreenGui
+local Orb = Instance.new("ImageButton")
+Orb.Size = UDim2.new(0,90,0,90); Orb.Position = UDim2.new(0.5,-45,0.5,-45)
+Orb.BackgroundColor3 = THEME.panel; Orb.Image = LOGO_ID; Orb.ScaleType = Enum.ScaleType.Crop
+Orb.ZIndex = 51; Orb.Parent = OrbRoot; corner(Orb, 45); mkstroke(Orb, THEME.accent2, 2.5, 0.15)
+task.spawn(function()
+	local halo = Instance.new("UIStroke"); halo.Color = THEME.accent; halo.Thickness = 2; halo.Parent = Orb
+	while Orb.Parent do halo.Color = Color3.fromHSV((tick()%4)/4, 0.7, 1); task.wait(0.05) end
+end)
+do
+	local draggingOrb, dragStartOrb, startPosOrb
+	Orb.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			draggingOrb = true; dragStartOrb = input.Position; startPosOrb = OrbRoot.Position
+			input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then draggingOrb = false end end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if draggingOrb and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStartOrb
+			OrbRoot.Position = UDim2.new(startPosOrb.X.Scale, startPosOrb.X.Offset+delta.X, startPosOrb.Y.Scale, startPosOrb.Y.Offset+delta.Y)
+		end
+	end)
+end
+
+local function setVisible(on)
+	if on then
+		Win.Visible = true; OrbRoot.Visible = false
+		Win.Position = UDim2.new(0.5, -BASE_W/2, 0.5, -BASE_H/2)
+		TweenService:Create(Win, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = UDim2.new(0, BASE_W, 0, BASE_H),
+		}):Play()
+	else
+		Win.Visible = false; OrbRoot.Visible = OrbState.visible
+	end
+end
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+CloseBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function() setVisible(true) end)
+
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.RightShift or i.KeyCode == Enum.KeyCode.RightControl or i.KeyCode == Enum.KeyCode.K then
+		setVisible(not Win.Visible)
+	end
+end)
+
+task.delay(1.7, function() switchPage("Welcome", "Welcome", "KHUB · Scream and Run") end)
+print("[KHUB] Scream and Run loaded")
+print("[KHUB] Toggle: RightShift / RightCtrl / K")
