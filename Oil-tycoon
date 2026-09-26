@@ -1,0 +1,1559 @@
+--[[
+	KHUB UI · Template
+	Welcome + Settings + Save Config
+	Toggle: RightShift / RightCtrl / K
+]]
+repeat task.wait() until game:IsLoaded()
+
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
+local CoreGui           = game:GetService("CoreGui")
+local Workspace         = game:GetService("Workspace")
+local HttpService       = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player            = Players.LocalPlayer
+
+local LOGO_ID  = "rbxassetid://127230219966945"
+local BG_ID    = "rbxassetid://127230219966945"
+local DISCORD  = "https://discord.gg/EKPb7BRDH8"
+local YOUTUBE  = "https://www.youtube.com/@kyielpambid"
+
+print("[KHUB] Oil Tycoon starting...")
+-- ========== OIL TYCOON ENGINE ==========
+local Character = player.Character or player.CharacterAdded:Wait()
+local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart") or Character:WaitForChild("HumanoidRootPart", 10)
+
+player.CharacterAdded:Connect(function(newChar)
+	Character = newChar
+	HumanoidRootPart = newChar:WaitForChild("HumanoidRootPart", 10)
+end)
+
+local RS = ReplicatedStorage
+local BuyButton = RS:FindFirstChild("Buy_Button", true)
+local ConfirmPurchase = RS:FindFirstChild("Confirm_Purchase", true)
+local SyncNuggets = RS:FindFirstChild("Sync_Nuggets", true)
+local NuggetCollected = RS:FindFirstChild("Nugget_Collected", true) or RS:FindFirstChild("Collect_Nugget", true)
+local FinishRebirth = RS:FindFirstChild("Finish_Rebirth", true)
+local SyncRebirth = RS:FindFirstChild("Sync_Rebirth", true)
+local WorkerDeposit = RS:FindFirstChild("Worker_Deposit", true)
+
+local currentNuggets = {}
+if SyncNuggets then
+	SyncNuggets.OnClientEvent:Connect(function(nuggets)
+		if type(nuggets) == "table" then
+			currentNuggets = nuggets
+		end
+	end)
+end
+
+local function getAllStrictlyGreenObjects()
+	local paths = {}
+	local tycoon = Workspace:FindFirstChild("Tycoon")
+	local searchFolders = {tycoon and tycoon:FindFirstChild("Buttons"), tycoon and tycoon:FindFirstChild("Paths"), Workspace}
+	for _, folder in ipairs(searchFolders) do
+		if folder then
+			for _, obj in ipairs(folder:GetDescendants()) do
+				if obj:IsA("Model") or obj:IsA("BasePart") then
+					local isRobux, hasGreen, hasRed = false, false, false
+					for _, desc in ipairs(obj:GetDescendants()) do
+						if desc:IsA("BasePart") then
+							local color = desc.Color
+							if color.G > color.R + 0.05 and color.G > color.B + 0.05 then
+								hasGreen = true
+							elseif color.R > color.G + 0.05 and color.R > color.B + 0.05 then
+								hasRed = true
+							end
+						end
+						if desc:IsA("SurfaceGui") or desc:IsA("BillboardGui") then
+							for _, label in ipairs(desc:GetDescendants()) do
+								if label:IsA("TextLabel") and string.find(label.Text:lower(), "robux") then
+									isRobux = true
+								end
+							end
+						end
+					end
+					if hasGreen and not hasRed and not isRobux then
+						table.insert(paths, obj)
+					end
+				end
+			end
+		end
+	end
+	return paths
+end
+
+local function getAllSpecificOilSources()
+	local sources = {}
+	local tycoon = Workspace:FindFirstChild("Tycoon")
+	if tycoon then
+		local other = tycoon:FindFirstChild("Other")
+		if other then
+			local oil = other:FindFirstChild("Oil")
+			if oil then
+				for _, sourceFolder in ipairs(oil:GetChildren()) do
+					local oilSourcePart = sourceFolder:FindFirstChild("OilSource")
+					if oilSourcePart and oilSourcePart:IsA("BasePart") then
+						table.insert(sources, oilSourcePart)
+					end
+				end
+			end
+		end
+	end
+	if #sources == 0 then
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if obj.Name == "OilSource" and obj:IsA("BasePart") then
+				table.insert(sources, obj)
+			end
+		end
+	end
+	return sources
+end
+
+local AutoTPPathEnabled = false
+local AutoNuggetsEnabled = false
+local AutoOilSourceEnabled = false
+local AutoInteractEnabled = false
+local AutoRebirthEnabled = false
+local AutoBuyToolsEnabled = false
+
+task.spawn(function()
+	while task.wait(0.3) do
+		if AutoTPPathEnabled and HumanoidRootPart then
+			pcall(function()
+				local paths = getAllStrictlyGreenObjects()
+				for _, pathObj in ipairs(paths) do
+					if not AutoTPPathEnabled then break end
+					local targetPart = pathObj:IsA("BasePart") and pathObj or pathObj.PrimaryPart or pathObj:FindFirstChildWhichIsA("BasePart")
+					if targetPart then
+						HumanoidRootPart.CFrame = targetPart.CFrame + Vector3.new(0, 3, 0)
+						task.wait(0.15)
+						if BuyButton then BuyButton:FireServer(pathObj.Name) end
+						if ConfirmPurchase then ConfirmPurchase:FireServer(pathObj.Name) end
+						for _, desc in ipairs(pathObj:GetDescendants()) do
+							if desc:IsA("ProximityPrompt") then
+								pcall(function()
+									if fireproximityprompt then fireproximityprompt(desc) end
+								end)
+							end
+						end
+						task.wait(0.2)
+					end
+				end
+			end)
+		end
+	end
+end)
+
+task.spawn(function()
+	while task.wait(0.1) do
+		if AutoNuggetsEnabled then
+			pcall(function()
+				for i = 1, 100 do
+					if NuggetCollected then NuggetCollected:FireServer(i) end
+				end
+				if #currentNuggets > 0 then
+					for _, nugget in ipairs(currentNuggets) do
+						if nugget.id and NuggetCollected then
+							NuggetCollected:FireServer(nugget.id)
+						end
+					end
+				end
+				for _, obj in ipairs(Workspace:GetDescendants()) do
+					if obj.Name == "GoldNugget" or obj.Name == "Nugget" or string.find(obj.Name:lower(), "nugget") then
+						for _, desc in ipairs(obj:GetDescendants()) do
+							if desc:IsA("ProximityPrompt") then
+								pcall(function()
+									if fireproximityprompt then fireproximityprompt(desc) end
+								end)
+							end
+						end
+						if obj:IsA("BasePart") and HumanoidRootPart then
+							HumanoidRootPart.CFrame = obj.CFrame + Vector3.new(0, 1, 0)
+							task.wait(0.05)
+						end
+					end
+				end
+			end)
+		end
+	end
+end)
+
+task.spawn(function()
+	while task.wait(0.3) do
+		if AutoOilSourceEnabled and HumanoidRootPart then
+			pcall(function()
+				local backpack = player:FindFirstChild("Backpack")
+				local characterTool = Character and Character:FindFirstChildOfClass("Tool")
+				local targetTool = nil
+				if backpack then
+					for _, tool in ipairs(backpack:GetChildren()) do
+						if tool:IsA("Tool") and (string.find(tool.Name:lower(), "spork") or string.find(tool.Name:lower(), "bowl")) then
+							targetTool = tool
+							break
+						end
+					end
+				end
+				if not characterTool and targetTool then
+					local humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+					if humanoid then humanoid:EquipTool(targetTool) end
+				end
+				local activeTool = (Character and Character:FindFirstChildOfClass("Tool")) or targetTool
+				local currentCount, maxCount = 0, 3
+				if activeTool then
+					local nameMatch1, nameMatch2 = string.match(activeTool.Name, "%[(%d+)%/(%d+)%]")
+					if nameMatch1 and nameMatch2 then
+						currentCount = tonumber(nameMatch1) or 0
+						maxCount = tonumber(nameMatch2) or 3
+					end
+				end
+				if backpack and not activeTool then
+					for _, tool in ipairs(backpack:GetChildren()) do
+						if tool:IsA("Tool") and (string.find(tool.Name:lower(), "spork") or string.find(tool.Name:lower(), "bowl")) then
+							local m1, m2 = string.match(tool.Name, "%[(%d+)%/(%d+)%]")
+							if m1 and m2 then
+								currentCount = tonumber(m1) or 0
+								maxCount = tonumber(m2) or 3
+							end
+						end
+					end
+				end
+				local isFull = (currentCount >= maxCount and maxCount > 0)
+					or (activeTool and string.find(activeTool.Name, "3/3") and currentCount >= 3)
+					or (currentCount >= 3)
+				if isFull then
+					HumanoidRootPart.CFrame = CFrame.new(-0.38, 3.70, 23.50)
+					task.wait(0.2)
+					for _, desc in ipairs(Workspace:GetDescendants()) do
+						if desc:IsA("ProximityPrompt") then
+							local parentName = desc.Parent and desc.Parent.Name:lower() or ""
+							local actionText = desc.ActionText and desc.ActionText:lower() or ""
+							if string.find(parentName, "barrel") or string.find(parentName, "deposit")
+								or string.find(actionText, "deposit") or string.find(parentName, "collector")
+								or (desc.Parent and desc.Parent:IsA("BasePart")
+									and (HumanoidRootPart.Position - desc.Parent.Position).Magnitude <= 15) then
+								pcall(function()
+									if fireproximityprompt then fireproximityprompt(desc) end
+								end)
+							end
+						end
+					end
+					task.wait(2.0)
+					if WorkerDeposit then WorkerDeposit:FireServer() end
+					task.wait(0.5)
+				else
+					local oilSources = getAllSpecificOilSources()
+					if #oilSources > 0 then
+						for _, source in ipairs(oilSources) do
+							if not AutoOilSourceEnabled then break end
+							if source and source:IsA("BasePart") then
+								local activeToolCheck = Character and Character:FindFirstChildOfClass("Tool")
+								local curC, maxC = 0, 3
+								if activeToolCheck then
+									local m1, m2 = string.match(activeToolCheck.Name, "%[(%d+)%/(%d+)%]")
+									if m1 and m2 then
+										curC = tonumber(m1) or 0
+										maxC = tonumber(m2) or 3
+									end
+								end
+								if curC >= maxC or curC >= 3 then break end
+								HumanoidRootPart.CFrame = source.CFrame + Vector3.new(0, 3, 0)
+								task.wait(0.2)
+								for _, desc in ipairs(source:GetDescendants()) do
+									if desc:IsA("ProximityPrompt") then
+										pcall(function()
+											if fireproximityprompt then fireproximityprompt(desc) end
+										end)
+									end
+								end
+								if source.Parent then
+									for _, desc in ipairs(source.Parent:GetDescendants()) do
+										if desc:IsA("ProximityPrompt") then
+											pcall(function()
+												if fireproximityprompt then fireproximityprompt(desc) end
+											end)
+										end
+									end
+								end
+								task.wait(0.3)
+							end
+						end
+					end
+				end
+			end)
+		end
+	end
+end)
+
+task.spawn(function()
+	while task.wait(0.5) do
+		if AutoBuyToolsEnabled and HumanoidRootPart then
+			pcall(function()
+				local tycoon = Workspace:FindFirstChild("Tycoon")
+				local searchFolders = {
+					tycoon and tycoon:FindFirstChild("Buttons"),
+					tycoon and tycoon:FindFirstChild("Upgrades"),
+					Workspace,
+				}
+				for _, folder in ipairs(searchFolders) do
+					if folder then
+						for _, obj in ipairs(folder:GetDescendants()) do
+							if not AutoBuyToolsEnabled then return end
+							if obj:IsA("Model") or obj:IsA("BasePart") then
+								local nameL = obj.Name:lower()
+								if string.find(nameL, "spork") or string.find(nameL, "bowl")
+									or string.find(nameL, "tool") or string.find(nameL, "upgrade")
+									or string.find(nameL, "shop") then
+									local targetPart = obj:IsA("BasePart") and obj or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+									if targetPart then
+										local isGreen, isRobux = false, false
+										for _, desc in ipairs(obj:GetDescendants()) do
+											if desc:IsA("BasePart") and desc.Color.G > desc.Color.R + 0.05 then
+												isGreen = true
+											end
+											if desc:IsA("SurfaceGui") or desc:IsA("BillboardGui") then
+												for _, label in ipairs(desc:GetDescendants()) do
+													if label:IsA("TextLabel") and string.find(label.Text:lower(), "robux") then
+														isRobux = true
+													end
+												end
+											end
+										end
+										if isGreen and not isRobux then
+											local oldPos = HumanoidRootPart.CFrame
+											HumanoidRootPart.CFrame = targetPart.CFrame + Vector3.new(0, 3, 0)
+											task.wait(0.2)
+											for _, desc in ipairs(obj:GetDescendants()) do
+												if desc:IsA("ProximityPrompt") then
+													pcall(function()
+														if fireproximityprompt then fireproximityprompt(desc) end
+													end)
+												end
+											end
+											if BuyButton then BuyButton:FireServer(obj.Name) end
+											if ConfirmPurchase then ConfirmPurchase:FireServer(obj.Name) end
+											task.wait(0.2)
+											HumanoidRootPart.CFrame = oldPos
+											task.wait(0.3)
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+			end)
+		end
+	end
+end)
+
+task.spawn(function()
+	while task.wait(2) do
+		if AutoRebirthEnabled then
+			pcall(function()
+				if FinishRebirth then FinishRebirth:FireServer() end
+				if SyncRebirth then SyncRebirth:FireServer() end
+				for _, desc in ipairs(Workspace:GetDescendants()) do
+					if desc:IsA("ProximityPrompt") then
+						local at = (desc.ActionText or ""):lower()
+						local ot = (desc.ObjectText or ""):lower()
+						local pn = desc.Parent and desc.Parent.Name:lower() or ""
+						if string.find(at, "rebirth") or string.find(ot, "rebirth") or string.find(pn, "rebirth") then
+							pcall(function()
+								if fireproximityprompt then fireproximityprompt(desc) end
+							end)
+						end
+					end
+				end
+			end)
+		end
+	end
+end)
+
+task.spawn(function()
+	while task.wait(0.2) do
+		if AutoInteractEnabled then
+			pcall(function()
+				for _, desc in ipairs(Workspace:GetDescendants()) do
+					if desc:IsA("ProximityPrompt") then
+						if HumanoidRootPart and desc.Parent and desc.Parent:IsA("BasePart") then
+							if (HumanoidRootPart.Position - desc.Parent.Position).Magnitude <= (desc.MaxActivationDistance + 5) then
+								pcall(function()
+									if fireproximityprompt then fireproximityprompt(desc) end
+								end)
+							end
+						end
+					end
+				end
+			end)
+		end
+	end
+end)
+
+pcall(function()
+	local VU = game:GetService("VirtualUser")
+	player.Idled:Connect(function()
+		pcall(function()
+			VU:CaptureController()
+			VU:ClickButton2(Vector2.new())
+		end)
+	end)
+end)
+
+
+-- ========== MOVEMENT ENGINE ==========
+local Move = {
+	SpeedOn = false,
+	Speed = 24,
+	FOVOn = false,
+	FOV = 70,
+	InfJump = false,
+	FPSBoost = false,
+	BestFPS = false,
+	Noclip = false,
+	Fly = false,
+	FlySpeed = 50,
+}
+
+local Cam = Workspace.CurrentCamera
+local defaultFOV = Cam and Cam.FieldOfView or 70
+local noclipConn = nil
+local flyConn = nil
+local flyBV = nil
+local flyBG = nil
+
+local function getHum()
+	local c = player.Character
+	return c and c:FindFirstChildOfClass("Humanoid")
+end
+local function getHRP()
+	local c = player.Character
+	return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function applySpeed()
+	local hum = getHum()
+	if not hum then return end
+	if Move.SpeedOn then
+		hum.WalkSpeed = Move.Speed
+	else
+		if hum.WalkSpeed == Move.Speed or hum.WalkSpeed > 20 then
+			hum.WalkSpeed = 16
+		end
+	end
+end
+
+local function applyFOV()
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	if Move.FOVOn then
+		cam.FieldOfView = Move.FOV
+	else
+		cam.FieldOfView = defaultFOV
+	end
+end
+
+-- Infinite jump
+UserInputService.JumpRequest:Connect(function()
+	if not Move.InfJump then return end
+	local hum = getHum()
+	if hum then
+		hum:ChangeState(Enum.HumanoidStateType.Jumping)
+	end
+end)
+
+local function setNoclip(on)
+	Move.Noclip = on
+	if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
+	if on then
+		noclipConn = RunService.Stepped:Connect(function()
+			local char = player.Character
+			if not char then return end
+			for _, p in ipairs(char:GetDescendants()) do
+				if p:IsA("BasePart") then
+					p.CanCollide = false
+				end
+			end
+		end)
+	end
+end
+
+local function stopFly()
+	if flyConn then flyConn:Disconnect(); flyConn = nil end
+	if flyBV then pcall(function() flyBV:Destroy() end); flyBV = nil end
+	if flyBG then pcall(function() flyBG:Destroy() end); flyBG = nil end
+	local hum = getHum()
+	if hum then hum.PlatformStand = false end
+end
+
+local function startFly()
+	stopFly()
+	local hrp = getHRP()
+	local hum = getHum()
+	if not hrp or not hum then return end
+	hum.PlatformStand = true
+	flyBV = Instance.new("BodyVelocity")
+	flyBV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+	flyBV.Velocity = Vector3.zero
+	flyBV.Parent = hrp
+	flyBG = Instance.new("BodyGyro")
+	flyBG.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+	flyBG.P = 1e4
+	flyBG.Parent = hrp
+	-- Superhero-style: camera look + WASD / mobile move direction
+	flyConn = RunService.RenderStepped:Connect(function()
+		if not Move.Fly then stopFly(); return end
+		hrp = getHRP()
+		hum = getHum()
+		if not hrp or not hum then stopFly(); return end
+		local cam = Workspace.CurrentCamera
+		if not cam then return end
+		local look = cam.CFrame.LookVector
+		local right = cam.CFrame.RightVector
+		local move = Vector3.zero
+		-- keyboard
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + look end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - look end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - right end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + right end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsKeyDown(Enum.KeyCode.E) then
+			move = move + Vector3.new(0, 1, 0)
+		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.Q) then
+			move = move - Vector3.new(0, 1, 0)
+		end
+		-- mobile / thumbstick
+		local md = hum.MoveDirection
+		if md.Magnitude > 0.05 then
+			local flat = Vector3.new(look.X, 0, look.Z)
+			if flat.Magnitude > 0.01 then flat = flat.Unit end
+			local rflat = Vector3.new(right.X, 0, right.Z)
+			if rflat.Magnitude > 0.01 then rflat = rflat.Unit end
+			move = move + flat * md.Z + rflat * md.X
+		end
+		if move.Magnitude > 0 then
+			move = move.Unit * Move.FlySpeed
+		end
+		flyBV.Velocity = move
+		flyBG.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + look)
+	end)
+end
+
+local function setFly(on)
+	Move.Fly = on
+	if on then startFly() else stopFly() end
+end
+
+local function applyFPSBoost(level)
+	-- level 0 off, 1 normal, 2 best
+	pcall(function()
+		local Lighting = game:GetService("Lighting")
+		local Terrain = Workspace:FindFirstChildOfClass("Terrain")
+		if level >= 1 then
+			settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+			Lighting.GlobalShadows = false
+			Lighting.FogEnd = 1e6
+			if Terrain then
+				Terrain.WaterWaveSize = 0
+				Terrain.WaterWaveSpeed = 0
+				Terrain.WaterReflectance = 0
+				Terrain.WaterTransparency = 1
+			end
+			for _, v in ipairs(Lighting:GetChildren()) do
+				if v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect")
+					or v:IsA("BloomEffect") or v:IsA("ColorCorrectionEffect") then
+					v.Enabled = false
+				end
+			end
+		end
+		if level >= 2 then
+			pcall(function() setfpscap(1000) end)
+			for _, obj in ipairs(Workspace:GetDescendants()) do
+				if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke")
+					or obj:IsA("Fire") or obj:IsA("Sparkles") then
+					obj.Enabled = false
+				end
+				if obj:IsA("BasePart") then
+					obj.CastShadow = false
+					obj.Material = Enum.Material.SmoothPlastic
+				end
+				if obj:IsA("Decal") or obj:IsA("Texture") then
+					obj.Transparency = 1
+				end
+			end
+		end
+		if level == 0 then
+			settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+			Lighting.GlobalShadows = true
+		end
+	end)
+end
+
+RunService.Heartbeat:Connect(function()
+	if Move.SpeedOn then applySpeed() end
+	if Move.FOVOn then applyFOV() end
+end)
+
+player.CharacterAdded:Connect(function()
+	task.wait(0.3)
+	if Move.SpeedOn then applySpeed() end
+	if Move.Fly then startFly() end
+	if Move.Noclip then setNoclip(true) end
+end)
+
+print("[KHUB] Movement engine ready")
+
+print("[KHUB] Oil Tycoon engine ready")
+
+
+local OrbState = { visible = true }
+local ConfigFolder = "KHUB_OilTycoon_Configs"
+
+local THEME = {
+	bg = Color3.fromRGB(5, 7, 18), panel = Color3.fromRGB(10, 14, 32),
+	card = Color3.fromRGB(17, 23, 48), inner = Color3.fromRGB(10, 14, 30),
+	accent = Color3.fromRGB(70, 225, 255), accent2 = Color3.fromRGB(175, 110, 255),
+	gold = Color3.fromRGB(255, 216, 140), text = Color3.fromRGB(238, 242, 255),
+	dim = Color3.fromRGB(150, 160, 205), mute = Color3.fromRGB(100, 112, 158),
+	stroke = Color3.fromRGB(80, 120, 210), green = Color3.fromRGB(95, 235, 165),
+	red = Color3.fromRGB(255, 100, 120), off = Color3.fromRGB(38, 44, 80),
+	white = Color3.fromRGB(255, 255, 255),
+}
+
+local function corner(p, r)
+	local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, r or 10); c.Parent = p; return c
+end
+local function mkstroke(p, col, th, tr)
+	local s = Instance.new("UIStroke"); s.Color = col or THEME.stroke; s.Thickness = th or 1.2; s.Transparency = tr or 0.35; s.Parent = p; return s
+end
+local function openLink(url)
+	pcall(function() if openlink then openlink(url) elseif setclipboard then setclipboard(url) end end)
+end
+
+local Parent = CoreGui
+pcall(function() if gethui then Parent = gethui() end end)
+pcall(function()
+	for _, n in ipairs({"KHUB_OilTycoon", "KHUB_UI", "KHUB_UI_Only"}) do
+		local o = Parent:FindFirstChild(n); if o then o:Destroy() end
+		local pg = player:FindFirstChild("PlayerGui")
+		if pg then local o2 = pg:FindFirstChild(n); if o2 then o2:Destroy() end end
+	end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_OilTycoon"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999999
+pcall(function() if gethui then ScreenGui.Parent = gethui() end end)
+if not ScreenGui.Parent then pcall(function() ScreenGui.Parent = CoreGui end) end
+if not ScreenGui.Parent then ScreenGui.Parent = player:WaitForChild("PlayerGui") end
+
+-- Splash
+local Splash = Instance.new("Frame")
+Splash.Size = UDim2.new(1,0,1,0); Splash.BackgroundColor3 = Color3.fromRGB(4,5,14)
+Splash.BorderSizePixel = 0; Splash.ZIndex = 200; Splash.Parent = ScreenGui
+local SpTitle = Instance.new("TextLabel")
+SpTitle.Size = UDim2.new(1,0,0,60); SpTitle.Position = UDim2.new(0,0,0.42,0)
+SpTitle.BackgroundTransparency = 1; SpTitle.Text = "KHUB"
+SpTitle.Font = Enum.Font.GothamBlack; SpTitle.TextSize = 54
+SpTitle.TextColor3 = Color3.new(1,1,1); SpTitle.ZIndex = 201; SpTitle.Parent = Splash
+local SpG = Instance.new("UIGradient")
+SpG.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, THEME.accent), ColorSequenceKeypoint.new(0.4, Color3.new(1,1,1)),
+	ColorSequenceKeypoint.new(0.7, THEME.accent2), ColorSequenceKeypoint.new(1, THEME.gold),
+})
+SpG.Parent = SpTitle
+local SpSub = Instance.new("TextLabel")
+SpSub.Size = UDim2.new(1,0,0,24); SpSub.Position = UDim2.new(0,0,0.52,0)
+SpSub.BackgroundTransparency = 1; SpSub.Text = "Oil Tycoon"
+SpSub.Font = Enum.Font.GothamBold; SpSub.TextSize = 16; SpSub.TextColor3 = THEME.gold
+SpSub.ZIndex = 201; SpSub.Parent = Splash
+task.spawn(function()
+	task.wait(1.5)
+	TweenService:Create(Splash, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+	task.wait(0.55); pcall(function() Splash:Destroy() end)
+end)
+
+local BASE_W, BASE_H = 680, 460
+local Scale = Instance.new("UIScale"); Scale.Parent = ScreenGui
+local function updateScale()
+	local cam = Workspace.CurrentCamera; if not cam then return end
+	local vs = cam.ViewportSize
+	Scale.Scale = math.clamp(math.min(vs.X / 800, vs.Y / 520), 0.75, 1.45)
+end
+updateScale()
+pcall(function() Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale) end)
+
+local Win = Instance.new("Frame")
+Win.Name = "Win"; Win.Size = UDim2.new(0, BASE_W, 0, BASE_H)
+Win.Position = UDim2.new(0.5, -BASE_W/2, 0.5, -BASE_H/2)
+Win.BackgroundColor3 = THEME.bg; Win.BorderSizePixel = 0
+Win.ClipsDescendants = true; Win.Visible = true; Win.Parent = ScreenGui
+corner(Win, 20); mkstroke(Win, THEME.accent2, 2, 0.3)
+
+local WinBG = Instance.new("ImageLabel")
+WinBG.Size = UDim2.new(1,0,1,0); WinBG.BackgroundTransparency = 1
+WinBG.Image = BG_ID; WinBG.ScaleType = Enum.ScaleType.Crop
+WinBG.ImageTransparency = 0.3; WinBG.ZIndex = 0; WinBG.Parent = Win
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1,0,0,52); Header.BackgroundColor3 = THEME.panel
+Header.BackgroundTransparency = 0.55; Header.BorderSizePixel = 0; Header.ZIndex = 5; Header.Parent = Win
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.new(0,36,0,36); Logo.Position = UDim2.new(0,12,0.5,-18)
+Logo.BackgroundTransparency = 1; Logo.Image = LOGO_ID; Logo.ZIndex = 6; Logo.Parent = Header
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0,280,1,0); Title.Position = UDim2.new(0,56,0,0)
+Title.BackgroundTransparency = 1; Title.Text = "KHUB · Oil Tycoon"
+Title.Font = Enum.Font.GothamBlack; Title.TextSize = 22
+Title.TextColor3 = Color3.new(1,1,1); Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 6; Title.Parent = Header
+local TG = Instance.new("UIGradient")
+TG.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120,190,255)),
+	ColorSequenceKeypoint.new(0.5, Color3.new(1,1,1)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(180,130,255)),
+})
+TG.Parent = Title
+task.spawn(function()
+	while Title.Parent do TG.Offset = Vector2.new(math.sin(tick()*1.2)*0.5, 0); task.wait(0.03) end
+end)
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0,32,0,28); MinBtn.Position = UDim2.new(1,-78,0.5,-14)
+MinBtn.BackgroundColor3 = Color3.fromRGB(30,38,70); MinBtn.Text = "-"
+MinBtn.Font = Enum.Font.GothamBold; MinBtn.TextSize = 16; MinBtn.TextColor3 = THEME.text
+MinBtn.ZIndex = 7; MinBtn.Parent = Header; corner(MinBtn, 8)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0,32,0,28); CloseBtn.Position = UDim2.new(1,-40,0.5,-14)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(66,22,36); CloseBtn.Text = "X"
+CloseBtn.Font = Enum.Font.GothamBold; CloseBtn.TextSize = 14; CloseBtn.TextColor3 = THEME.text
+CloseBtn.ZIndex = 7; CloseBtn.Parent = Header; corner(CloseBtn, 8)
+
+do
+	local dragging, dragStart, startPos
+	Header.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true; dragStart = i.Position; startPos = Win.Position
+			i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+			local d = i.Position - dragStart
+			Win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset+d.X, startPos.Y.Scale, startPos.Y.Offset+d.Y)
+		end
+	end)
+end
+
+local Rail = Instance.new("ScrollingFrame")
+Rail.Size = UDim2.new(0,88,1,-52); Rail.Position = UDim2.new(0,0,0,52)
+Rail.BackgroundColor3 = THEME.panel; Rail.BackgroundTransparency = 0.35
+Rail.BorderSizePixel = 0; Rail.ScrollBarThickness = 2
+Rail.CanvasSize = UDim2.new(0,0,0,0); Rail.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Rail.ZIndex = 5; Rail.Parent = Win
+local RailList = Instance.new("UIListLayout")
+RailList.Padding = UDim.new(0,10); RailList.HorizontalAlignment = Enum.HorizontalAlignment.Center; RailList.SortOrder = Enum.SortOrder.LayoutOrder; RailList.Parent = Rail
+local RailPad = Instance.new("UIPadding"); RailPad.PaddingTop = UDim.new(0,8); RailPad.Parent = Rail
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1,-100,1,-60); Content.Position = UDim2.new(0,94,0,56)
+Content.BackgroundTransparency = 1; Content.ZIndex = 5; Content.Parent = Win
+
+local PageTitle = Instance.new("TextLabel")
+PageTitle.Size = UDim2.new(1,-10,0,22); PageTitle.Position = UDim2.new(0,4,0,0)
+PageTitle.BackgroundTransparency = 1; PageTitle.Text = "Welcome"
+PageTitle.Font = Enum.Font.GothamBlack; PageTitle.TextSize = 18
+PageTitle.TextColor3 = THEME.text; PageTitle.TextXAlignment = Enum.TextXAlignment.Left
+PageTitle.ZIndex = 6; PageTitle.Parent = Content
+
+local PageSub = Instance.new("TextLabel")
+PageSub.Size = UDim2.new(1,-10,0,16); PageSub.Position = UDim2.new(0,4,0,22)
+PageSub.BackgroundTransparency = 1; PageSub.Text = "KHUB · Oil Tycoon"
+PageSub.Font = Enum.Font.Gotham; PageSub.TextSize = 12
+PageSub.TextColor3 = THEME.dim; PageSub.TextXAlignment = Enum.TextXAlignment.Left
+PageSub.ZIndex = 6; PageSub.Parent = Content
+
+local Pages = Instance.new("Frame")
+Pages.Size = UDim2.new(1,0,1,-44); Pages.Position = UDim2.new(0,0,0,42)
+Pages.BackgroundTransparency = 1; Pages.ClipsDescendants = true; Pages.ZIndex = 5; Pages.Parent = Content
+
+local Tabs, ActiveId = {}, nil
+local TAB_ICONS = {
+	Welcome  = "",
+	Farm     = "",
+	Movement = "",
+	Server   = "",
+	Settings = "",
+	Config   = "",
+}
+
+local function createPage(id)
+	local sc = Instance.new("ScrollingFrame")
+	sc.Name = id; sc.Size = UDim2.new(1,0,1,0); sc.BackgroundTransparency = 1
+	sc.BorderSizePixel = 0; sc.ScrollBarThickness = 3; sc.ScrollBarImageColor3 = THEME.accent2
+	sc.CanvasSize = UDim2.new(0,0,0,0); sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	sc.Visible = false; sc.ZIndex = 6; sc.Parent = Pages
+	local lay = Instance.new("UIListLayout"); lay.Padding = UDim.new(0,8); lay.SortOrder = Enum.SortOrder.LayoutOrder; lay.Parent = sc
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0,4); pad.PaddingBottom = UDim.new(0,12)
+	pad.PaddingLeft = UDim.new(0,4); pad.PaddingRight = UDim.new(0,8); pad.Parent = sc
+	return sc
+end
+
+local function switchPage(id, title, subtitle)
+	ActiveId = id
+	PageTitle.Text = title or id
+	PageSub.Text = subtitle or ""
+	for _, pg in ipairs(Pages:GetChildren()) do
+		if pg:IsA("ScrollingFrame") then pg.Visible = (pg.Name == id) end
+	end
+	for tid, btnRef in pairs(Tabs) do
+		if typeof(btnRef) == "Instance" then
+			local bar = btnRef:FindFirstChild("ActiveBar")
+			local iconF = btnRef:FindFirstChild("IconFrame")
+			local isActive = (tid == id)
+			if bar then
+				bar.BackgroundTransparency = isActive and 0 or 1
+				bar.Size = isActive and UDim2.new(0, 3, 0.6, 0) or UDim2.new(0, 3, 0.3, 0)
+			end
+			if iconF then
+				iconF.BackgroundColor3 = isActive and THEME.accent2 or Color3.fromRGB(24,30,60)
+				local stroke = iconF:FindFirstChildOfClass("UIStroke")
+				if stroke then stroke.Transparency = isActive and 0.1 or 0.5 end
+			end
+		end
+	end
+end
+
+local function createTabButton(id, label, order, pageTitle, pageSub)
+	local b = Instance.new("TextButton")
+	b.Name = id; b.Size = UDim2.new(0,78,0,72); b.BackgroundTransparency = 1
+	b.Text = ""; b.LayoutOrder = order; b.ZIndex = 8; b.Parent = Rail
+
+	local iconFrame = Instance.new("Frame")
+	iconFrame.Name = "IconFrame"; iconFrame.Size = UDim2.new(0,68,0,58)
+	iconFrame.Position = UDim2.new(0.5,-34,0,4)
+	iconFrame.BackgroundColor3 = Color3.fromRGB(24,30,60); iconFrame.BackgroundTransparency = 0.08
+	iconFrame.ZIndex = 9; iconFrame.Parent = b
+	corner(iconFrame, 12); mkstroke(iconFrame, THEME.accent2, 1.6, 0.35)
+
+	-- Text-only tab (no image icons)
+	local icon = Instance.new("TextLabel")
+	icon.Name = "TabText"
+	icon.Size = UDim2.new(1,-8,1,-8); icon.Position = UDim2.new(0,4,0,4)
+	icon.BackgroundTransparency = 1
+	icon.Text = label
+	icon.Font = Enum.Font.GothamBold
+	icon.TextSize = 14
+	icon.TextColor3 = Color3.fromRGB(230,235,255)
+	icon.TextWrapped = true
+	icon.ZIndex = 10; icon.Parent = iconFrame
+
+	local activeBar = Instance.new("Frame")
+	activeBar.Name = "ActiveBar"; activeBar.Size = UDim2.new(0,4,0.5,0)
+	activeBar.Position = UDim2.new(1,-4,0.25,0)
+	activeBar.BackgroundColor3 = THEME.white; activeBar.BackgroundTransparency = 1
+	activeBar.BorderSizePixel = 0; activeBar.ZIndex = 11; activeBar.Parent = b
+	corner(activeBar, 2)
+
+	b.MouseButton1Click:Connect(function()
+		TweenService:Create(iconFrame, TweenInfo.new(0.12, Enum.EasingStyle.Back), {Size = UDim2.new(0,72,0,62)}):Play()
+		task.delay(0.12, function()
+			TweenService:Create(iconFrame, TweenInfo.new(0.15), {Size = UDim2.new(0,68,0,58)}):Play()
+		end)
+		switchPage(id, pageTitle or label, pageSub or "")
+	end)
+	Tabs[id] = b
+	return b
+end
+
+local function card(parent, title)
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1,-4,0,0); f.AutomaticSize = Enum.AutomaticSize.Y
+	f.BackgroundColor3 = THEME.card; f.BackgroundTransparency = 0.25
+	f.BorderSizePixel = 0; f.ZIndex = 7; f.Parent = parent
+	corner(f, 12); mkstroke(f, THEME.stroke, 1, 0.5)
+	local lay = Instance.new("UIListLayout"); lay.Padding = UDim.new(0,6); lay.SortOrder = Enum.SortOrder.LayoutOrder; lay.Parent = f
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0,10); pad.PaddingBottom = UDim.new(0,10)
+	pad.PaddingLeft = UDim.new(0,10); pad.PaddingRight = UDim.new(0,10); pad.Parent = f
+	if title then
+		local t = Instance.new("TextLabel")
+		t.Size = UDim2.new(1,0,0,18); t.BackgroundTransparency = 1; t.Text = title
+		t.Font = Enum.Font.GothamBold; t.TextSize = 13; t.TextColor3 = THEME.gold
+		t.TextXAlignment = Enum.TextXAlignment.Left; t.ZIndex = 8; t.LayoutOrder = 0; t.Parent = f
+	end
+	return f
+end
+
+local function btn(parent, text, callback, color)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1,0,0,36); b.BackgroundColor3 = color or Color3.fromRGB(34,44,84)
+	b.Text = text; b.Font = Enum.Font.GothamBold; b.TextSize = 13; b.TextColor3 = THEME.text
+	b.ZIndex = 8; b.Parent = parent; corner(b, 8)
+	b.MouseButton1Click:Connect(function() pcall(callback) end)
+	return b
+end
+
+local function toggle(parent, text, get, set)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1,0,0,34); row.BackgroundTransparency = 1; row.ZIndex = 8; row.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1,-56,1,0); lbl.BackgroundTransparency = 1; lbl.Text = text
+	lbl.Font = Enum.Font.GothamMedium; lbl.TextSize = 13; lbl.TextColor3 = THEME.text
+	lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.ZIndex = 9; lbl.Parent = row
+	local sw = Instance.new("TextButton")
+	sw.Size = UDim2.new(0,48,0,24); sw.Position = UDim2.new(1,-48,0.5,-12)
+	sw.BackgroundColor3 = get() and THEME.green or THEME.off; sw.Text = ""; sw.ZIndex = 9; sw.Parent = row
+	corner(sw, 12)
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.new(0,18,0,18)
+	knob.Position = get() and UDim2.new(1,-21,0.5,-9) or UDim2.new(0,3,0.5,-9)
+	knob.BackgroundColor3 = THEME.white; knob.ZIndex = 10; knob.Parent = sw; corner(knob, 9)
+	sw.MouseButton1Click:Connect(function()
+		local v = not get(); set(v)
+		sw.BackgroundColor3 = v and THEME.green or THEME.off
+		TweenService:Create(knob, TweenInfo.new(0.15), {
+			Position = v and UDim2.new(1,-21,0.5,-9) or UDim2.new(0,3,0.5,-9)
+		}):Play()
+	end)
+	return row
+end
+
+local function slider(parent, text, min, max, get, set)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1,0,0,48); row.BackgroundTransparency = 1; row.ZIndex = 8; row.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1,0,0,16); lbl.BackgroundTransparency = 1
+	lbl.Text = text .. ": " .. tostring(math.floor(get()+0.5))
+	lbl.Font = Enum.Font.Gotham; lbl.TextSize = 12; lbl.TextColor3 = THEME.dim
+	lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.ZIndex = 9; lbl.Parent = row
+	local track = Instance.new("Frame")
+	track.Size = UDim2.new(1,0,0,10); track.Position = UDim2.new(0,0,0,26)
+	track.BackgroundColor3 = THEME.off; track.BorderSizePixel = 0; track.ZIndex = 9; track.Parent = row
+	corner(track, 5)
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new(math.clamp((get()-min)/(max-min),0,1),0,1,0)
+	fill.BackgroundColor3 = THEME.accent; fill.BorderSizePixel = 0; fill.ZIndex = 10; fill.Parent = track
+	corner(fill, 5)
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.new(0,16,0,16); knob.AnchorPoint = Vector2.new(0.5,0.5)
+	knob.Position = UDim2.new(math.clamp((get()-min)/(max-min),0,1),0,0.5,0)
+	knob.BackgroundColor3 = THEME.white; knob.BorderSizePixel = 0; knob.ZIndex = 11; knob.Parent = track
+	corner(knob, 8)
+	local dragging = false
+	local function applyFromX(x)
+		local absPos = track.AbsolutePosition.X
+		local absSize = math.max(track.AbsoluteSize.X, 1)
+		local rel = math.clamp((x - absPos) / absSize, 0, 1)
+		local val = math.floor(min + (max - min) * rel + 0.5)
+		set(val)
+		lbl.Text = text .. ": " .. tostring(val)
+		fill.Size = UDim2.new(rel,0,1,0)
+		knob.Position = UDim2.new(rel,0,0.5,0)
+	end
+	track.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true; applyFromX(i.Position.X)
+		end
+	end)
+	knob.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(i)
+		if not dragging then return end
+		if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+			applyFromX(i.Position.X)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+	return row
+end
+
+local function textBox(parent, placeholder)
+	local tb = Instance.new("TextBox")
+	tb.Size = UDim2.new(1,0,0,34); tb.BackgroundColor3 = THEME.inner; tb.Text = ""
+	tb.PlaceholderText = placeholder or ""; tb.Font = Enum.Font.Gotham; tb.TextSize = 13
+	tb.TextColor3 = THEME.text; tb.PlaceholderColor3 = THEME.mute
+	tb.ClearTextOnFocus = false; tb.ZIndex = 8; tb.Parent = parent; corner(tb, 8)
+	return tb
+end
+
+-- ========== WELCOME (first) ==========
+local PageWelcome = createPage("Welcome")
+createTabButton("Welcome", "Welcome", 1, "Welcome", "KHUB · Oil Tycoon")
+do
+	-- Big KHUB hero
+	local Hero = Instance.new("Frame")
+	Hero.Size = UDim2.new(1, -4, 0, 146)
+	Hero.BackgroundColor3 = THEME.card
+	Hero.BackgroundTransparency = 0.15
+	Hero.BorderSizePixel = 0
+	Hero.ZIndex = 9
+	Hero.LayoutOrder = 1
+	Hero.Parent = PageWelcome
+	corner(Hero, 16)
+	mkstroke(Hero, THEME.accent2, 1.4, 0.3)
+
+	local HeroText = Instance.new("TextLabel")
+	HeroText.Size = UDim2.new(1, -36, 0, 60)
+	HeroText.Position = UDim2.fromOffset(24, 18)
+	HeroText.BackgroundTransparency = 1
+	HeroText.Text = "KHUB"
+	HeroText.Font = Enum.Font.GothamBlack
+	HeroText.TextSize = 58
+	HeroText.TextColor3 = Color3.new(1, 1, 1)
+	HeroText.TextXAlignment = Enum.TextXAlignment.Left
+	HeroText.ZIndex = 12
+	HeroText.Parent = Hero
+
+	local HeroGrad = Instance.new("UIGradient")
+	HeroGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.00, THEME.accent),
+		ColorSequenceKeypoint.new(0.35, Color3.new(1, 1, 1)),
+		ColorSequenceKeypoint.new(0.60, THEME.accent2),
+		ColorSequenceKeypoint.new(1.00, THEME.gold),
+	})
+	HeroGrad.Offset = Vector2.new(-1.4, 0)
+	HeroGrad.Parent = HeroText
+	task.spawn(function()
+		while HeroText.Parent do
+			local t = (tick() % 3) / 3
+			HeroGrad.Offset = Vector2.new(-1.4 + t * 2.8, 0)
+			task.wait(0.03)
+		end
+	end)
+
+	local HeroBy = Instance.new("TextLabel")
+	HeroBy.Size = UDim2.new(1, -36, 0, 22)
+	HeroBy.Position = UDim2.fromOffset(26, 82)
+	HeroBy.BackgroundTransparency = 1
+	HeroBy.Text = "by Kyiel Pambid"
+	HeroBy.Font = Enum.Font.GothamBold
+	HeroBy.TextSize = 17
+	HeroBy.TextColor3 = THEME.gold
+	HeroBy.TextXAlignment = Enum.TextXAlignment.Left
+	HeroBy.ZIndex = 12
+	HeroBy.Parent = Hero
+
+	-- Typewriter moving text under KHUB
+	local HeroType = Instance.new("TextLabel")
+	HeroType.Size = UDim2.new(1, -36, 0, 18)
+	HeroType.Position = UDim2.fromOffset(26, 110)
+	HeroType.BackgroundTransparency = 1
+	HeroType.Text = ""
+	HeroType.Font = Enum.Font.Code
+	HeroType.TextSize = 12
+	HeroType.TextColor3 = THEME.dim
+	HeroType.TextXAlignment = Enum.TextXAlignment.Left
+	HeroType.ZIndex = 12
+	HeroType.Parent = Hero
+
+	task.spawn(function()
+		local phrases = {
+			"Join Discord for more scripts",
+			"Subscribe on my channel",
+			"Toggle: RightShift / RightCtrl / K",
+			"KHUB · smooth like butter",
+		}
+		while HeroType.Parent do
+			for _, phrase in ipairs(phrases) do
+				if not HeroType.Parent then break end
+				HeroType.Text = ""
+				for i = 1, #phrase do
+					if not HeroType.Parent then break end
+					HeroType.Text = string.sub(phrase, 1, i)
+					task.wait(0.028)
+				end
+				task.wait(1.8)
+				for i = #phrase, 1, -1 do
+					if not HeroType.Parent then break end
+					HeroType.Text = string.sub(phrase, 1, i)
+					task.wait(0.012)
+				end
+				task.wait(0.2)
+			end
+		end
+	end)
+
+	-- Profile card
+	local ProfileCard = card(PageWelcome, "Player")
+	ProfileCard.LayoutOrder = 2
+
+	local PF = Instance.new("Frame")
+	PF.Size = UDim2.new(1, 0, 0, 100)
+	PF.BackgroundColor3 = THEME.inner
+	PF.BackgroundTransparency = 0.1
+	PF.BorderSizePixel = 0
+	PF.ZIndex = 10
+	PF.Parent = ProfileCard
+	corner(PF, 10)
+	mkstroke(PF, THEME.stroke, 1, 0.35)
+
+	local Avatar = Instance.new("ImageLabel")
+	Avatar.Size = UDim2.fromOffset(72, 72)
+	Avatar.Position = UDim2.new(0, 14, 0.5, -36)
+	Avatar.BackgroundColor3 = Color3.fromRGB(30, 38, 70)
+	Avatar.BackgroundTransparency = 0.05
+	Avatar.ZIndex = 12
+	Avatar.Parent = PF
+	corner(Avatar, 36)
+	mkstroke(Avatar, THEME.accent, 1.5, 0.3)
+	pcall(function()
+		local content, isReady = Players:GetUserThumbnailAsync(
+			player.UserId,
+			Enum.ThumbnailType.HeadShot,
+			Enum.ThumbnailSize.Size150x150
+		)
+		if isReady then Avatar.Image = content end
+	end)
+
+	local function profRow(y, txt, col, font, size)
+		local l = Instance.new("TextLabel")
+		l.Size = UDim2.new(1, -110, 0, 22)
+		l.Position = UDim2.new(0, 100, 0, y)
+		l.BackgroundTransparency = 1
+		l.Text = txt
+		l.Font = font or Enum.Font.GothamBold
+		l.TextSize = size or 14
+		l.TextColor3 = col or THEME.text
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.ZIndex = 12
+		l.Parent = PF
+		return l
+	end
+	profRow(16, "hey, " .. (player.DisplayName or player.Name) .. " :)", THEME.gold, Enum.Font.GothamBold, 17)
+	profRow(42, "@" .. player.Name, THEME.dim, Enum.Font.Gotham, 13)
+	profRow(64, "user id · " .. tostring(player.UserId), THEME.mute, Enum.Font.Code, 12)
+
+	-- Links
+	local sc = card(PageWelcome, "Join & Subscribe")
+	sc.LayoutOrder = 3
+	btn(sc, "JOIN DISCORD FOR MORE SCRIPTS", function() openLink(DISCORD) end, Color3.fromRGB(45, 70, 160))
+	btn(sc, "SUBSCRIBE ON YOUTUBE", function() openLink(YOUTUBE) end, Color3.fromRGB(150, 40, 50))
+
+	-- Status
+	local StatusCard = card(PageWelcome, "Status")
+	StatusCard.LayoutOrder = 4
+	local StatusLbl = Instance.new("TextLabel")
+	StatusLbl.Size = UDim2.new(1, 0, 0, 20)
+	StatusLbl.BackgroundTransparency = 1
+	StatusLbl.Text = "KHUB online · everything ready"
+	StatusLbl.Font = Enum.Font.Gotham
+	StatusLbl.TextSize = 12
+	StatusLbl.TextColor3 = THEME.green
+	StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+	StatusLbl.ZIndex = 8
+	StatusLbl.Parent = StatusCard
+	task.spawn(function()
+		local statusList = {
+			"KHUB online · everything ready",
+			"Join Discord for more scripts",
+			"Toggle: RightShift / RightCtrl / K",
+		}
+		local i = 1
+		while StatusLbl.Parent do
+			StatusLbl.Text = statusList[i]
+			StatusLbl.TextTransparency = 1
+			TweenService:Create(StatusLbl, TweenInfo.new(0.5), { TextTransparency = 0 }):Play()
+			i = i % #statusList + 1
+			task.wait(3.5)
+		end
+	end)
+
+	-- Keybinds
+	local info = card(PageWelcome, "Keybinds")
+	info.LayoutOrder = 5
+	local tip = Instance.new("TextLabel")
+	tip.Size = UDim2.new(1, 0, 0, 50)
+	tip.BackgroundTransparency = 1
+	tip.Text = "• RightShift  Toggle UI\n• RightCtrl  Toggle UI\n• K  Toggle UI\n• Drag header to move window"
+	tip.Font = Enum.Font.Gotham
+	tip.TextSize = 12
+	tip.TextColor3 = THEME.dim
+	tip.TextXAlignment = Enum.TextXAlignment.Left
+	tip.TextYAlignment = Enum.TextYAlignment.Top
+	tip.ZIndex = 8
+	tip.Parent = info
+end
+
+
+
+-- Green tips box on Welcome
+do
+	local info = Instance.new("Frame")
+	info.Size = UDim2.new(1, -4, 0, 0)
+	info.AutomaticSize = Enum.AutomaticSize.Y
+	info.BackgroundColor3 = Color3.fromRGB(18, 55, 32)
+	info.BackgroundTransparency = 0.15
+	info.BorderSizePixel = 0
+	info.ZIndex = 7
+	info.LayoutOrder = -1
+	-- parent after page exists - attach via createPage content
+end
+
+local PageFarm = createPage("Farm")
+createTabButton("Farm", "Farm", 2, "Farm", "Oil · Nuggets · Paths")
+do
+	-- Green instructions box (top of main/farm tab)
+	local info = Instance.new("Frame")
+	info.Size = UDim2.new(1, -4, 0, 0)
+	info.AutomaticSize = Enum.AutomaticSize.Y
+	info.BackgroundColor3 = Color3.fromRGB(18, 55, 32)
+	info.BackgroundTransparency = 0.15
+	info.BorderSizePixel = 0
+	info.ZIndex = 7
+	info.Parent = PageFarm
+	corner(info, 12)
+	mkstroke(info, Color3.fromRGB(60, 200, 110), 1.5, 0.25)
+	local infoPad = Instance.new("UIPadding")
+	infoPad.PaddingTop = UDim.new(0, 10); infoPad.PaddingBottom = UDim.new(0, 10)
+	infoPad.PaddingLeft = UDim.new(0, 12); infoPad.PaddingRight = UDim.new(0, 12)
+	infoPad.Parent = info
+	local infoLay = Instance.new("UIListLayout")
+	infoLay.Padding = UDim.new(0, 4); infoLay.SortOrder = Enum.SortOrder.LayoutOrder
+	infoLay.Parent = info
+	local function infoLine(txt, size, color)
+		local l = Instance.new("TextLabel")
+		l.Size = UDim2.new(1, 0, 0, 0); l.AutomaticSize = Enum.AutomaticSize.Y
+		l.BackgroundTransparency = 1
+		l.Text = txt; l.Font = Enum.Font.GothamMedium; l.TextSize = size or 12
+		l.TextColor3 = color or Color3.fromRGB(180, 255, 200)
+		l.TextWrapped = true; l.TextXAlignment = Enum.TextXAlignment.Left
+		l.ZIndex = 8; l.Parent = info
+		return l
+	end
+	infoLine("Made by KHUB", 13, Color3.fromRGB(120, 255, 160))
+	infoLine("Join Discord  ·  For more scripts etc.", 11, Color3.fromRGB(160, 230, 180))
+	infoLine("This game: keep Auto Green Objects ON (green buttons only).", 11)
+	infoLine("Green color = Auto Oil farm. Want money? turn ON Auto Nuggets.", 11)
+	infoLine("Keybinds: RightShift / RightCtrl / K  ·  toggle UI", 11, Color3.fromRGB(140, 210, 160))
+
+	local c = card(PageFarm, "AUTO FARM")
+	toggle(c, "Auto TP ALL Available Green Objects", function() return AutoTPPathEnabled end, function(v)
+		AutoTPPathEnabled = v
+	end)
+	toggle(c, "Auto Collect Gold Nuggets", function() return AutoNuggetsEnabled end, function(v)
+		AutoNuggetsEnabled = v
+	end)
+	toggle(c, "Auto Farm Oil Sources & Deposit", function() return AutoOilSourceEnabled end, function(v)
+		AutoOilSourceEnabled = v
+	end)
+	toggle(c, "Auto Buy Spork / Bowl / Tools", function() return AutoBuyToolsEnabled end, function(v)
+		AutoBuyToolsEnabled = v
+	end)
+	toggle(c, "Auto Rebirth", function() return AutoRebirthEnabled end, function(v)
+		AutoRebirthEnabled = v
+	end)
+	toggle(c, "Auto Interact (ProximityPrompts)", function() return AutoInteractEnabled end, function(v)
+		AutoInteractEnabled = v
+	end)
+end
+
+-- SERVER TAB
+
+local PageMovement = createPage("Movement")
+createTabButton("Movement", "Move", 3, "Movement", "Speed · Fly · FPS")
+do
+	local c = card(PageMovement, "SPEED & FOV")
+	toggle(c, "Custom WalkSpeed", function() return Move.SpeedOn end, function(v)
+		Move.SpeedOn = v
+		applySpeed()
+	end)
+	slider(c, "WalkSpeed", 16, 200, function() return Move.Speed end, function(v)
+		Move.Speed = v
+		if Move.SpeedOn then applySpeed() end
+	end)
+	toggle(c, "Custom FOV", function() return Move.FOVOn end, function(v)
+		Move.FOVOn = v
+		applyFOV()
+	end)
+	slider(c, "FOV", 50, 120, function() return Move.FOV end, function(v)
+		Move.FOV = v
+		if Move.FOVOn then applyFOV() end
+	end)
+
+	local c2 = card(PageMovement, "JUMP & CLIP")
+	toggle(c2, "Infinite Jump", function() return Move.InfJump end, function(v)
+		Move.InfJump = v
+	end)
+	toggle(c2, "Noclip", function() return Move.Noclip end, function(v)
+		setNoclip(v)
+	end)
+
+	local c3 = card(PageMovement, "FLY (Superhero)")
+	toggle(c3, "Fly", function() return Move.Fly end, function(v)
+		setFly(v)
+	end)
+	slider(c3, "Fly Speed", 20, 250, function() return Move.FlySpeed end, function(v)
+		Move.FlySpeed = v
+	end)
+	local flyTip = Instance.new("TextLabel")
+	flyTip.Size = UDim2.new(1, 0, 0, 36)
+	flyTip.BackgroundTransparency = 1
+	flyTip.Text = "WASD + camera look · Space/E up · Ctrl/Q down · mobile stick works"
+	flyTip.Font = Enum.Font.Gotham
+	flyTip.TextSize = 11
+	flyTip.TextColor3 = THEME.dim
+	flyTip.TextWrapped = true
+	flyTip.TextXAlignment = Enum.TextXAlignment.Left
+	flyTip.ZIndex = 8
+	flyTip.Parent = c3
+
+	local c4 = card(PageMovement, "FPS BOOST")
+	toggle(c4, "FPS Boost", function() return Move.FPSBoost end, function(v)
+		Move.FPSBoost = v
+		if v then
+			Move.BestFPS = false
+			applyFPSBoost(1)
+		else
+			if not Move.BestFPS then applyFPSBoost(0) end
+		end
+	end)
+	toggle(c4, "Best FPS Boost", function() return Move.BestFPS end, function(v)
+		Move.BestFPS = v
+		if v then
+			Move.FPSBoost = false
+			applyFPSBoost(2)
+		else
+			if Move.FPSBoost then applyFPSBoost(1) else applyFPSBoost(0) end
+		end
+	end)
+end
+
+local PageServer = createPage("Server")
+createTabButton("Server", "Server", 4, "Server", "Discord · invites")
+do
+	local c = card(PageServer, "DISCORD SERVER")
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 64)
+	row.BackgroundColor3 = Color3.fromRGB(30, 35, 70)
+	row.BackgroundTransparency = 0.2
+	row.BorderSizePixel = 0
+	row.ZIndex = 8
+	row.Parent = c
+	corner(row, 10)
+	mkstroke(row, Color3.fromRGB(88, 101, 242), 1.2, 0.3)
+	local av = Instance.new("Frame")
+	av.Size = UDim2.new(0, 44, 0, 44)
+	av.Position = UDim2.new(0, 10, 0.5, -22)
+	av.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+	av.BorderSizePixel = 0
+	av.ZIndex = 9
+	av.Parent = row
+	corner(av, 22)
+	local avTxt = Instance.new("TextLabel")
+	avTxt.Size = UDim2.new(1, 0, 1, 0)
+	avTxt.BackgroundTransparency = 1
+	avTxt.Text = "K"
+	avTxt.Font = Enum.Font.GothamBold
+	avTxt.TextSize = 20
+	avTxt.TextColor3 = Color3.fromRGB(255, 255, 255)
+	avTxt.ZIndex = 10
+	avTxt.Parent = av
+	local nameL = Instance.new("TextLabel")
+	nameL.Size = UDim2.new(1, -120, 0, 22)
+	nameL.Position = UDim2.new(0, 64, 0, 10)
+	nameL.BackgroundTransparency = 1
+	nameL.Text = "KHUB Discord"
+	nameL.Font = Enum.Font.GothamBold
+	nameL.TextSize = 14
+	nameL.TextColor3 = THEME.text
+	nameL.TextXAlignment = Enum.TextXAlignment.Left
+	nameL.ZIndex = 9
+	nameL.Parent = row
+	local subL = Instance.new("TextLabel")
+	subL.Size = UDim2.new(1, -120, 0, 18)
+	subL.Position = UDim2.new(0, 64, 0, 32)
+	subL.BackgroundTransparency = 1
+	subL.Text = "discord.gg/EKPb7BRDH8"
+	subL.Font = Enum.Font.Gotham
+	subL.TextSize = 11
+	subL.TextColor3 = THEME.dim
+	subL.TextXAlignment = Enum.TextXAlignment.Left
+	subL.ZIndex = 9
+	subL.Parent = row
+	btn(c, "Join Discord Server", function() openLink(DISCORD) end, Color3.fromRGB(88, 101, 242))
+	btn(c, "Copy Invite Link", function()
+		pcall(function() if setclipboard then setclipboard(DISCORD) end end)
+	end, THEME.accent)
+	local c2 = card(PageServer, "KEYBINDS")
+	local kbL = Instance.new("TextLabel")
+	kbL.Size = UDim2.new(1, 0, 0, 52)
+	kbL.BackgroundTransparency = 1
+	kbL.Text = "RightShift  ·  toggle UI\nRightCtrl  ·  toggle UI\nK  ·  toggle UI"
+	kbL.Font = Enum.Font.Gotham
+	kbL.TextSize = 12
+	kbL.TextColor3 = THEME.dim
+	kbL.TextXAlignment = Enum.TextXAlignment.Left
+	kbL.ZIndex = 8
+	kbL.Parent = c2
+end
+
+
+-- ========== SETTINGS ==========
+local PageSettings = createPage("Settings")
+createTabButton("Settings", "Settings", 5, "Settings", "UI options · keybinds")
+do
+	local uiOpt = { ShowOrb = true, RainbowTitle = true }
+	local c = card(PageSettings, "UI Options")
+	toggle(c, "Show floating orb when minimized", function() return uiOpt.ShowOrb end, function(v)
+		uiOpt.ShowOrb = v; OrbState.visible = v
+	end)
+	toggle(c, "Rainbow title gradient", function() return uiOpt.RainbowTitle end, function(v)
+		uiOpt.RainbowTitle = v; TG.Enabled = v
+	end)
+	local k = card(PageSettings, "Keybinds")
+	local tip = Instance.new("TextLabel")
+	tip.Size = UDim2.new(1,0,0,55); tip.BackgroundTransparency = 1
+	tip.Text = "PC: RightShift / RightCtrl / K\nMobile: Tap floating orb to reopen"
+	tip.Font = Enum.Font.Gotham; tip.TextSize = 12; tip.TextColor3 = THEME.dim
+	tip.TextXAlignment = Enum.TextXAlignment.Left; tip.TextYAlignment = Enum.TextYAlignment.Top
+	tip.ZIndex = 8; tip.Parent = k
+end
+
+-- ========== SAVE CONFIG (last) ==========
+local PageConfig = createPage("Config")
+createTabButton("Config", "Config", 99, "Save Config", "create · load · delete")
+do
+	local c = card(PageConfig, "Config Manager")
+	local nameBox = textBox(c, "Config name...")
+	local statusCfg = Instance.new("TextLabel")
+	statusCfg.Size = UDim2.new(1,0,0,18); statusCfg.BackgroundTransparency = 1
+	statusCfg.Text = "Ready"; statusCfg.Font = Enum.Font.Gotham; statusCfg.TextSize = 12
+	statusCfg.TextColor3 = THEME.dim; statusCfg.TextXAlignment = Enum.TextXAlignment.Left
+	statusCfg.ZIndex = 8; statusCfg.Parent = c
+
+	local function ensureFolder()
+		if isfolder and not isfolder(ConfigFolder) then pcall(function() makefolder(ConfigFolder) end) end
+	end
+	local function listConfigs()
+		ensureFolder(); if not listfiles then return {} end
+		local out = {}
+		pcall(function()
+			for _, f in ipairs(listfiles(ConfigFolder)) do
+				local n = f:match("([^/\\]+)%.json$"); if n then table.insert(out, n) end
+			end
+		end)
+		return out
+	end
+
+	local listFrame = Instance.new("Frame")
+	listFrame.Size = UDim2.new(1,0,0,100); listFrame.BackgroundColor3 = THEME.inner
+	listFrame.ZIndex = 8; listFrame.Parent = c; corner(listFrame, 8)
+	local listScroll = Instance.new("ScrollingFrame")
+	listScroll.Size = UDim2.new(1,-4,1,-4); listScroll.Position = UDim2.new(0,2,0,2)
+	listScroll.BackgroundTransparency = 1; listScroll.ScrollBarThickness = 3
+	listScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; listScroll.CanvasSize = UDim2.new(0,0,0,0)
+	listScroll.ZIndex = 9; listScroll.Parent = listFrame
+	local listLay = Instance.new("UIListLayout"); listLay.Padding = UDim.new(0,3); listLay.Parent = listScroll
+	local selectedCfg = nil
+
+	local function refreshCfg()
+		for _, ch in ipairs(listScroll:GetChildren()) do if ch:IsA("TextButton") then ch:Destroy() end end
+		for _, n in ipairs(listConfigs()) do
+			local b = Instance.new("TextButton")
+			b.Size = UDim2.new(1,-6,0,26)
+			b.BackgroundColor3 = selectedCfg == n and THEME.accent2 or Color3.fromRGB(22,28,56)
+			b.Text = n; b.Font = Enum.Font.Gotham; b.TextSize = 12; b.TextColor3 = THEME.text
+			b.ZIndex = 10; b.Parent = listScroll; corner(b, 6)
+			b.MouseButton1Click:Connect(function() selectedCfg = n; nameBox.Text = n; refreshCfg() end)
+		end
+	end
+
+	btn(c, "Save Config", function()
+		local n = nameBox.Text:gsub("%s+", "")
+		if n == "" then statusCfg.Text = "Enter a name"; return end
+		ensureFolder()
+		local ok = pcall(function()
+			writefile(ConfigFolder.."/"..n..".json", HttpService:JSONEncode({savedAt = os.date("%Y-%m-%d %H:%M:%S")}))
+		end)
+		statusCfg.Text = ok and ("Saved: "..n) or "Save failed"
+		refreshCfg()
+	end, Color3.fromRGB(40,80,50))
+
+	btn(c, "Load Config", function()
+		local n = selectedCfg or nameBox.Text:gsub("%s+", "")
+		if n == "" then statusCfg.Text = "Select a config"; return end
+		local ok, raw = pcall(function() return readfile(ConfigFolder.."/"..n..".json") end)
+		if not ok or not raw then statusCfg.Text = "Load failed"; return end
+		statusCfg.Text = "Loaded: "..n
+	end, Color3.fromRGB(40,50,90))
+
+	btn(c, "Delete Config", function()
+		local n = selectedCfg or nameBox.Text:gsub("%s+", "")
+		if n == "" then statusCfg.Text = "Select a config"; return end
+		pcall(function() delfile(ConfigFolder.."/"..n..".json") end)
+		selectedCfg = nil; statusCfg.Text = "Deleted: "..n; refreshCfg()
+	end, Color3.fromRGB(90,30,40))
+
+	btn(c, "Refresh List", refreshCfg)
+	task.defer(refreshCfg)
+end
+
+-- ORB
+local OrbRoot = Instance.new("Frame")
+OrbRoot.Size = UDim2.new(0,72,0,72); OrbRoot.Position = UDim2.new(0, 16, 0.5, -50)
+OrbRoot.BackgroundTransparency = 1; OrbRoot.Visible = false; OrbRoot.ZIndex = 50; OrbRoot.Parent = ScreenGui
+local Orb = Instance.new("ImageButton")
+Orb.Size = UDim2.new(0,64,0,64); Orb.Position = UDim2.new(0.5,-32,0.5,-32)
+Orb.BackgroundColor3 = THEME.panel; Orb.Image = LOGO_ID; Orb.ScaleType = Enum.ScaleType.Crop
+Orb.ZIndex = 51; Orb.Parent = OrbRoot; corner(Orb, 45); mkstroke(Orb, THEME.accent2, 2.5, 0.15)
+task.spawn(function()
+	local halo = Instance.new("UIStroke"); halo.Color = THEME.accent; halo.Thickness = 2; halo.Parent = Orb
+	while Orb.Parent do halo.Color = Color3.fromHSV((tick()%4)/4, 0.7, 1); task.wait(0.05) end
+end)
+do
+	local draggingOrb, dragStartOrb, startPosOrb
+	Orb.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			draggingOrb = true; dragStartOrb = input.Position; startPosOrb = OrbRoot.Position
+			input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then draggingOrb = false end end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if draggingOrb and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStartOrb
+			OrbRoot.Position = UDim2.new(startPosOrb.X.Scale, startPosOrb.X.Offset+delta.X, startPosOrb.Y.Scale, startPosOrb.Y.Offset+delta.Y)
+		end
+	end)
+end
+
+local function setVisible(on)
+	if on then
+		Win.Visible = true; OrbRoot.Visible = false
+		Win.Position = UDim2.new(0.5, -BASE_W/2, 0.5, -BASE_H/2)
+		TweenService:Create(Win, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = UDim2.new(0, BASE_W, 0, BASE_H),
+		}):Play()
+	else
+		Win.Visible = false; OrbRoot.Visible = OrbState.visible
+	end
+end
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+CloseBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function() setVisible(true) end)
+
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.RightShift or i.KeyCode == Enum.KeyCode.RightControl or i.KeyCode == Enum.KeyCode.K then
+		setVisible(not Win.Visible)
+	end
+end)
+
+task.delay(1.7, function() switchPage("Welcome", "Welcome", "KHUB · Oil Tycoon") end)
+print("[KHUB] UI Template loaded · Welcome · Settings · Save Config")
+print("[KHUB] Toggle: RightShift / RightCtrl / K")
