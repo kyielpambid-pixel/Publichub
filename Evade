@@ -1,0 +1,966 @@
+--[[
+	KHUB · Evade (WindUI)
+	Port of Yin Yang Evade features · No key system
+	Tabs: Welcome · Dashboard · Move · Map · Extra · Settings · Config
+	Toggle: RightControl
+]]
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local LocalPlayer = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
+
+local LOGO_ID = "rbxassetid://127230219966945"
+local BG_ID = "rbxassetid://127230219966945"
+local DISCORD = "https://discord.gg/EKPb7BRDH8"
+local YOUTUBE = "https://www.youtube.com/@kyielpambid"
+
+print("[KHUB] Evade starting...")
+
+-- ========== CONFIG ==========
+local Config = {
+	EnableSpeedMultiplier = false,
+	SpeedMultiplierValue = 2,
+	EnableTeleportWalk = false,
+	TeleportMovementSpeed = 5,
+	EnableEnhancedJump = false,
+	JumpHeight = 50,
+	EnableInfiniteSlide = false,
+	InfiniteSlideSpeed = 30,
+	AutoJump = false,
+	AutoJumpSpeed = 1.5,
+	AutoCrouch = false,
+	EnableFrontalJump = false,
+	FrontalJumpSpeed = 42,
+	EnableBackJump = false,
+	BackJumpSpeed = 42,
+	EnableGravityMod = false,
+	GravityScale = 0.5,
+	EnableFullBright = false,
+	EnableVoidEscape = false,
+	EnableAntiAfk = false,
+	EnableNoclip = false,
+	EnableFly = false,
+	FlySpeed = 50,
+	EnableFigure8 = false,
+	Figure8Speed = 1.5,
+	Figure8Radius = 8,
+	EnableReviveAura = false,
+	EnableAutoSave = false,
+	EnableEspDown = false,
+	EnableAutoCarry = false,
+	CarryRange = 30,
+	EnableAutoForceSpawn = false,
+	EnableAntiBot = false,
+	AntiBotDistance = 10,
+	EnableAutoTrimp = false,
+	AutoTrimpMultiplier = 2.5,
+	FOV = 70,
+	EnableFOV = false,
+}
+
+local SettingsFile = "KHUB_Evade_Settings.json"
+
+local function SaveSettings()
+	pcall(function()
+		if writefile then
+			writefile(SettingsFile, HttpService:JSONEncode(Config))
+		end
+	end)
+end
+
+local function LoadSettings()
+	pcall(function()
+		if isfile and isfile(SettingsFile) then
+			local data = HttpService:JSONDecode(readfile(SettingsFile))
+			if type(data) == "table" then
+				for k, v in pairs(data) do
+					if Config[k] ~= nil then Config[k] = v end
+				end
+			end
+		end
+	end)
+end
+LoadSettings()
+
+-- ========== WINDUI ==========
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+pcall(function()
+	WindUI:AddTheme({
+		Name = "KHUB",
+		Accent = Color3.fromRGB(60, 255, 140),
+		Outline = Color3.fromRGB(90, 255, 170),
+		Text = Color3.fromRGB(230, 255, 240),
+		Placeholder = Color3.fromRGB(140, 220, 170),
+		Background = Color3.fromRGB(6, 14, 12),
+		Button = Color3.fromRGB(20, 48, 36),
+		Icon = Color3.fromRGB(90, 255, 160),
+		Toggle = Color3.fromRGB(60, 255, 140),
+		Slider = Color3.fromRGB(80, 240, 180),
+		Checkbox = Color3.fromRGB(60, 255, 140),
+	})
+end)
+
+local Window = WindUI:CreateWindow({
+	Title = "KHUB | Evade",
+	Icon = LOGO_ID,
+	Folder = "KHUB_Evade",
+	Author = "Kyiel Pambid",
+	Size = UDim2.fromOffset(640, 480),
+	Transparent = false,
+	Acrylic = false,
+	Theme = "Dark",
+	SideBarWidth = 230,
+	HideSearchBar = false,
+	ScrollBarEnabled = true,
+	Resizable = true,
+	ToggleKey = Enum.KeyCode.RightControl,
+	Background = BG_ID,
+	BackgroundImageTransparency = 0.82,
+	User = { Enabled = true, Anonymous = false },
+})
+
+Window:EditOpenButton({
+	Title = "KHUB | Evade",
+	Enabled = true,
+	Draggable = true,
+	OnlyMobile = false,
+	StrokeThickness = 2,
+	CornerRadius = UDim.new(0, 16),
+	Color = ColorSequence.new(Color3.fromRGB(60, 255, 140), Color3.fromRGB(70, 225, 255)),
+})
+
+pcall(function()
+	if Window.SetTheme then Window:SetTheme("KHUB") end
+	Window:SetBackgroundImage(BG_ID)
+	Window:SetBackgroundImageTransparency(0.82)
+	if Window.SetPanelBackground then Window:SetPanelBackground(true) end
+	if Window.ToggleTransparency then Window:ToggleTransparency(false) end
+end)
+
+-- Rainbow tag
+task.spawn(function()
+	local colors = {
+		Color3.fromRGB(60, 255, 140),
+		Color3.fromRGB(70, 225, 255),
+		Color3.fromRGB(175, 110, 255),
+		Color3.fromRGB(255, 180, 100),
+		Color3.fromRGB(255, 100, 140),
+	}
+	local i = 1
+	while true do
+		pcall(function()
+			Window:Tag({ Title = "EVADE", Color = colors[i], Radius = 7 })
+		end)
+		i = i % #colors + 1
+		task.wait(0.55)
+	end
+end)
+
+local function notify(text, icon)
+	WindUI:Notify({
+		Title = "KHUB Evade",
+		Content = text,
+		Icon = icon or "lucide:info",
+		Duration = 3,
+		CanClose = true,
+	})
+end
+
+local function openLink(url)
+	pcall(function()
+		if setclipboard then setclipboard(url) end
+		if openlink then openlink(url) end
+	end)
+end
+
+-- ========== ENGINE HELPERS ==========
+local function getChar()
+	return LocalPlayer.Character
+end
+
+local function getHRP()
+	local c = getChar()
+	return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHum()
+	local c = getChar()
+	return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+-- Fullbright
+local fbOriginal = nil
+local fbConn = nil
+local function captureFB()
+	if fbOriginal then return end
+	pcall(function()
+		fbOriginal = {
+			Brightness = Lighting.Brightness,
+			Ambient = Lighting.Ambient,
+			OutdoorAmbient = Lighting.OutdoorAmbient,
+			GlobalShadows = Lighting.GlobalShadows,
+			FogEnd = Lighting.FogEnd,
+			ClockTime = Lighting.ClockTime,
+		}
+	end)
+end
+local function applyFB()
+	pcall(function()
+		Lighting.GlobalShadows = false
+		Lighting.Brightness = 2
+		Lighting.Ambient = Color3.new(1, 1, 1)
+		Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+		Lighting.FogEnd = 1e10
+		Lighting.ClockTime = 12
+	end)
+end
+local function setFullBright(on)
+	Config.EnableFullBright = on
+	if on then
+		captureFB()
+		applyFB()
+		if not fbConn then
+			fbConn = RunService.Heartbeat:Connect(function()
+				if Config.EnableFullBright then applyFB() end
+			end)
+		end
+	else
+		if fbConn then fbConn:Disconnect() fbConn = nil end
+		if fbOriginal then
+			pcall(function()
+				for k, v in pairs(fbOriginal) do Lighting[k] = v end
+			end)
+		end
+	end
+	SaveSettings()
+end
+
+-- Noclip
+local noclipParts = {}
+local noclipConn = nil
+local function setNoclip(on)
+	Config.EnableNoclip = on
+	if on then
+		if noclipConn then return end
+		noclipConn = RunService.Stepped:Connect(function()
+			local c = getChar()
+			if not c then return end
+			for _, p in ipairs(c:GetDescendants()) do
+				if p:IsA("BasePart") then
+					p.CanCollide = false
+				end
+			end
+		end)
+	else
+		if noclipConn then noclipConn:Disconnect() noclipConn = nil end
+	end
+	SaveSettings()
+end
+
+-- Fly (superhero style)
+local flyConn = nil
+local function setFly(on)
+	Config.EnableFly = on
+	if on then
+		if flyConn then return end
+		flyConn = RunService.RenderStepped:Connect(function()
+			if not Config.EnableFly then return end
+			local hrp = getHRP()
+			local hum = getHum()
+			if not hrp or not hum then return end
+			local cam = Workspace.CurrentCamera
+			local move = Vector3.zero
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
+			if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move = move - Vector3.new(0, 1, 0) end
+			if move.Magnitude > 0 then
+				hrp.AssemblyLinearVelocity = move.Unit * Config.FlySpeed
+			else
+				hrp.AssemblyLinearVelocity = Vector3.zero
+			end
+			hum.PlatformStand = true
+		end)
+	else
+		if flyConn then flyConn:Disconnect() flyConn = nil end
+		local hum = getHum()
+		if hum then hum.PlatformStand = false end
+	end
+	SaveSettings()
+end
+
+-- Figure 8
+local figure8T, figure8CenterCF, figure8Conn, figure8PrevWalk = 0, nil, nil, 16
+local function StopFigure8()
+	if figure8Conn then figure8Conn:Disconnect() figure8Conn = nil end
+	local hum = getHum()
+	if hum then hum.WalkSpeed = figure8PrevWalk end
+	figure8CenterCF = nil
+end
+local function StartFigure8()
+	StopFigure8()
+	local hrp = getHRP()
+	local hum = getHum()
+	if not hrp or not hum then return end
+	figure8PrevWalk = hum.WalkSpeed
+	hum.WalkSpeed = 0
+	figure8T = 0
+	local look = hrp.CFrame.LookVector
+	figure8CenterCF = CFrame.new(hrp.Position) * CFrame.Angles(0, math.atan2(look.X, look.Z), 0)
+	figure8Conn = RunService.Heartbeat:Connect(function(dt)
+		if not Config.EnableFigure8 then return end
+		local hrp2 = getHRP()
+		if not hrp2 or not figure8CenterCF then return end
+		figure8T = figure8T + Config.Figure8Speed * dt
+		local R, t = Config.Figure8Radius, figure8T
+		local localX = R * math.cos(t)
+		local localZ = (R * 0.5) * math.sin(2 * t)
+		local tanX = -R * math.sin(t)
+		local tanZ = R * math.cos(2 * t)
+		local right, forward, origin = figure8CenterCF.RightVector, figure8CenterCF.LookVector, figure8CenterCF.Position
+		local worldPos = origin + right * localX + forward * localZ
+		worldPos = Vector3.new(worldPos.X, origin.Y, worldPos.Z)
+		local worldTan = right * tanX + forward * tanZ
+		if worldTan.Magnitude > 0.01 then
+			hrp2.CFrame = CFrame.new(worldPos, worldPos + worldTan)
+		else
+			hrp2.CFrame = CFrame.new(worldPos)
+		end
+		hrp2.AssemblyLinearVelocity = Vector3.zero
+	end)
+end
+
+-- Char service / interact (Evade internals)
+local CharServiceModule, InteractRemote
+local function FindCharService()
+	if CharServiceModule then return CharServiceModule end
+	if not getgc then return nil end
+	local ok, gcTable = pcall(getgc, true)
+	if not ok or not gcTable then return nil end
+	for i = 1, #gcTable do
+		local v = gcTable[i]
+		if type(v) == "table" then
+			local ok2, has = pcall(rawget, v, "GetCharacters")
+			if ok2 and has then CharServiceModule = v break end
+		end
+	end
+	return CharServiceModule
+end
+local function GetInteractRemote()
+	if InteractRemote then return InteractRemote end
+	pcall(function()
+		InteractRemote = ReplicatedStorage:WaitForChild("Events", 5):WaitForChild("Interact", 5)
+	end)
+	return InteractRemote
+end
+
+-- ESP Down
+local espDownEntries = {}
+local espDownConn = nil
+local function espDownClearAll()
+	for tag, e in pairs(espDownEntries) do
+		pcall(function() if e.highlight then e.highlight:Destroy() end end)
+		pcall(function() if e.billboard then e.billboard:Destroy() end end)
+	end
+	table.clear(espDownEntries)
+end
+local function setEspDown(on)
+	Config.EnableEspDown = on
+	if on then
+		if espDownConn then return end
+		local acc = 0
+		espDownConn = RunService.Heartbeat:Connect(function(dt)
+			acc = acc + dt
+			if acc < 0.2 then return end
+			acc = 0
+			local cs = FindCharService()
+			if not cs then return end
+			local ok, chars = pcall(function() return cs:GetCharacters() end)
+			if not ok or not chars then return end
+			local downedNow = {}
+			for i = 1, #chars do
+				local v = chars[i]
+				if type(v) == "table" and v.Done and not v.Local and v.Tag and v.PrimaryPart then
+					local okS, isDown = pcall(function() return v.State and v.State.State == "Downed" end)
+					if okS and isDown then downedNow[v.Tag] = v end
+				end
+			end
+			for tag in pairs(espDownEntries) do
+				if not downedNow[tag] then
+					local e = espDownEntries[tag]
+					pcall(function() if e.highlight then e.highlight:Destroy() end end)
+					pcall(function() if e.billboard then e.billboard:Destroy() end end)
+					espDownEntries[tag] = nil
+				end
+			end
+			for tag, v in pairs(downedNow) do
+				if not espDownEntries[tag] then
+					local hl = Instance.new("Highlight")
+					hl.Adornee = v.PrimaryPart.Parent or v.PrimaryPart
+					hl.FillColor = Color3.fromRGB(255, 140, 0)
+					hl.OutlineColor = Color3.fromRGB(255, 140, 0)
+					hl.FillTransparency = 0.5
+					hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+					hl.Parent = v.PrimaryPart
+					local bb = Instance.new("BillboardGui")
+					bb.Adornee = v.PrimaryPart
+					bb.AlwaysOnTop = true
+					bb.Size = UDim2.new(0, 200, 0, 30)
+					bb.StudsOffset = Vector3.new(0, 3, 0)
+					bb.Parent = v.PrimaryPart
+					local lbl = Instance.new("TextLabel")
+					lbl.Size = UDim2.new(1, 0, 1, 0)
+					lbl.BackgroundTransparency = 1
+					lbl.Text = "[DOWN]"
+					lbl.TextColor3 = Color3.fromRGB(255, 140, 0)
+					lbl.Font = Enum.Font.GothamBold
+					lbl.TextSize = 14
+					lbl.Parent = bb
+					espDownEntries[tag] = { highlight = hl, billboard = bb }
+				end
+			end
+		end)
+	else
+		if espDownConn then espDownConn:Disconnect() espDownConn = nil end
+		espDownClearAll()
+	end
+	SaveSettings()
+end
+
+-- Main movement loop state
+local autoJumpNext, autoCrouchNext = 0, 0
+local trimpWasAir = false
+local voidThreshold = -50
+
+RunService.Heartbeat:Connect(function()
+	local hrp = getHRP()
+	local hum = getHum()
+	if not hrp or not hum or hum.Health <= 0 then return end
+
+	-- Speed
+	if Config.EnableSpeedMultiplier then
+		hum.WalkSpeed = 16 * Config.SpeedMultiplierValue
+	end
+
+	-- Teleport walk
+	if Config.EnableTeleportWalk then
+		local move = hum.MoveDirection
+		if move.Magnitude > 0 then
+			hrp.CFrame = hrp.CFrame + move * (Config.TeleportMovementSpeed * 0.05)
+		end
+	end
+
+	-- Jump height
+	if Config.EnableEnhancedJump then
+		hum.UseJumpPower = true
+		hum.JumpPower = Config.JumpHeight
+	end
+
+	-- Gravity
+	if Config.EnableGravityMod then
+		Workspace.Gravity = 196.2 * Config.GravityScale
+	end
+
+	-- Auto jump
+	if Config.AutoJump then
+		local now = tick()
+		if now >= autoJumpNext and hum.FloorMaterial ~= Enum.Material.Air then
+			hum.Jump = true
+			autoJumpNext = now + (1 / math.max(Config.AutoJumpSpeed, 0.5))
+		end
+	end
+
+	-- Infinite slide (simple forward boost while shift-like crouch state)
+	if Config.EnableInfiniteSlide then
+		local move = hum.MoveDirection
+		if move.Magnitude > 0.1 then
+			local vel = hrp.AssemblyLinearVelocity
+			local boost = move.Unit * Config.InfiniteSlideSpeed
+			hrp.AssemblyLinearVelocity = Vector3.new(boost.X, vel.Y, boost.Z)
+		end
+	end
+
+	-- Frontal jump boost in air
+	if Config.EnableFrontalJump and hum.FloorMaterial == Enum.Material.Air then
+		local look = hrp.CFrame.LookVector
+		local vel = hrp.AssemblyLinearVelocity
+		local add = look * (Config.FrontalJumpSpeed * 0.02)
+		hrp.AssemblyLinearVelocity = Vector3.new(vel.X + add.X, vel.Y, vel.Z + add.Z)
+	end
+
+	-- Back jump
+	if Config.EnableBackJump and hum.FloorMaterial == Enum.Material.Air then
+		local look = -hrp.CFrame.LookVector
+		local vel = hrp.AssemblyLinearVelocity
+		local add = look * (Config.BackJumpSpeed * 0.02)
+		hrp.AssemblyLinearVelocity = Vector3.new(vel.X + add.X, vel.Y, vel.Z + add.Z)
+	end
+
+	-- Void escape
+	if Config.EnableVoidEscape and hrp.Position.Y < voidThreshold then
+		pcall(function()
+			hrp.CFrame = CFrame.new(0, 50, 0)
+		end)
+	end
+
+	-- Auto trimp
+	if Config.EnableAutoTrimp then
+		local isAir = hum.FloorMaterial == Enum.Material.Air
+		if isAir then
+			local vel = hrp.AssemblyLinearVelocity
+			if vel.Y < 0 then
+				hrp.AssemblyLinearVelocity = Vector3.new(vel.X, vel.Y * 0.5, vel.Z)
+			end
+		elseif trimpWasAir then
+			local vel = hrp.AssemblyLinearVelocity
+			local hs = Vector3.new(vel.X, 0, vel.Z).Magnitude
+			local impulse = math.max(hs, 20) * Config.AutoTrimpMultiplier
+			hrp.AssemblyLinearVelocity = Vector3.new(vel.X, impulse, vel.Z)
+		end
+		trimpWasAir = isAir
+	end
+
+	-- FOV
+	if Config.EnableFOV then
+		camera.FieldOfView = Config.FOV
+	end
+end)
+
+-- Anti AFK
+LocalPlayer.Idled:Connect(function()
+	if Config.EnableAntiAfk then
+		pcall(function()
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton2(Vector2.new())
+		end)
+	end
+end)
+
+-- Revive / Carry / AutoSave loops
+task.spawn(function()
+	while true do
+		task.wait(0.5)
+		if Config.EnableReviveAura or Config.EnableAutoCarry or Config.EnableAutoSave then
+			local cs = FindCharService()
+			local interact = GetInteractRemote()
+			local hrp = getHRP()
+			if cs and interact and hrp then
+				local ok, chars = pcall(function() return cs:GetCharacters() end)
+				if ok and chars then
+					for i = 1, #chars do
+						local v = chars[i]
+						if type(v) == "table" and v.Done and not v.Local and v.PrimaryPart then
+							local okS, isDown = pcall(function() return v.State and v.State.State == "Downed" end)
+							if okS and isDown then
+								local dist = (v.PrimaryPart.Position - hrp.Position).Magnitude
+								if Config.EnableReviveAura and dist < 30 then
+									pcall(function() interact:FireServer("Revive", v.Tag, true) end)
+								end
+								if Config.EnableAutoCarry and dist < Config.CarryRange then
+									pcall(function() interact:FireServer("Carry", v.Tag) end)
+								end
+								if Config.EnableAutoSave and dist < 80 then
+									pcall(function()
+										hrp.CFrame = CFrame.new(v.PrimaryPart.Position + Vector3.new(0, 2, 0))
+										interact:FireServer("Revive", v.Tag, true)
+									end)
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
+-- Auto force spawn
+task.spawn(function()
+	local last = 0
+	while true do
+		task.wait(0.25)
+		if Config.EnableAutoForceSpawn and (tick() - last >= 3) then
+			local cs = FindCharService()
+			if cs then
+				local ok, chars = pcall(function() return cs:GetCharacters() end)
+				if ok and chars then
+					for i = 1, #chars do
+						local v = chars[i]
+						if type(v) == "table" and v.Local then
+							local okS, isDown = pcall(function() return v.State and v.State.State == "Downed" end)
+							if okS and isDown then
+								last = tick()
+								pcall(function()
+									local r = ReplicatedStorage:FindFirstChild("Events")
+									local sp = r and r:FindFirstChild("SetPlayerMode")
+									if sp then sp:FireServer(true) end
+								end)
+							end
+							break
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
+-- Anti bot
+task.spawn(function()
+	local last = 0
+	while true do
+		task.wait(0.25)
+		if Config.EnableAntiBot and (tick() - last >= 0.3) then
+			local hrp = getHRP()
+			local cs = FindCharService()
+			if hrp and cs then
+				local ok, chars = pcall(function() return cs:GetCharacters() end)
+				if ok and chars then
+					for i = 1, #chars do
+						local v = chars[i]
+						if type(v) == "table" and v.AI == true and v.PrimaryPart then
+							local dist = (v.PrimaryPart.Position - hrp.Position).Magnitude
+							if dist < Config.AntiBotDistance then
+								last = tick()
+								local angle = math.random() * math.pi * 2
+								local rad = math.random(20, 40)
+								local cand = hrp.Position + Vector3.new(math.cos(angle) * rad, 0, math.sin(angle) * rad)
+								hrp.CFrame = CFrame.new(cand.X, hrp.Position.Y + 3, cand.Z)
+								break
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+end)
+
+-- Fix continue for older Luau - replace loops that use continue
+-- Actually I'll rewrite the auto spawn and anti bot without continue after writing
+
+-- ========== TABS ==========
+local WelcomeTab = Window:Tab({ Title = "Welcome", Icon = "lucide:home" })
+WelcomeTab:Section({ Title = "KHUB", Desc = "Evade · by Kyiel Pambid", Box = true, BoxBorder = true, Opened = true })
+WelcomeTab:Paragraph({
+	Title = "K H U B",
+	Desc = "================================\\n   EVADE  ·  WINDUI\\n================================",
+})
+WelcomeTab:Paragraph({
+	Title = "Profile",
+	Desc = "Name: " .. (LocalPlayer.DisplayName or LocalPlayer.Name) .. "\\nUser: @" .. LocalPlayer.Name .. "\\nID: " .. tostring(LocalPlayer.UserId),
+})
+local statusP = WelcomeTab:Paragraph({ Title = "Live status", Desc = "Join Discord for more scripts..." })
+task.spawn(function()
+	local msgs = {
+		"Join Discord for more scripts...",
+		"Subscribe on my YouTube channel...",
+		"Save config in Config tab...",
+		"Toggle UI · RightControl",
+		"Move · Map · Extra features ready",
+	}
+	local i = 1
+	while true do
+		pcall(function()
+			if statusP and statusP.SetDesc then statusP:SetDesc(msgs[i]) end
+			if Window.SetAuthor then Window:SetAuthor(msgs[i]) end
+		end)
+		i = i % #msgs + 1
+		task.wait(2)
+	end
+end)
+WelcomeTab:Button({ Title = "Join Discord", Icon = "lucide:message-circle", Callback = function() openLink(DISCORD) end })
+WelcomeTab:Button({ Title = "Subscribe YouTube", Icon = "lucide:youtube", Callback = function() openLink(YOUTUBE) end })
+WelcomeTab:Paragraph({ Title = "Keybinds", Desc = "RightControl · Toggle UI" })
+
+local DashTab = Window:Tab({ Title = "Dashboard", Icon = "lucide:layout-dashboard" })
+DashTab:Section({ Title = "HOW IT WORKS", Desc = "GREEN GUIDE", Box = true, BoxBorder = true, Opened = true })
+DashTab:Paragraph({
+	Title = "Quick setup",
+	Desc = "1) MOVE · Speed / Walk / Jump / Slide / Fly\\n2) MAP · Fullbright / Void Escape / Anti AFK\\n3) EXTRA · Revive / Carry / ESP Down / Anti Bot\\n4) Config · Save your settings\\nToggle UI · RightControl",
+})
+DashTab:Button({ Title = "Refresh Status", Icon = "lucide:refresh-cw", Callback = function() notify("OK · " .. os.date("%H:%M:%S"), "lucide:check") end })
+
+-- MOVE
+local MoveTab = Window:Tab({ Title = "Move", Icon = "lucide:footprints" })
+MoveTab:Section({ Title = "INSTRUCTIONS", Desc = "GREEN GUIDE", Box = true, BoxBorder = true, Opened = true })
+MoveTab:Paragraph({
+	Title = "Move guide",
+	Desc = "Speed = WalkSpeed multiplier\\nWalk = teleport movement\\nJump Height = custom jump power\\nInf Slide = boost while moving\\nFly = WASD + Space/Ctrl · superhero style\\nFigure-8 = loops around activation point",
+})
+
+MoveTab:Toggle({
+	Title = "Speed Multiplier",
+	Callback = function(v) Config.EnableSpeedMultiplier = v; SaveSettings() end,
+})
+MoveTab:Slider({
+	Title = "Speed Value",
+	Step = 0.1,
+	Value = { Min = 1, Max = 5, Default = Config.SpeedMultiplierValue },
+	Callback = function(v) Config.SpeedMultiplierValue = v; SaveSettings() end,
+})
+
+MoveTab:Toggle({
+	Title = "Teleport Walk",
+	Callback = function(v) Config.EnableTeleportWalk = v; SaveSettings() end,
+})
+MoveTab:Slider({
+	Title = "Walk Speed",
+	Value = { Min = 1, Max = 50, Default = Config.TeleportMovementSpeed },
+	Callback = function(v) Config.TeleportMovementSpeed = v; SaveSettings() end,
+})
+
+MoveTab:Toggle({
+	Title = "Jump Height",
+	Callback = function(v) Config.EnableEnhancedJump = v; SaveSettings() end,
+})
+MoveTab:Slider({
+	Title = "Jump Power",
+	Value = { Min = 20, Max = 300, Default = Config.JumpHeight },
+	Callback = function(v) Config.JumpHeight = v; SaveSettings() end,
+})
+
+MoveTab:Toggle({
+	Title = "Infinite Slide",
+	Callback = function(v) Config.EnableInfiniteSlide = v; SaveSettings() end,
+})
+MoveTab:Slider({
+	Title = "Slide Speed",
+	Value = { Min = 15, Max = 150, Default = Config.InfiniteSlideSpeed },
+	Callback = function(v) Config.InfiniteSlideSpeed = v; SaveSettings() end,
+})
+
+MoveTab:Toggle({
+	Title = "Auto Jump",
+	Callback = function(v) Config.AutoJump = v; SaveSettings() end,
+})
+MoveTab:Toggle({
+	Title = "Frontal Jump",
+	Callback = function(v) Config.EnableFrontalJump = v; SaveSettings() end,
+})
+MoveTab:Slider({
+	Title = "Frontal Jump Speed",
+	Value = { Min = 10, Max = 110, Default = Config.FrontalJumpSpeed },
+	Callback = function(v) Config.FrontalJumpSpeed = v; SaveSettings() end,
+})
+MoveTab:Toggle({
+	Title = "Back Jump",
+	Callback = function(v) Config.EnableBackJump = v; SaveSettings() end,
+})
+MoveTab:Toggle({
+	Title = "Gravity Mod",
+	Callback = function(v)
+		Config.EnableGravityMod = v
+		if not v then Workspace.Gravity = 196.2 end
+		SaveSettings()
+	end,
+})
+MoveTab:Slider({
+	Title = "Gravity Scale",
+	Step = 0.05,
+	Value = { Min = 0.1, Max = 1, Default = Config.GravityScale },
+	Callback = function(v) Config.GravityScale = v; SaveSettings() end,
+})
+MoveTab:Toggle({
+	Title = "Noclip",
+	Callback = function(v) setNoclip(v) end,
+})
+MoveTab:Toggle({
+	Title = "Fly (superhero)",
+	Callback = function(v) setFly(v) end,
+})
+MoveTab:Slider({
+	Title = "Fly Speed",
+	Value = { Min = 10, Max = 200, Default = Config.FlySpeed },
+	Callback = function(v) Config.FlySpeed = v; SaveSettings() end,
+})
+MoveTab:Toggle({
+	Title = "Figure-8 Loop",
+	Callback = function(v)
+		Config.EnableFigure8 = v
+		if v then StartFigure8() else StopFigure8() end
+		SaveSettings()
+	end,
+})
+MoveTab:Slider({
+	Title = "Figure-8 Speed",
+	Step = 0.1,
+	Value = { Min = 0.2, Max = 3, Default = Config.Figure8Speed },
+	Callback = function(v) Config.Figure8Speed = v; SaveSettings() end,
+})
+MoveTab:Slider({
+	Title = "Figure-8 Radius",
+	Value = { Min = 3, Max = 25, Default = Config.Figure8Radius },
+	Callback = function(v) Config.Figure8Radius = v; SaveSettings() end,
+})
+MoveTab:Toggle({
+	Title = "Auto Trimp",
+	Callback = function(v) Config.EnableAutoTrimp = v; SaveSettings() end,
+})
+MoveTab:Toggle({
+	Title = "Custom FOV",
+	Callback = function(v)
+		Config.EnableFOV = v
+		if not v then camera.FieldOfView = 70 end
+		SaveSettings()
+	end,
+})
+MoveTab:Slider({
+	Title = "FOV",
+	Value = { Min = 50, Max = 120, Default = Config.FOV },
+	Callback = function(v) Config.FOV = v; SaveSettings() end,
+})
+
+-- MAP
+local MapTab = Window:Tab({ Title = "Map", Icon = "lucide:map" })
+MapTab:Section({ Title = "INSTRUCTIONS", Desc = "GREEN GUIDE", Box = true, BoxBorder = true, Opened = true })
+MapTab:Paragraph({
+	Title = "Map guide",
+	Desc = "Fullbright = bright map always\\nVoid Escape = TP up if falling\\nAnti AFK = no idle kick",
+})
+MapTab:Toggle({
+	Title = "Fullbright",
+	Callback = function(v) setFullBright(v) end,
+})
+MapTab:Toggle({
+	Title = "Void Escape",
+	Callback = function(v) Config.EnableVoidEscape = v; SaveSettings() end,
+})
+MapTab:Toggle({
+	Title = "Anti AFK",
+	Callback = function(v) Config.EnableAntiAfk = v; SaveSettings() end,
+})
+
+-- EXTRA
+local ExtraTab = Window:Tab({ Title = "Extra", Icon = "lucide:sparkles" })
+ExtraTab:Section({ Title = "INSTRUCTIONS", Desc = "GREEN GUIDE", Box = true, BoxBorder = true, Opened = true })
+ExtraTab:Paragraph({
+	Title = "Extra guide",
+	Desc = "Revive Aura = revive nearby downed\\nAuto Save = TP + revive downed\\nAuto Carry = carry nearby downed\\nESP Down = highlight downed players\\nAnti Bot = TP away from bots\\nAuto Force Spawn = respawn when downed",
+})
+ExtraTab:Toggle({
+	Title = "Revive Aura",
+	Callback = function(v) Config.EnableReviveAura = v; SaveSettings() end,
+})
+ExtraTab:Toggle({
+	Title = "Auto Save (TP revive)",
+	Callback = function(v) Config.EnableAutoSave = v; SaveSettings() end,
+})
+ExtraTab:Toggle({
+	Title = "Auto Carry",
+	Callback = function(v) Config.EnableAutoCarry = v; SaveSettings() end,
+})
+ExtraTab:Slider({
+	Title = "Carry Range",
+	Value = { Min = 5, Max = 60, Default = Config.CarryRange },
+	Callback = function(v) Config.CarryRange = v; SaveSettings() end,
+})
+ExtraTab:Toggle({
+	Title = "ESP Down",
+	Callback = function(v) setEspDown(v) end,
+})
+ExtraTab:Toggle({
+	Title = "Anti Bot",
+	Callback = function(v) Config.EnableAntiBot = v; SaveSettings() end,
+})
+ExtraTab:Slider({
+	Title = "Anti Bot Distance",
+	Value = { Min = 1, Max = 25, Default = Config.AntiBotDistance },
+	Callback = function(v) Config.AntiBotDistance = v; SaveSettings() end,
+})
+ExtraTab:Toggle({
+	Title = "Auto Force Spawn",
+	Callback = function(v) Config.EnableAutoForceSpawn = v; SaveSettings() end,
+})
+
+-- SETTINGS
+local SettingsTab = Window:Tab({ Title = "Settings", Icon = "lucide:settings" })
+SettingsTab:Paragraph({
+	Title = "UI",
+	Desc = "Solid green KHUB theme · Toggle RightControl\\nBackground = KHUB image",
+})
+SettingsTab:Button({
+	Title = "Re-apply Background",
+	Icon = "lucide:image",
+	Callback = function()
+		pcall(function()
+			Window:SetBackgroundImage(BG_ID)
+			Window:SetBackgroundImageTransparency(0.82)
+		end)
+		notify("Background set", "lucide:image")
+	end,
+})
+
+-- CONFIG
+local ConfigTab = Window:Tab({ Title = "Config", Icon = "lucide:save" })
+local cfgName = "default"
+local ConfigFolder = "KHUB_Evade_Configs"
+ConfigTab:Input({
+	Title = "Config name",
+	Placeholder = "default",
+	Value = "default",
+	Callback = function(text)
+		cfgName = (text and text:gsub("%s+", "") ~= "") and text:gsub("%s+", "") or "default"
+	end,
+})
+ConfigTab:Button({
+	Title = "Save Config",
+	Icon = "lucide:save",
+	Callback = function()
+		SaveSettings()
+		pcall(function()
+			if isfolder and not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
+			if writefile then
+				writefile(ConfigFolder .. "/" .. cfgName .. ".json", HttpService:JSONEncode(Config))
+			end
+		end)
+		notify("Saved: " .. cfgName, "lucide:check")
+	end,
+})
+ConfigTab:Button({
+	Title = "Load Config",
+	Icon = "lucide:folder-open",
+	Callback = function()
+		local ok, raw = pcall(function()
+			return readfile(ConfigFolder .. "/" .. cfgName .. ".json")
+		end)
+		if ok and raw then
+			local data = HttpService:JSONDecode(raw)
+			for k, v in pairs(data) do
+				if Config[k] ~= nil then Config[k] = v end
+			end
+			notify("Loaded: " .. cfgName, "lucide:check")
+		else
+			notify("Load failed", "lucide:x")
+		end
+	end,
+})
+ConfigTab:Button({
+	Title = "Delete Config",
+	Icon = "lucide:trash-2",
+	Callback = function()
+		pcall(function() delfile(ConfigFolder .. "/" .. cfgName .. ".json") end)
+		notify("Deleted: " .. cfgName, "lucide:trash")
+	end,
+})
+
+-- Apply loaded settings on start
+if Config.EnableFullBright then setFullBright(true) end
+if Config.EnableNoclip then setNoclip(true) end
+if Config.EnableEspDown then setEspDown(true) end
+
+print("[KHUB] Evade loaded · WindUI · no key system")
+notify("Evade loaded", "lucide:check")
