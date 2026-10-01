@@ -826,10 +826,14 @@ Sidebar.Size = UDim2.new(0, SIDE_W, 1, 0)
 Sidebar.BackgroundColor3 = THEME.sidebar
 Sidebar.BackgroundTransparency = 0.45
 Sidebar.BorderSizePixel = 0
-Sidebar.ScrollBarThickness = 2
+Sidebar.ScrollBarThickness = 4
 Sidebar.ScrollBarImageColor3 = THEME.accent
+Sidebar.ScrollingEnabled = true
+Sidebar.ScrollingDirection = Enum.ScrollingDirection.Y
+Sidebar.ElasticBehavior = Enum.ElasticBehavior.Always
 Sidebar.CanvasSize = UDim2.new(0, 0, 0, 0)
 Sidebar.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Sidebar.ClipsDescendants = true
 Sidebar.ZIndex = 6
 Sidebar.Parent = Body
 
@@ -841,8 +845,19 @@ local sidePad = Instance.new("UIPadding")
 sidePad.PaddingTop = UDim.new(0, 6)
 sidePad.PaddingLeft = UDim.new(0, 6)
 sidePad.PaddingRight = UDim.new(0, 6)
-sidePad.PaddingBottom = UDim.new(0, 6)
+sidePad.PaddingBottom = UDim.new(0, 12)
 sidePad.Parent = Sidebar
+
+-- keep canvas tall enough so tabs can scroll when many
+local function refreshSidebarCanvas()
+	task.defer(function()
+		local h = sideLay.AbsoluteContentSize.Y + sidePad.PaddingTop.Offset + sidePad.PaddingBottom.Offset + 8
+		Sidebar.CanvasSize = UDim2.new(0, 0, 0, math.max(h, Sidebar.AbsoluteSize.Y + 1))
+	end)
+end
+sideLay:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(refreshSidebarCanvas)
+Sidebar:GetPropertyChangedSignal("AbsoluteSize"):Connect(refreshSidebarCanvas)
+task.defer(refreshSidebarCanvas)
 
 local Content = Instance.new("Frame")
 Content.Name = "Content"
@@ -926,6 +941,7 @@ local function createTab(id, label, order)
 	pad.Parent = page
 
 	pages[id] = page
+	if refreshSidebarCanvas then refreshSidebarCanvas() end
 	btn.MouseButton1Click:Connect(function() switchTab(id) end)
 	return page
 end
