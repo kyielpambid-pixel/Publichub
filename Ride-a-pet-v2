@@ -1,0 +1,2134 @@
+--[[
+	KHUB · Ride a Pet
+	Compact violet UI · Oil Tycoon BG · tab icons · scrollable sidebar
+	Features ported from Skyhawk/WindUI Ride a Pet
+	Toggle: RightShift / RightCtrl / K
+]]
+repeat task.wait() until game:IsLoaded()
+
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
+local CoreGui           = game:GetService("CoreGui")
+local Workspace         = game:GetService("Workspace")
+local HttpService       = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
+local TeleportService   = game:GetService("TeleportService")
+local Lighting          = game:GetService("Lighting")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local Stats             = game:GetService("Stats")
+local player            = Players.LocalPlayer
+local localPlayer       = player
+
+local LOGO_ID  = "rbxassetid://127230219966945"
+local BG_ID    = "rbxassetid://127230219966945"
+local DISCORD  = "https://discord.gg/EKPb7BRDH8"
+local YOUTUBE  = "https://www.youtube.com/@kyielpambid"
+
+print("[KHUB] Ride a Pet starting...")
+
+-- Tab icons (open-source style rbxassetids)
+local TAB_ICONS = {
+	Welcome  = "rbxassetid://7733960981",
+	Farm     = "rbxassetid://7734053495",
+	Pets     = "rbxassetid://7743866505",
+	Shop     = "rbxassetid://7734056609",
+	Progress = "rbxassetid://7733715400",
+	Player   = "rbxassetid://7733962710",
+	Server   = "rbxassetid://7743871527",
+	Misc     = "rbxassetid://7734058345",
+	Config   = "rbxassetid://7734053495",
+}
+
+local THEME = {
+	bg = Color3.fromRGB(8, 10, 18),
+	title = Color3.fromRGB(12, 14, 24),
+	sidebar = Color3.fromRGB(6, 8, 16),
+	card = Color3.fromRGB(16, 20, 36),
+	element = Color3.fromRGB(18, 22, 40),
+	accent = Color3.fromRGB(70, 225, 255),
+	accent2 = Color3.fromRGB(175, 110, 255),
+	green = Color3.fromRGB(60, 255, 140),
+	gold = Color3.fromRGB(255, 216, 140),
+	text = Color3.fromRGB(240, 244, 255),
+	dim = Color3.fromRGB(150, 160, 190),
+	tabOn = Color3.fromRGB(28, 36, 62),
+	tabOff = Color3.fromRGB(14, 18, 32),
+	red = Color3.fromRGB(255, 90, 110),
+}
+
+local function corner(o, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 8)
+	c.Parent = o
+	return c
+end
+local function stroke(o, col, th, tr)
+	local s = Instance.new("UIStroke")
+	s.Color = col or THEME.accent
+	s.Thickness = th or 1
+	s.Transparency = tr or 0.2
+	s.Parent = o
+	return s
+end
+
+local function getParent()
+	local ok, r = pcall(function() if gethui then return gethui() end end)
+	if ok and r then return r end
+	return CoreGui
+end
+
+pcall(function()
+	for _, n in ipairs({"KHUB_RideAPet", "KHUB_UI_Only", "KHUB_MM2"}) do
+		local g = CoreGui:FindFirstChild(n) or (player.PlayerGui and player.PlayerGui:FindFirstChild(n))
+		if g then g:Destroy() end
+	end
+end)
+
+local cleanupFns = {}
+local function onCleanup(fn) table.insert(cleanupFns, fn) end
+local genv = typeof(getgenv) == "function" and getgenv() or _G
+if type(genv.KHUB_RideAPetCleanup) == "function" then pcall(genv.KHUB_RideAPetCleanup) end
+genv.KHUB_RideAPetCleanup = function()
+	for i = #cleanupFns, 1, -1 do pcall(cleanupFns[i]) end
+	table.clear(cleanupFns)
+end
+
+local function notify(title, content)
+	print("[KHUB]", title, content or "")
+end
+
+-- ========== GAME DATA ==========
+local game_ = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Game")
+local activeEggs = ReplicatedStorage:WaitForChild("ServerData"):WaitForChild("ActiveEggs")
+
+local function safeRequire(getter)
+	local ok, result = pcall(function() return require(getter()) end)
+	return ok and result or nil
+end
+
+local GameData = {
+	Eggs = safeRequire(function() return ReplicatedStorage.GameData.Eggs end),
+	Pets = safeRequire(function() return ReplicatedStorage.GameData.Pets end),
+	Foods = safeRequire(function() return ReplicatedStorage.GameData.Foods end),
+	Shop = safeRequire(function() return ReplicatedStorage.GameData.Shop end),
+	Rebirths = safeRequire(function() return ReplicatedStorage.GameData.Rebirths end),
+	EggBaskets = safeRequire(function() return ReplicatedStorage.GameData.EggBaskets end),
+	Mutations = safeRequire(function() return ReplicatedStorage.GameData.Mutations end),
+}
+
+local rng = Random.new()
+local H = {} -- helpers / state (tbl3 equivalent)
+
+local rarityOrder = { "Common", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Ethereal" }
+do
+	local luckSum, luckCount = {}, {}
+	if type(GameData.Eggs) == "table" then
+		for _, egg in pairs(GameData.Eggs) do
+			if type(egg) == "table" and egg.Rarity ~= nil then
+				local name = tostring(egg.Rarity)
+				luckSum[name] = (luckSum[name] or 0) + (tonumber(egg.Luck) or 0)
+				luckCount[name] = (luckCount[name] or 0) + 1
+			end
+		end
+	end
+	local function avgLuck(name)
+		return luckCount[name] and luckSum[name] / luckCount[name] or 0
+	end
+	local known = {}
+	for _, name in ipairs(rarityOrder) do known[name] = true end
+	local unknown = {}
+	for name in pairs(luckCount) do
+		if not known[name] then table.insert(unknown, name) end
+	end
+	table.sort(unknown, function(a, b) return avgLuck(a) < avgLuck(b) end)
+	for _, name in ipairs(unknown) do
+		local pos = #rarityOrder + 1
+		for i, existing in ipairs(rarityOrder) do
+			if avgLuck(existing) > avgLuck(name) then pos = i break end
+		end
+		table.insert(rarityOrder, pos, name)
+	end
+end
+
+H.RarityOrder = rarityOrder
+H.RarityRank = {}
+for i, v in ipairs(rarityOrder) do H.RarityRank[v] = i end
+H.RarityChoices = { "Any" }
+for _, v in ipairs(rarityOrder) do table.insert(H.RarityChoices, v) end
+H.KnownRarities = {}
+for _, v in ipairs(rarityOrder) do H.KnownRarities[v] = true end
+H.RegisterRarity = function(arg)
+	local name = tostring(arg)
+	if H.KnownRarities[name] then return H.RarityRank[name] end
+	H.KnownRarities[name] = true
+	table.insert(H.RarityOrder, name)
+	local rank = #H.RarityOrder
+	H.RarityRank[name] = rank
+	table.insert(H.RarityChoices, name)
+	return rank
+end
+H.RarityColors = {
+	Common = Color3.fromRGB(214, 218, 228),
+	Rare = Color3.fromRGB(96, 170, 255),
+	Epic = Color3.fromRGB(190, 110, 255),
+	Legendary = Color3.fromRGB(255, 196, 66),
+	Mythic = Color3.fromRGB(255, 82, 90),
+	Divine = Color3.fromRGB(255, 240, 150),
+	Ethereal = Color3.fromRGB(125, 225, 255),
+}
+H.FlySpeed = 2000
+H.Status = "Idle"
+H.Movement = { Owner = nil }
+H.CruiseHeight = 45
+H.VoidDepth = 110
+H.OverHeight = 250
+
+local plotCache = nil
+H.Character = function() return localPlayer.Character end
+H.Humanoid = function()
+	local c = localPlayer.Character
+	local h = c and c:FindFirstChildOfClass("Humanoid")
+	return (h and h.Health > 0) and h or nil
+end
+H.Root = function()
+	local c = localPlayer.Character
+	local r = c and c:FindFirstChild("HumanoidRootPart")
+	return (r and r:IsDescendantOf(workspace)) and r or nil
+end
+H.Plot = function()
+	if plotCache and plotCache.Parent then
+		local data = plotCache:FindFirstChild("Data")
+		local owner = data and data:FindFirstChild("Owner")
+		if owner and owner.Value == localPlayer then return plotCache end
+	end
+	plotCache = nil
+	local plots = workspace:FindFirstChild("Plots")
+	if not plots then return nil end
+	for _, child in ipairs(plots:GetChildren()) do
+		local data = child:FindFirstChild("Data")
+		local owner = data and data:FindFirstChild("Owner")
+		if owner and owner.Value == localPlayer then
+			plotCache = child
+			return child
+		end
+	end
+	return nil
+end
+H.PlotBase = function()
+	local p = H.Plot()
+	local b = p and p:FindFirstChild("Baseplate")
+	return (b and b:IsA("BasePart")) and b or nil
+end
+H.PlotTop = function()
+	local b = H.PlotBase()
+	if not b then return nil end
+	return b.Position + Vector3.new(0, b.Size.Y / 2, 0)
+end
+H.RandomPlotPoint = function(margin, avoid, minDist)
+	local b = H.PlotBase()
+	if not b then return nil end
+	local n = math.max(1, b.Size.X / 2 - margin)
+	local n2 = math.max(1, b.Size.Z / 2 - margin)
+	local n3 = b.Position.Y + b.Size.Y / 2
+	local fallback = nil
+	for _ = 1, 24 do
+		local vector = Vector3.new(rng:NextNumber(-n, n), 0, rng:NextNumber(-n2, n2))
+		local v8 = b.CFrame:PointToWorldSpace(vector)
+		local vector2 = Vector3.new(v8.X, n3, v8.Z)
+		local ok = true
+		if avoid then
+			for _, v9 in ipairs(avoid) do
+				if Vector3.new(v9.X - vector2.X, 0, v9.Z - vector2.Z).Magnitude < minDist then
+					ok = false
+					break
+				end
+			end
+		end
+		if ok then return vector2 end
+		fallback = fallback or vector2
+	end
+	return fallback
+end
+H.Cash = function()
+	local sd = localPlayer:FindFirstChild("SavedData")
+	local cash = sd and sd:FindFirstChild("Cash")
+	return cash and tonumber(cash.Value) or 0
+end
+H.Saved = function(arg)
+	local sd = localPlayer:FindFirstChild("SavedData")
+	local v = sd and sd:FindFirstChild(arg)
+	return v and v.Value or nil
+end
+H.Fire = function(arg, ...)
+	local rem = game_:FindFirstChild(arg)
+	if not rem or not rem:IsA("RemoteEvent") then return false end
+	local packed = table.pack(...)
+	return pcall(function()
+		rem:FireServer(table.unpack(packed, 1, packed.n))
+	end)
+end
+H.EggData = function(arg)
+	local eggs = GameData.Eggs
+	local d = type(eggs) == "table" and eggs[tostring(arg)] or nil
+	return type(d) == "table" and d or nil
+end
+H.EggRank = function(arg)
+	local d = H.EggData(arg)
+	if not d or d.Rarity == nil then return #H.RarityOrder end
+	local name = tostring(d.Rarity)
+	return H.RarityRank[name] or H.RegisterRarity(name)
+end
+H.EggRarity = function(arg)
+	local d = H.EggData(arg)
+	return d and tostring(d.Rarity) or "Common"
+end
+H.EggLuck = function(arg)
+	local d = H.EggData(arg)
+	return d and tonumber(d.Luck) or 0
+end
+H.PetData = function(arg)
+	local pets = GameData.Pets
+	local d = type(pets) == "table" and pets[tostring(arg)] or nil
+	return type(d) == "table" and d or nil
+end
+H.MutationBonus = function(arg)
+	local mut = GameData.Mutations
+	local d = type(mut) == "table" and arg and mut[tostring(arg)] or nil
+	return 1 + (type(d) == "table" and tonumber(d.StatMultiplier) or 0) / 100
+end
+H.PetScore = function(name, weight, mut)
+	local d = H.PetData(name)
+	return (d and tonumber(d.Income) or 1) * math.max(tonumber(weight) or 1, 0.1) * H.MutationBonus(mut)
+end
+H.PetNameOf = function(tool)
+	local a = tool:GetAttribute("PetName")
+	if type(a) == "string" and a ~= "" then return a end
+	return (string.gsub(tool.Name, "%s*%[.*$", ""))
+end
+H.Tools = function(tag)
+	local out = {}
+	local bp = localPlayer:FindFirstChildOfClass("Backpack")
+	if bp then
+		for _, c in ipairs(bp:GetChildren()) do
+			if c:IsA("Tool") and CollectionService:HasTag(c, tag) then table.insert(out, c) end
+		end
+	end
+	local char = localPlayer.Character
+	if char then
+		for _, c in ipairs(char:GetChildren()) do
+			if c:IsA("Tool") and CollectionService:HasTag(c, tag) then table.insert(out, c) end
+		end
+	end
+	return out
+end
+H.Equip = function(tool)
+	local hum = H.Humanoid()
+	local char = localPlayer.Character
+	if not hum or not tool or not char then return false end
+	if tool.Parent == char then return true end
+	pcall(function() hum:EquipTool(tool) end)
+	local deadline = os.clock() + 1
+	while tool.Parent ~= char and os.clock() < deadline do
+		RunService.Heartbeat:Wait()
+	end
+	return tool.Parent == char
+end
+H.Unequip = function()
+	local hum = H.Humanoid()
+	if hum then pcall(function() hum:UnequipTools() end) end
+end
+H.BasketCount = function()
+	local b = localPlayer:FindFirstChild("Basket")
+	return b and #b:GetChildren() or 0
+end
+H.BasketCapacity = function()
+	local eq = H.Saved("EquippedEggBasket")
+	local baskets = GameData.EggBaskets
+	local d = type(baskets) == "table" and eq and baskets[tostring(eq)] or nil
+	local n = type(d) == "table" and tonumber(d.Capacity) or 1
+	if n == math.huge or n > 50 then return 50 end
+	return math.max(1, n)
+end
+H.BasketDeadline = function()
+	local b = localPlayer:FindFirstChild("Basket")
+	local best = nil
+	if b then
+		for _, child in ipairs(b:GetChildren()) do
+			local num = tonumber(child:GetAttribute("BreakAt"))
+			if num and (best == nil or num < best) then best = num end
+		end
+	end
+	return best
+end
+H.Claim = function(owner)
+	if H.Movement.Owner == nil or H.Movement.Owner == owner then
+		H.Movement.Owner = owner
+		return true
+	end
+	return false
+end
+H.Release = function(arg)
+	if H.Movement.Owner == arg then H.Movement.Owner = nil end
+end
+
+-- Noclip + Fly
+local noclipParts = {}
+H.SetNoclip = function(on)
+	local char = localPlayer.Character
+	if not char then return end
+	for _, d in ipairs(char:GetDescendants()) do
+		if d:IsA("BasePart") then
+			if on then
+				if noclipParts[d] == nil then noclipParts[d] = d.CanCollide end
+				d.CanCollide = false
+			elseif noclipParts[d] ~= nil then
+				d.CanCollide = noclipParts[d]
+			end
+		end
+	end
+	if not on then table.clear(noclipParts) end
+end
+
+local function buildPath(from, to, opts)
+	if Vector3.new(to.X - from.X, 0, to.Z - from.Z).Magnitude < 80 and math.abs(to.Y - from.Y) < 30 then
+		return { to }
+	end
+	if opts and opts.Void then
+		local voidY = math.min(from.Y, to.Y) - H.VoidDepth
+		voidY = math.max(voidY, workspace.FallenPartsDestroyHeight + 60)
+		return {
+			Vector3.new(from.X, voidY, from.Z),
+			Vector3.new(to.X, voidY, to.Z),
+			to,
+		}
+	end
+	local cruise = (opts and opts.Over) and H.OverHeight or H.CruiseHeight
+	local y = math.max(from.Y, to.Y) + cruise
+	return {
+		Vector3.new(from.X, y, from.Z),
+		Vector3.new(to.X, y, to.Z),
+		to,
+	}
+end
+
+H.TravelTime = function(from, to, opts)
+	local n = 0
+	local cur = from
+	for _, p in ipairs(buildPath(from, to, opts)) do
+		n = n + (p - cur).Magnitude
+		cur = p
+	end
+	return n / math.max((opts and opts.Speed) or H.FlySpeed, 20)
+end
+
+H.FlyTo = function(target, cancelFn, arrive, opts)
+	local root = H.Root()
+	if not root or typeof(target) ~= "Vector3" then return false end
+	local n = arrive or 3
+	if (root.Position - target).Magnitude <= n then return true end
+	local startPos = root.Position
+	local path = buildPath(root.Position, target, opts)
+	local deadline = os.clock() + H.TravelTime(root.Position, target, opts) + 6
+	local speed = (opts and opts.Speed) or H.FlySpeed
+	H.SetNoclip(true)
+	local conn = RunService.Stepped:Connect(function()
+		local char = localPlayer.Character
+		if not char then return end
+		for _, d in ipairs(char:GetDescendants()) do
+			if d:IsA("BasePart") and d.CanCollide then d.CanCollide = false end
+		end
+	end)
+	local idx = 1
+	local ok = false
+	while os.clock() < deadline do
+		if cancelFn and cancelFn() then break end
+		local dt = RunService.Heartbeat:Wait()
+		local r = H.Root()
+		if not r then break end
+		local isLast = idx == #path
+		local delta = path[idx] - r.Position
+		local mag = delta.Magnitude
+		if mag <= (isLast and n or 2) then
+			if isLast then ok = true break end
+			idx = idx + 1
+		else
+			local step = math.min(mag, math.max(speed, 20) * dt)
+			local flat = Vector3.new(delta.X, 0, delta.Z)
+			local rot = flat.Magnitude > 0.1 and CFrame.lookAt(Vector3.zero, flat.Unit) or r.CFrame.Rotation
+			local nextPos = r.Position + delta.Unit * step
+			if step > 60 then
+				pcall(function()
+					if typeof(workspace.RequestStreamAroundAsync) == "function" then
+						workspace:RequestStreamAroundAsync(nextPos, 16)
+					end
+				end)
+			end
+			pcall(function()
+				r.CFrame = CFrame.new(nextPos) * rot
+				r.AssemblyLinearVelocity = Vector3.zero
+				r.AssemblyAngularVelocity = Vector3.zero
+			end)
+		end
+	end
+	local r = H.Root()
+	if r and r.Position.Y < math.min(target.Y, startPos.Y) - 15 then
+		local recover = ok and target or startPos
+		pcall(function()
+			local was = r.Anchored
+			r.Anchored = true
+			r.AssemblyLinearVelocity = Vector3.zero
+			r.CFrame = CFrame.new(recover)
+			RunService.Heartbeat:Wait()
+			r.Anchored = was
+		end)
+		r = H.Root()
+	end
+	conn:Disconnect()
+	H.SetNoclip(false)
+	r = H.Root()
+	if r then
+		pcall(function() r.AssemblyLinearVelocity = Vector3.zero end)
+		return (r.Position - target).Magnitude <= n + 1 or ok
+	end
+	return ok
+end
+
+H.InstantFlyTo = function(target, cancelFn, arrive)
+	local root = H.Root()
+	if not root or typeof(target) ~= "Vector3" then return false end
+	local n = arrive or 3
+	if (root.Position - target).Magnitude <= n then return true end
+	if cancelFn and cancelFn() then return false end
+	H.SetNoclip(true)
+	local conn = RunService.Stepped:Connect(function()
+		local char = localPlayer.Character
+		if not char then return end
+		for _, d in ipairs(char:GetDescendants()) do
+			if d:IsA("BasePart") and d.CanCollide then d.CanCollide = false end
+		end
+	end)
+	local wasAnchored = root.Anchored
+	local function teleportTo(pos)
+		local r = H.Root()
+		if not r then return end
+		pcall(function()
+			r.Anchored = true
+			r.AssemblyLinearVelocity = Vector3.zero
+			r.AssemblyAngularVelocity = Vector3.zero
+			r.CFrame = CFrame.new(pos)
+		end)
+	end
+	teleportTo(target)
+	pcall(function()
+		if typeof(workspace.RequestStreamAroundAsync) == "function" then
+			workspace:RequestStreamAroundAsync(target, 16)
+		end
+	end)
+	for _ = 1, 5 do
+		if cancelFn and cancelFn() then break end
+		RunService.Heartbeat:Wait()
+	end
+	local r = H.Root()
+	if r and r.Position.Y < target.Y - 15 then
+		teleportTo(target)
+		RunService.Heartbeat:Wait()
+		r = H.Root()
+	end
+	pcall(function()
+		if r then
+			r.Anchored = wasAnchored
+			r.AssemblyLinearVelocity = Vector3.zero
+			r.AssemblyAngularVelocity = Vector3.zero
+		end
+	end)
+	conn:Disconnect()
+	H.SetNoclip(false)
+	r = H.Root()
+	if not r then return false end
+	pcall(function() r.AssemblyLinearVelocity = Vector3.zero end)
+	return (r.Position - target).Magnitude <= n + 1
+end
+
+H.FirePrompt = function(prompt)
+	if not prompt or not prompt:IsA("ProximityPrompt") then return false end
+	if typeof(fireproximityprompt) == "function" then
+		return pcall(fireproximityprompt, prompt)
+	end
+	return pcall(function()
+		prompt:InputHoldBegin()
+		task.wait(prompt.HoldDuration + 0.1)
+		prompt:InputHoldEnd()
+	end)
+end
+onCleanup(function() H.SetNoclip(false) end)
+
+-- Farm state
+local Farm = {
+	Collect = false,
+	Plant = false,
+	Hatch = false,
+	Place = false,
+	Swap = false,
+	Feed = false,
+	Busy = false,
+	Manual = {},
+	Carried = {},
+	Target = nil,
+	TargetManual = false,
+	Dropped = nil,
+	LastPickupAt = 0,
+	Relaying = false,
+	StealMethod = "Tween",
+	ReturnSpeed = 1976,
+	StealApproach = "Under Map",
+	PickupPos = nil,
+	minRarity = 0,
+	plantMinRarity = 0,
+	targetEggs = {},
+	priority = "Highest Rarity",
+	foodsToUse = {},
+	WakeFlag = false,
+}
+
+Farm.RouteOpts = function()
+	if Farm.StealApproach == "Under Map" then return { Void = true }
+	elseif Farm.StealApproach == "Over Map" then return { Over = true } end
+	return nil
+end
+Farm.Wake = function() Farm.WakeFlag = true end
+
+local collectedAttr = function(eggName)
+	local a = localPlayer:GetAttribute("CollectedEggs")
+	return type(a) == "string" and a ~= "" and string.find(a, tostring(eggName) .. ",", 1, true) ~= nil
+end
+
+local eggCooldowns = {}
+local function listEggs(fromPos)
+	local out = {}
+	local plotTop = H.PlotTop()
+	local now = os.clock()
+	for _, child in ipairs(activeEggs:GetChildren()) do
+		local egg = child:GetAttribute("Egg")
+		local pos = child:GetAttribute("Position")
+		local priv = child:GetAttribute("PrivateTo")
+		local cd = eggCooldowns[child.Name]
+		local ok = type(egg) == "string" and typeof(pos) == "Vector3" and (priv == nil or priv == localPlayer.UserId)
+		if ok then ok = not (cd and cd > now) end
+		if ok and not collectedAttr(egg) then
+			local rank = H.EggRank(egg)
+			if rank >= Farm.minRarity and (next(Farm.targetEggs) == nil or Farm.targetEggs[egg]) then
+				if (plotTop and H.TravelTime(pos, plotTop) or 0) < 18 then
+					table.insert(out, {
+						Config = child,
+						Name = egg,
+						Position = pos,
+						Rank = rank,
+						Luck = H.EggLuck(egg) * (tonumber(child:GetAttribute("Weight")) or 1),
+						Distance = (pos - fromPos).Magnitude,
+					})
+				end
+			end
+		end
+	end
+	table.sort(out, function(a, b)
+		if Farm.priority == "Nearest" then return a.Distance < b.Distance end
+		if Farm.priority == "Farthest" then return a.Distance > b.Distance end
+		if Farm.priority == "Highest Rarity" then
+			if a.Rank ~= b.Rank then return a.Rank > b.Rank end
+			if a.Luck ~= b.Luck then return a.Luck > b.Luck end
+			return a.Distance < b.Distance
+		end
+		if a.Luck ~= b.Luck then return a.Luck > b.Luck end
+		return a.Distance < b.Distance
+	end)
+	return out
+end
+
+local function deliverEggs(cancelFn)
+	if H.BasketCount() <= 0 then return true end
+	local top = H.PlotTop()
+	if not top then return false end
+	H.Status = "Bringing eggs home"
+	if Farm.StealMethod == "Instant" then
+		H.InstantFlyTo(top + Vector3.new(0, 4, 0), cancelFn, 4)
+	else
+		H.FlyTo(top + Vector3.new(0, 4, 0), cancelFn, 4, { Speed = Farm.ReturnSpeed })
+	end
+	local deadline = os.clock() + 3
+	while H.BasketCount() > 0 and os.clock() < deadline do
+		RunService.Heartbeat:Wait()
+	end
+	if H.BasketCount() == 0 then
+		table.clear(Farm.Carried)
+		Farm.PickupPos = nil
+	end
+	return H.BasketCount() == 0
+end
+
+local function popManual()
+	while #Farm.Manual > 0 do
+		local cfg = activeEggs:FindFirstChild(Farm.Manual[1])
+		local egg = cfg and cfg:GetAttribute("Egg")
+		local pos = cfg and cfg:GetAttribute("Position")
+		local priv = cfg and cfg:GetAttribute("PrivateTo")
+		if type(egg) == "string" and typeof(pos) == "Vector3" and (priv == nil or priv == localPlayer.UserId) then
+			return { Config = cfg, Name = egg, Position = pos, Manual = true }
+		end
+		table.remove(Farm.Manual, 1)
+	end
+	return nil
+end
+
+local function removeManual(name)
+	local i = table.find(Farm.Manual, name)
+	if i then table.remove(Farm.Manual, i) end
+end
+
+local function collectStep(cancelFn)
+	if not H.Root() then return false end
+	local cap = H.BasketCapacity()
+	local got = false
+	while H.BasketCount() < cap do
+		if cancelFn() then break end
+		local root = H.Root()
+		if not root then break end
+		local target = popManual()
+		if not target and Farm.Collect then
+			for _, e in ipairs(listEggs(root.Position)) do
+				if not table.find(Farm.Manual, e.Config.Name) then
+					target = e
+					break
+				end
+			end
+		end
+		if not target then
+			if not got then H.Status = "No egg matches the filters" end
+			break
+		end
+		local name = target.Config.Name
+		Farm.Target = name
+		Farm.TargetManual = target.Manual == true
+		Farm.Dropped = nil
+		H.Status = "Collecting " .. target.Name
+		local reached = H.FlyTo(target.Position + Vector3.new(0, 3, 0), function()
+			return cancelFn() or target.Config.Parent == nil or Farm.Dropped == name
+		end, 6, Farm.RouteOpts())
+		if Farm.Dropped == name then
+			Farm.Target = nil
+			Farm.Dropped = nil
+		elseif target.Config.Parent == nil and not reached then
+			removeManual(name)
+			Farm.Target = nil
+		elseif not reached then
+			eggCooldowns[name] = os.clock() + 20
+			removeManual(name)
+			Farm.Target = nil
+			break
+		else
+			local before = H.BasketCount()
+			Farm.LastPickupAt = os.clock()
+			if before == 0 then Farm.PickupPos = target.Position end
+			H.Fire("EggPickup", name)
+			local dl = os.clock() + 1.2
+			while H.BasketCount() == before and os.clock() < dl do
+				RunService.Heartbeat:Wait()
+			end
+			removeManual(name)
+			Farm.Target = nil
+			if H.BasketCount() > before then
+				Farm.Carried[name] = target.Config
+				got = true
+			else
+				eggCooldowns[name] = os.clock() + 20
+			end
+		end
+	end
+	Farm.Target = nil
+	if H.BasketCount() > 0 then deliverEggs(nil) end
+	return got
+end
+
+local plantCD, plantCountAtCD = 0, 0
+local function plotEggs()
+	local p = H.Plot()
+	local eggs = p and p:FindFirstChild("Eggs")
+	return eggs and eggs:GetChildren() or {}
+end
+local function occupiedPoints()
+	local pts = {}
+	for _, e in ipairs(plotEggs()) do
+		local ok, pos = pcall(function() return e:GetPivot().Position end)
+		if ok then table.insert(pts, pos) end
+	end
+	local pets = H.Plot()
+	pets = pets and pets:FindFirstChild("Pets")
+	if pets then
+		for _, c in ipairs(pets:GetChildren()) do
+			local ok, pos = pcall(function() return c:GetPivot().Position end)
+			if ok then table.insert(pts, pos) end
+		end
+	end
+	return pts
+end
+
+local function plantStep(cancelFn)
+	if os.clock() < plantCD and #plotEggs() >= plantCountAtCD then return false end
+	local tools = {}
+	for _, t in ipairs(H.Tools("Egg")) do
+		if H.EggRank(t.Name) >= Farm.plantMinRarity then table.insert(tools, t) end
+	end
+	if #tools == 0 then return false end
+	table.sort(tools, function(a, b) return H.EggLuck(a.Name) > H.EggLuck(b.Name) end)
+	local planted = 0
+	for _, tool in ipairs(tools) do
+		if cancelFn() then break end
+		if not tool.Parent then continue end
+		local pt = H.RandomPlotPoint(8, occupiedPoints(), 5)
+		if not pt then continue end
+		H.Status = "Planting " .. tool.Name
+		if H.Equip(tool) then
+			local before = #plotEggs()
+			H.Fire("EggPlaced", { PlantPosition = pt })
+			local dl = os.clock() + 1.2
+			while os.clock() < dl and #plotEggs() == before do RunService.Heartbeat:Wait() end
+			if #plotEggs() > before then
+				planted = planted + 1
+			else
+				plantCD = os.clock() + 15
+				plantCountAtCD = #plotEggs()
+				break
+			end
+		end
+	end
+	H.Unequip()
+	return planted > 0
+end
+
+local function readyHatches()
+	local out = {}
+	for _, egg in ipairs(plotEggs()) do
+		local timer = egg:FindFirstChild("Timer", true)
+		local hatch = egg:FindFirstChild("Hatch", true)
+		if hatch and hatch:IsA("ProximityPrompt") and hatch.Enabled and timer and timer:IsA("TextLabel") and timer.Text == "Ready" then
+			table.insert(out, { Egg = egg, Prompt = hatch })
+		end
+	end
+	return out
+end
+
+local function hatchStep(cancelFn)
+	local n = 0
+	for _, item in ipairs(readyHatches()) do
+		if cancelFn() then break end
+		if not item.Egg.Parent then continue end
+		local ok, pos = pcall(function() return item.Egg:GetPivot().Position end)
+		if not ok then continue end
+		H.Status = "Hatching eggs"
+		H.FlyTo(pos + Vector3.new(0, 3, 3), cancelFn, 5)
+		H.FirePrompt(item.Prompt)
+		local dl = os.clock() + 2
+		while os.clock() < dl and item.Egg.Parent do RunService.Heartbeat:Wait() end
+		if not item.Egg.Parent then n = n + 1 end
+	end
+	if n > 0 then task.wait(0.5) H.Unequip() end
+	return n > 0
+end
+
+-- Pets place/feed
+local feedCD = {}
+local function plotPets()
+	local p = H.Plot()
+	local pets = p and p:FindFirstChild("Pets")
+	return pets and pets:GetChildren() or {}
+end
+local function maxPets()
+	return math.max(1, tonumber(localPlayer:GetAttribute("MaxPets")) or tonumber(H.Saved("MaxPets")) or 5)
+end
+local function petToolScore(tool)
+	return H.PetScore(H.PetNameOf(tool), tool:GetAttribute("Weight"), tool:GetAttribute("Mutation"))
+end
+local function petPlotScore(pet)
+	return H.PetScore(pet:GetAttribute("PetName") or pet.Name, pet:GetAttribute("Weight"), pet:GetAttribute("Mutation"))
+end
+local function bestPetTool()
+	local best, score = nil, -1
+	for _, t in ipairs(H.Tools("Pet")) do
+		local s = petToolScore(t)
+		if s > score then best, score = t, s end
+	end
+	return best, score
+end
+local function weakestPlotPet()
+	local weak, score = nil, math.huge
+	for _, p in ipairs(plotPets()) do
+		local s = petPlotScore(p)
+		if s < score then weak, score = p, s end
+	end
+	return weak, score
+end
+local function placePetTool(tool, cancelFn)
+	local key = tool:GetAttribute("PetKey")
+	if not key then return false end
+	local top = H.PlotTop()
+	if top then H.FlyTo(top + Vector3.new(0, 4, 0), cancelFn, 20) end
+	if not H.Equip(tool) then return false end
+	local pt = H.RandomPlotPoint(10, nil, 0)
+	local before = #plotPets()
+	H.Fire("PlacePet", key, (pt or Vector3.zero) + Vector3.new(0, 2, 0))
+	task.wait(0.35)
+	H.Unequip()
+	local dl = os.clock() + 1.5
+	while os.clock() < dl and #plotPets() == before do RunService.Heartbeat:Wait() end
+	return #plotPets() > before
+end
+local function placeStep(cancelFn)
+	local placed = 0
+	for _ = 1, maxPets() do
+		if cancelFn() or not Farm.Place then break end
+		local best = bestPetTool()
+		if not best then break end
+		if #plotPets() < maxPets() then
+			H.Status = "Placing " .. H.PetNameOf(best)
+			if placePetTool(best, cancelFn) then placed = placed + 1 end
+		elseif Farm.Swap then
+			local weak = weakestPlotPet()
+			local key = weak and weak:GetAttribute("PetKey")
+			if key then
+				H.Status = "Swapping in a stronger pet"
+				local top = H.PlotTop()
+				if top then H.FlyTo(top + Vector3.new(0, 4, 0), cancelFn, 20) end
+				H.Fire("PickupPet", key)
+				local dl = os.clock() + 1.5
+				while os.clock() < dl and weak.Parent do RunService.Heartbeat:Wait() end
+				if not weak.Parent then
+					H.Status = "Placing " .. H.PetNameOf(best)
+					if placePetTool(best, cancelFn) then placed = placed + 1 end
+				end
+			end
+		else
+			break
+		end
+	end
+	return placed > 0
+end
+local function bestFood()
+	local best, cost = nil, math.huge
+	for _, t in ipairs(H.Tools("Food")) do
+		local amt = t:FindFirstChild("Amount", true)
+		if (amt and tonumber(amt.Value) or 1) > 0 and (next(Farm.foodsToUse) == nil or Farm.foodsToUse[t.Name]) then
+			local d = type(GameData.Foods) == "table" and GameData.Foods[t.Name] or nil
+			local c = type(d) == "table" and tonumber(d.Cost) or 0
+			if c < cost then best, cost = t, c end
+		end
+	end
+	return best
+end
+local function feedStep(cancelFn)
+	local pets = plotPets()
+	table.sort(pets, function(a, b) return petPlotScore(a) > petPlotScore(b) end)
+	local n = 0
+	for _, pet in ipairs(pets) do
+		if cancelFn() then break end
+		local key = pet:GetAttribute("PetKey")
+		local food = bestFood()
+		if not food or not key then break end
+		if (feedCD[key] or 0) > os.clock() then continue end
+		local ok, pos = pcall(function() return pet:GetPivot().Position end)
+		if not ok then continue end
+		H.Status = "Feeding " .. tostring(pet:GetAttribute("PetName") or pet.Name)
+		H.FlyTo(pos + Vector3.new(0, 4, 4), cancelFn, 8)
+		if H.Equip(food) then
+			local age = pet:GetAttribute("Age")
+			H.Fire("FeedPet", key, food.Name)
+			local dl = os.clock() + 1.2
+			while os.clock() < dl and pet:GetAttribute("Age") == age do RunService.Heartbeat:Wait() end
+			feedCD[key] = os.clock() + 2
+			n = n + 1
+		end
+	end
+	H.Unequip()
+	return n > 0
+end
+
+-- Main farm loop
+task.spawn(function()
+	while true do
+		local any = Farm.Collect or #Farm.Manual > 0 or Farm.Plant or Farm.Hatch or Farm.Place or Farm.Feed or H.BasketCount() > 0
+		local did = false
+		if any and H.Root() and H.Plot() then
+			Farm.Busy = true
+			pcall(function()
+				local function cancel() return false end
+				if H.BasketCount() > 0 then deliverEggs(cancel) did = true end
+				if Farm.Plant then if plantStep(function() return not Farm.Plant end) then did = true end end
+				if Farm.Hatch and #readyHatches() > 0 then if hatchStep(function() return not Farm.Hatch end) then did = true end end
+				if Farm.Place then if placeStep(function() return not Farm.Place end) then did = true end end
+				if Farm.Feed then if feedStep(function() return not Farm.Feed end) then did = true end end
+				if Farm.Collect or #Farm.Manual > 0 then
+					if collectStep(function() return not (Farm.Collect or #Farm.Manual > 0) end) then did = true end
+				end
+			end)
+			Farm.Busy = false
+			if not did and not Farm.Collect then H.Status = "Waiting for work" end
+		elseif not any then
+			H.Status = "Idle"
+		end
+		local waitUntil = os.clock() + (did and 0.15 or 1)
+		while os.clock() < waitUntil and not Farm.WakeFlag do
+			RunService.Heartbeat:Wait()
+		end
+		Farm.WakeFlag = false
+	end
+end)
+
+-- Shop / progress state
+local Shop = {
+	BuyFood = false,
+	BuyGears = false,
+	foodSel = {},
+	gearSel = {},
+	keepCash = 0,
+	stock = { Food = {}, Gears = {} },
+}
+local Progress = {
+	AutoRebirth = false,
+	AutoIndex = false,
+}
+local PlayerMod = {
+	SpeedBoost = false,
+	Speed = 60,
+	InfJump = false,
+	Noclip = false,
+	InstantPickup = false,
+	ESPEggs = false,
+	ESPMinRarity = 0,
+}
+
+-- Shop stock listener
+pcall(function()
+	for _, name in ipairs({ "Restock", "ShopStock" }) do
+		local rem = game_:FindFirstChild(name)
+		if rem and rem:IsA("RemoteEvent") then
+			rem.OnClientEvent:Connect(function(data)
+				if type(data) ~= "table" then return end
+				for k, v in pairs(data) do
+					if (k == "Food" or k == "Gears") and type(v) == "table" then
+						local map = {}
+						for k2, v2 in pairs(v) do
+							if type(v2) == "table" then
+								map[k2] = tonumber(v2.Amount) or (v2.InStock and 1 or 0)
+							end
+						end
+						Shop.stock[k] = map
+					end
+				end
+			end)
+		end
+	end
+	H.Fire("ShopStock")
+end)
+
+local function shopList(kind)
+	local out = {}
+	local shop = GameData.Shop
+	local cat = type(shop) == "table" and shop[kind] or nil
+	if type(cat) == "table" then
+		local tmp = {}
+		for k, v in pairs(cat) do
+			if type(v) == "table" then table.insert(tmp, { Name = k, Price = tonumber(v.Price) or 0 }) end
+		end
+		table.sort(tmp, function(a, b) return a.Price < b.Price end)
+		for _, e in ipairs(tmp) do table.insert(out, e.Name) end
+	end
+	return out
+end
+local function shopPrice(kind, name)
+	local shop = GameData.Shop
+	local cat = type(shop) == "table" and shop[kind] or nil
+	local item = type(cat) == "table" and cat[name] or nil
+	return type(item) == "table" and tonumber(item.Price) or math.huge
+end
+local function toolCount(name)
+	local n = 0
+	for _, parent in ipairs({ localPlayer:FindFirstChildOfClass("Backpack"), localPlayer.Character }) do
+		if parent then
+			for _, c in ipairs(parent:GetChildren()) do
+				if c:IsA("Tool") and string.gsub(c.Name, "%s*%[.*$", "") == name then
+					local amt = c:FindFirstChild("Amount", true)
+					n = n + (amt and tonumber(amt.Value) or 1)
+				end
+			end
+		end
+	end
+	return n
+end
+
+task.spawn(function()
+	while true do
+		for _, kind in ipairs({ "Food", "Gears" }) do
+			local enabled = kind == "Food" and Shop.BuyFood or Shop.BuyGears
+			local sel = kind == "Food" and Shop.foodSel or Shop.gearSel
+			if enabled then
+				local opened = false
+				for _, name in ipairs(shopList(kind)) do
+					if sel[name] then
+						local price = shopPrice(kind, name)
+						local stock = Shop.stock[kind] and Shop.stock[kind][name]
+						local can = stock == nil or stock > 0
+						local tries = 0
+						while can and tries < 20 and H.Cash() - price >= Shop.keepCash do
+							if not opened then H.Fire("SetOpenShop", kind) task.wait(0.15) opened = true end
+							local before = toolCount(name)
+							H.Fire("BuyWithCash", kind, name)
+							tries = tries + 1
+							local dl = os.clock() + 0.8
+							while os.clock() < dl and toolCount(name) <= before do RunService.Heartbeat:Wait() end
+							if toolCount(name) > before then
+								if stock and Shop.stock[kind] then
+									Shop.stock[kind][name] = math.max(0, (Shop.stock[kind][name] or 1) - 1)
+									can = Shop.stock[kind][name] > 0
+								end
+							else
+								can = false
+							end
+						end
+					end
+				end
+			end
+		end
+		task.wait(3)
+	end
+end)
+
+task.spawn(function()
+	while true do
+		if Progress.AutoRebirth then
+			local rebirths = GameData.Rebirths
+			local n = tonumber(H.Saved("Rebirths")) or 0
+			local cost = nil
+			if type(rebirths) == "table" then
+				local cap = tonumber(rebirths.Cap)
+				if not (cap and n >= cap) and type(rebirths.GetCost) == "function" then
+					local ok, r = pcall(rebirths.GetCost, n)
+					if ok then cost = tonumber(r) end
+				end
+			end
+			if cost and H.Cash() >= cost then H.Fire("Rebirth") end
+		end
+		if Progress.AutoIndex then H.Fire("ClaimIndexReward") end
+		task.wait(3)
+	end
+end)
+
+-- Player mods
+RunService.Heartbeat:Connect(function()
+	if PlayerMod.SpeedBoost and not Farm.Busy then
+		local hum = H.Humanoid()
+		local root = H.Root()
+		if hum and root and not hum.Sit then
+			local md = hum.MoveDirection
+			local flat = Vector3.new(md.X, 0, md.Z)
+			if flat.Magnitude >= 0.05 then
+				local n2 = flat.Unit * PlayerMod.Speed
+				root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0) + n2
+			end
+		end
+	end
+end)
+UserInputService.JumpRequest:Connect(function()
+	if not PlayerMod.InfJump then return end
+	local hum = H.Humanoid()
+	if hum then pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end) end
+end)
+local noclipForced = false
+RunService.Stepped:Connect(function()
+	if PlayerMod.Noclip then
+		noclipForced = true
+		H.SetNoclip(true)
+	elseif noclipForced then
+		noclipForced = false
+		if not Farm.Busy then H.SetNoclip(false) end
+	end
+end)
+
+local promptBackup = {}
+local promptConns = {}
+local function applyInstantPrompts()
+	for _, d in ipairs(workspace:GetDescendants()) do
+		if d:IsA("ProximityPrompt") then
+			if promptBackup[d] == nil then promptBackup[d] = d.HoldDuration end
+			d.HoldDuration = 0
+		end
+	end
+	table.insert(promptConns, workspace.DescendantAdded:Connect(function(d)
+		if d:IsA("ProximityPrompt") then
+			task.defer(function()
+				if promptBackup[d] == nil then promptBackup[d] = d.HoldDuration end
+				d.HoldDuration = 0
+			end)
+		end
+	end))
+end
+local function clearInstantPrompts()
+	for _, c in ipairs(promptConns) do c:Disconnect() end
+	table.clear(promptConns)
+	for k, v in pairs(promptBackup) do
+		if k.Parent then pcall(function() k.HoldDuration = v end) end
+	end
+	table.clear(promptBackup)
+end
+
+-- Anti AFK
+task.spawn(function()
+	while true do
+		pcall(function()
+			if type(getconnections) == "function" then
+				for _, c in ipairs(getconnections(localPlayer.Idled)) do c:Disable() end
+			end
+		end)
+		task.wait(30)
+	end
+end)
+
+-- Egg name list for dropdown
+local eggNames = {}
+do
+	local tmp = {}
+	if type(GameData.Eggs) == "table" then
+		for k, egg in pairs(GameData.Eggs) do
+			if type(egg) == "table" then
+				local rn = egg.Rarity ~= nil and tostring(egg.Rarity) or nil
+				table.insert(tmp, {
+					Name = k,
+					Rank = rn and (H.RarityRank[rn] or H.RegisterRarity(rn)) or 0,
+					Luck = tonumber(egg.Luck) or 0,
+				})
+			end
+		end
+	end
+	table.sort(tmp, function(a, b)
+		if a.Rank ~= b.Rank then return a.Rank > b.Rank end
+		return a.Luck > b.Luck
+	end)
+	for _, e in ipairs(tmp) do table.insert(eggNames, e.Name) end
+end
+local foodNames = {}
+if type(GameData.Foods) == "table" then
+	local tmp = {}
+	for k, f in pairs(GameData.Foods) do
+		if type(f) == "table" then table.insert(tmp, { Name = k, Cost = tonumber(f.Cost) or 0 }) end
+	end
+	table.sort(tmp, function(a, b) return a.Cost < b.Cost end)
+	for _, e in ipairs(tmp) do table.insert(foodNames, e.Name) end
+end
+
+print("[KHUB] Ride a Pet engine ready")
+
+-- ========== UI ==========
+local WIN_W, WIN_H = 540, 400
+local SIDE_W = 128
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KHUB_RideAPet"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = getParent()
+
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(0, WIN_W, 0, WIN_H)
+Main.Position = UDim2.new(0.5, -WIN_W/2, 0.5, -WIN_H/2)
+Main.BackgroundColor3 = THEME.bg
+Main.BackgroundTransparency = 0.22
+Main.BorderSizePixel = 0
+Main.ClipsDescendants = true
+Main.Parent = ScreenGui
+corner(Main, 10)
+stroke(Main, THEME.accent2, 1.2, 0.4)
+
+local BgImg = Instance.new("ImageLabel")
+BgImg.Size = UDim2.new(1,0,1,0)
+BgImg.BackgroundTransparency = 1
+BgImg.Image = BG_ID
+BgImg.ImageTransparency = 0.58
+BgImg.ScaleType = Enum.ScaleType.Crop
+BgImg.ZIndex = 1
+BgImg.Parent = Main
+
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1,0,0,48)
+TitleBar.BackgroundColor3 = THEME.title
+TitleBar.BackgroundTransparency = 0.35
+TitleBar.BorderSizePixel = 0
+TitleBar.ZIndex = 10
+TitleBar.Parent = Main
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.new(0,28,0,28)
+Logo.Position = UDim2.new(0,10,0,10)
+Logo.BackgroundTransparency = 1
+Logo.Image = LOGO_ID
+Logo.ZIndex = 11
+Logo.Parent = TitleBar
+corner(Logo, 6)
+
+local TitleLbl = Instance.new("TextLabel")
+TitleLbl.Size = UDim2.new(1,-120,0,20)
+TitleLbl.Position = UDim2.new(0,46,0,6)
+TitleLbl.BackgroundTransparency = 1
+TitleLbl.Text = "KHUB · Ride a Pet"
+TitleLbl.TextColor3 = Color3.new(1,1,1)
+TitleLbl.Font = Enum.Font.GothamBlack
+TitleLbl.TextSize = 15
+TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
+TitleLbl.ZIndex = 11
+TitleLbl.Parent = TitleBar
+local TitleGrad = Instance.new("UIGradient")
+TitleGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(120,190,255)),
+	ColorSequenceKeypoint.new(0.5, Color3.new(1,1,1)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(180,130,255)),
+})
+TitleGrad.Parent = TitleLbl
+task.spawn(function()
+	while TitleLbl.Parent do
+		TitleGrad.Offset = Vector2.new(math.sin(tick()*1.2)*0.5, 0)
+		task.wait(0.03)
+	end
+end)
+
+local SubLbl = Instance.new("TextLabel")
+SubLbl.Size = UDim2.new(1,-120,0,14)
+SubLbl.Position = UDim2.new(0,46,0,26)
+SubLbl.BackgroundTransparency = 1
+SubLbl.Text = "by Kyiel Pambid"
+SubLbl.TextColor3 = THEME.dim
+SubLbl.Font = Enum.Font.Gotham
+SubLbl.TextSize = 11
+SubLbl.TextXAlignment = Enum.TextXAlignment.Left
+SubLbl.ZIndex = 11
+SubLbl.Parent = TitleBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0,28,0,28)
+CloseBtn.Position = UDim2.new(1,-36,0,10)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(40,20,28)
+CloseBtn.BackgroundTransparency = 0.2
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = THEME.red
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.ZIndex = 12
+CloseBtn.Parent = TitleBar
+corner(CloseBtn, 6)
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0,28,0,28)
+MinBtn.Position = UDim2.new(1,-68,0,10)
+MinBtn.BackgroundColor3 = Color3.fromRGB(24,28,44)
+MinBtn.BackgroundTransparency = 0.2
+MinBtn.Text = "-"
+MinBtn.TextColor3 = THEME.text
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 14
+MinBtn.ZIndex = 12
+MinBtn.Parent = TitleBar
+corner(MinBtn, 6)
+
+do
+	local dragging, dragStart, startPos
+	TitleBar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = Main.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local d = input.Position - dragStart
+			Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset+d.X, startPos.Y.Scale, startPos.Y.Offset+d.Y)
+		end
+	end)
+end
+
+local Body = Instance.new("Frame")
+Body.Size = UDim2.new(1,0,1,-48)
+Body.Position = UDim2.new(0,0,0,48)
+Body.BackgroundTransparency = 1
+Body.ZIndex = 5
+Body.Parent = Main
+
+local Sidebar = Instance.new("ScrollingFrame")
+Sidebar.Name = "Sidebar"
+Sidebar.Size = UDim2.new(0, SIDE_W, 1, 0)
+Sidebar.BackgroundColor3 = THEME.sidebar
+Sidebar.BackgroundTransparency = 0.45
+Sidebar.BorderSizePixel = 0
+Sidebar.ScrollBarThickness = 4
+Sidebar.ScrollBarImageColor3 = THEME.accent
+Sidebar.ScrollingEnabled = true
+Sidebar.ScrollingDirection = Enum.ScrollingDirection.Y
+Sidebar.ElasticBehavior = Enum.ElasticBehavior.Always
+Sidebar.CanvasSize = UDim2.new(0,0,0,0)
+Sidebar.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Sidebar.ClipsDescendants = true
+Sidebar.ZIndex = 6
+Sidebar.Parent = Body
+
+local sideLay = Instance.new("UIListLayout")
+sideLay.SortOrder = Enum.SortOrder.LayoutOrder
+sideLay.Padding = UDim.new(0,4)
+sideLay.Parent = Sidebar
+local sidePad = Instance.new("UIPadding")
+sidePad.PaddingTop = UDim.new(0,6)
+sidePad.PaddingLeft = UDim.new(0,6)
+sidePad.PaddingRight = UDim.new(0,6)
+sidePad.PaddingBottom = UDim.new(0,12)
+sidePad.Parent = Sidebar
+
+local function refreshSidebarCanvas()
+	task.defer(function()
+		local h = sideLay.AbsoluteContentSize.Y + sidePad.PaddingTop.Offset + sidePad.PaddingBottom.Offset + 8
+		Sidebar.CanvasSize = UDim2.new(0, 0, 0, math.max(h, Sidebar.AbsoluteSize.Y + 1))
+	end)
+end
+sideLay:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(refreshSidebarCanvas)
+Sidebar:GetPropertyChangedSignal("AbsoluteSize"):Connect(refreshSidebarCanvas)
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -SIDE_W, 1, 0)
+Content.Position = UDim2.new(0, SIDE_W, 0, 0)
+Content.BackgroundTransparency = 1
+Content.ZIndex = 6
+Content.Parent = Body
+
+local pages, tabButtons = {}, {}
+
+local function switchTab(id)
+	for name, pg in pairs(pages) do pg.Visible = (name == id) end
+	for name, btn in pairs(tabButtons) do
+		btn.BackgroundColor3 = (name == id) and THEME.tabOn or THEME.tabOff
+		btn.BackgroundTransparency = (name == id) and 0.25 or 0.55
+		local ind = btn:FindFirstChild("ActiveBar")
+		if ind then ind.Visible = (name == id) end
+	end
+end
+
+local function createTab(id, label, order, iconId)
+	local btn = Instance.new("TextButton")
+	btn.Name = id
+	btn.Size = UDim2.new(1, 0, 0, 36)
+	btn.BackgroundColor3 = THEME.tabOff
+	btn.BackgroundTransparency = 0.55
+	btn.Text = ""
+	btn.LayoutOrder = order
+	btn.ZIndex = 8
+	btn.Parent = Sidebar
+	corner(btn, 6)
+
+	local bar = Instance.new("Frame")
+	bar.Name = "ActiveBar"
+	bar.Size = UDim2.new(0, 3, 0.7, 0)
+	bar.Position = UDim2.new(0, 2, 0.15, 0)
+	bar.BackgroundColor3 = THEME.green
+	bar.BorderSizePixel = 0
+	bar.Visible = false
+	bar.ZIndex = 9
+	bar.Parent = btn
+	corner(bar, 2)
+
+	local icon = Instance.new("ImageLabel")
+	icon.Size = UDim2.new(0, 16, 0, 16)
+	icon.Position = UDim2.new(0, 10, 0.5, -8)
+	icon.BackgroundTransparency = 1
+	icon.Image = iconId or TAB_ICONS[id] or ""
+	icon.ZIndex = 9
+	icon.Parent = btn
+
+	local txt = Instance.new("TextLabel")
+	txt.Size = UDim2.new(1, -34, 1, 0)
+	txt.Position = UDim2.new(0, 30, 0, 0)
+	txt.BackgroundTransparency = 1
+	txt.Text = label
+	txt.TextColor3 = THEME.text
+	txt.Font = Enum.Font.GothamMedium
+	txt.TextSize = 12
+	txt.TextXAlignment = Enum.TextXAlignment.Left
+	txt.ZIndex = 9
+	txt.Parent = btn
+
+	tabButtons[id] = btn
+
+	local page = Instance.new("ScrollingFrame")
+	page.Name = id
+	page.Size = UDim2.new(1,0,1,0)
+	page.BackgroundTransparency = 1
+	page.BorderSizePixel = 0
+	page.ScrollBarThickness = 3
+	page.ScrollBarImageColor3 = THEME.accent
+	page.CanvasSize = UDim2.new(0,0,0,0)
+	page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	page.Visible = false
+	page.ZIndex = 7
+	page.Parent = Content
+
+	local lay = Instance.new("UIListLayout")
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Padding = UDim.new(0,8)
+	lay.Parent = page
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0,8)
+	pad.PaddingLeft = UDim.new(0,10)
+	pad.PaddingRight = UDim.new(0,10)
+	pad.PaddingBottom = UDim.new(0,12)
+	pad.Parent = page
+
+	pages[id] = page
+	btn.MouseButton1Click:Connect(function() switchTab(id) end)
+	refreshSidebarCanvas()
+	return page
+end
+
+local function greenGuide(parent, extra)
+	local box = Instance.new("Frame")
+	box.Size = UDim2.new(1,0,0,0)
+	box.AutomaticSize = Enum.AutomaticSize.Y
+	box.BackgroundColor3 = Color3.fromRGB(10,48,28)
+	box.BackgroundTransparency = 0.25
+	box.BorderSizePixel = 0
+	box.ZIndex = 8
+	box.Parent = parent
+	corner(box, 8)
+	stroke(box, THEME.green, 1.5, 0.25)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0,8)
+	pad.PaddingBottom = UDim.new(0,8)
+	pad.PaddingLeft = UDim.new(0,10)
+	pad.PaddingRight = UDim.new(0,10)
+	pad.Parent = box
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0,3)
+	lay.Parent = box
+	local function line(t, sz, col)
+		local l = Instance.new("TextLabel")
+		l.Size = UDim2.new(1,0,0,0)
+		l.AutomaticSize = Enum.AutomaticSize.Y
+		l.BackgroundTransparency = 1
+		l.Text = t
+		l.TextColor3 = col or Color3.fromRGB(180,255,210)
+		l.Font = Enum.Font.GothamMedium
+		l.TextSize = sz or 11
+		l.TextWrapped = true
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.ZIndex = 9
+		l.Parent = box
+	end
+	line("HI, EVERYONE IM KYIEL PAMBID", 12, THEME.green)
+	line("OWNER OF KHUB · JOIN DISCORD", 11)
+	line("HOW IT WORKS? + ALWAYS ON IMPORTANT + EXPLORE THE SCRIPT", 11)
+	if extra and extra ~= "" then line(extra, 10, Color3.fromRGB(160,230,190)) end
+	return box
+end
+
+local function section(parent, title)
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1,0,0,0)
+	f.AutomaticSize = Enum.AutomaticSize.Y
+	f.BackgroundColor3 = THEME.card
+	f.BackgroundTransparency = 0.4
+	f.BorderSizePixel = 0
+	f.ZIndex = 8
+	f.Parent = parent
+	corner(f, 8)
+	stroke(f, THEME.accent2, 1, 0.55)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0,8)
+	pad.PaddingBottom = UDim.new(0,8)
+	pad.PaddingLeft = UDim.new(0,10)
+	pad.PaddingRight = UDim.new(0,10)
+	pad.Parent = f
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0,6)
+	lay.Parent = f
+	local h = Instance.new("TextLabel")
+	h.Size = UDim2.new(1,0,0,16)
+	h.BackgroundTransparency = 1
+	h.Text = title
+	h.TextColor3 = THEME.accent
+	h.Font = Enum.Font.GothamBold
+	h.TextSize = 12
+	h.TextXAlignment = Enum.TextXAlignment.Left
+	h.ZIndex = 9
+	h.Parent = f
+	return f
+end
+
+local function addToggle(parent, text, getFn, setFn)
+	local on = getFn and getFn() or false
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1,0,0,30)
+	row.BackgroundColor3 = THEME.element
+	row.BackgroundTransparency = 0.35
+	row.BorderSizePixel = 0
+	row.ZIndex = 9
+	row.Parent = parent
+	corner(row, 6)
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1,-52,1,0)
+	lbl.Position = UDim2.new(0,8,0,0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.TextColor3 = THEME.text
+	lbl.Font = Enum.Font.GothamMedium
+	lbl.TextSize = 12
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 10
+	lbl.Parent = row
+	local outer = Instance.new("Frame")
+	outer.Size = UDim2.new(0,36,0,18)
+	outer.Position = UDim2.new(1,-42,0.5,-9)
+	outer.BackgroundColor3 = Color3.fromRGB(45,50,70)
+	outer.ZIndex = 10
+	outer.Parent = row
+	corner(outer, 9)
+	local kn = Instance.new("Frame")
+	kn.Size = UDim2.new(0,14,0,14)
+	kn.Position = UDim2.new(0,2,0.5,-7)
+	kn.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	kn.ZIndex = 11
+	kn.Parent = outer
+	corner(kn, 7)
+	local function paint()
+		outer.BackgroundColor3 = on and THEME.green or Color3.fromRGB(45,50,70)
+		kn.Position = on and UDim2.new(1,-16,0.5,-7) or UDim2.new(0,2,0.5,-7)
+	end
+	paint()
+	local hit = Instance.new("TextButton")
+	hit.Size = UDim2.new(1,0,1,0)
+	hit.BackgroundTransparency = 1
+	hit.Text = ""
+	hit.ZIndex = 12
+	hit.Parent = row
+	hit.MouseButton1Click:Connect(function()
+		on = not on
+		paint()
+		if setFn then setFn(on) end
+	end)
+	return row
+end
+
+local function addButton(parent, text, cb, col)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1,0,0,32)
+	b.BackgroundColor3 = col or Color3.fromRGB(28,36,58)
+	b.BackgroundTransparency = 0.25
+	b.Text = text
+	b.TextColor3 = THEME.text
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 12
+	b.ZIndex = 9
+	b.Parent = parent
+	corner(b, 6)
+	b.MouseButton1Click:Connect(function() if cb then cb() end end)
+	return b
+end
+
+local function addLabel(parent, text, size, col)
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1,0,0,0)
+	l.AutomaticSize = Enum.AutomaticSize.Y
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.TextColor3 = col or THEME.dim
+	l.Font = Enum.Font.Gotham
+	l.TextSize = size or 11
+	l.TextWrapped = true
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.ZIndex = 9
+	l.Parent = parent
+	return l
+end
+
+local function addDropdown(parent, title, options, default, onChange)
+	local wrap = Instance.new("Frame")
+	wrap.Size = UDim2.new(1,0,0,0)
+	wrap.AutomaticSize = Enum.AutomaticSize.Y
+	wrap.BackgroundTransparency = 1
+	wrap.ZIndex = 9
+	wrap.Parent = parent
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0,4)
+	lay.Parent = wrap
+	addLabel(wrap, title, 11, THEME.dim)
+	local current = default or (options[1] or "")
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1,0,0,28)
+	btn.BackgroundColor3 = THEME.element
+	btn.BackgroundTransparency = 0.3
+	btn.Text = "  " .. tostring(current) .. "  ▼"
+	btn.TextColor3 = THEME.text
+	btn.Font = Enum.Font.GothamMedium
+	btn.TextSize = 12
+	btn.TextXAlignment = Enum.TextXAlignment.Left
+	btn.ZIndex = 10
+	btn.Parent = wrap
+	corner(btn, 6)
+	local open = false
+	local list = Instance.new("Frame")
+	list.Size = UDim2.new(1,0,0,0)
+	list.AutomaticSize = Enum.AutomaticSize.Y
+	list.BackgroundColor3 = THEME.card
+	list.BackgroundTransparency = 0.2
+	list.Visible = false
+	list.ZIndex = 15
+	list.Parent = wrap
+	corner(list, 6)
+	local listLay = Instance.new("UIListLayout")
+	listLay.Parent = list
+	for _, opt in ipairs(options) do
+		local o = Instance.new("TextButton")
+		o.Size = UDim2.new(1,0,0,26)
+		o.BackgroundTransparency = 1
+		o.Text = "  " .. tostring(opt)
+		o.TextColor3 = THEME.text
+		o.Font = Enum.Font.Gotham
+		o.TextSize = 12
+		o.TextXAlignment = Enum.TextXAlignment.Left
+		o.ZIndex = 16
+		o.Parent = list
+		o.MouseButton1Click:Connect(function()
+			current = opt
+			btn.Text = "  " .. tostring(current) .. "  ▼"
+			list.Visible = false
+			open = false
+			if onChange then onChange(current) end
+		end)
+	end
+	btn.MouseButton1Click:Connect(function()
+		open = not open
+		list.Visible = open
+	end)
+	return wrap
+end
+
+local function addSlider(parent, title, minV, maxV, default, step, onChange)
+	local val = default or minV
+	local wrap = Instance.new("Frame")
+	wrap.Size = UDim2.new(1,0,0,48)
+	wrap.BackgroundTransparency = 1
+	wrap.ZIndex = 9
+	wrap.Parent = parent
+	local lab = Instance.new("TextLabel")
+	lab.Size = UDim2.new(1,0,0,16)
+	lab.BackgroundTransparency = 1
+	lab.Text = title .. ": " .. tostring(val)
+	lab.TextColor3 = THEME.dim
+	lab.Font = Enum.Font.Gotham
+	lab.TextSize = 11
+	lab.TextXAlignment = Enum.TextXAlignment.Left
+	lab.ZIndex = 10
+	lab.Parent = wrap
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1,0,0,28)
+	row.Position = UDim2.new(0,0,0,18)
+	row.BackgroundTransparency = 1
+	row.ZIndex = 10
+	row.Parent = wrap
+	local function bump(d)
+		val = math.clamp(val + d, minV, maxV)
+		if step and step > 1 then val = math.floor(val / step + 0.5) * step end
+		lab.Text = title .. ": " .. tostring(val)
+		if onChange then onChange(val) end
+	end
+	local m = Instance.new("TextButton")
+	m.Size = UDim2.new(0,40,0,26)
+	m.Text = "-"
+	m.BackgroundColor3 = THEME.element
+	m.BackgroundTransparency = 0.3
+	m.TextColor3 = THEME.text
+	m.ZIndex = 11
+	m.Parent = row
+	corner(m, 5)
+	m.MouseButton1Click:Connect(function() bump(-(step or 1)) end)
+	local p = Instance.new("TextButton")
+	p.Size = UDim2.new(0,40,0,26)
+	p.Position = UDim2.new(0,48,0,0)
+	p.Text = "+"
+	p.BackgroundColor3 = THEME.element
+	p.BackgroundTransparency = 0.3
+	p.TextColor3 = THEME.text
+	p.ZIndex = 11
+	p.Parent = row
+	corner(p, 5)
+	p.MouseButton1Click:Connect(function() bump(step or 1) end)
+	return wrap
+end
+
+-- TABS
+local PageWelcome  = createTab("Welcome",  "Welcome",  1, TAB_ICONS.Welcome)
+local PageFarm     = createTab("Farm",     "Farm",     2, TAB_ICONS.Farm)
+local PagePets     = createTab("Pets",     "Pets",     3, TAB_ICONS.Pets)
+local PageShop     = createTab("Shop",     "Shop",     4, TAB_ICONS.Shop)
+local PageProgress = createTab("Progress", "Progress", 5, TAB_ICONS.Progress)
+local PagePlayer   = createTab("Player",   "Player",   6, TAB_ICONS.Player)
+local PageServer   = createTab("Server",   "Server",   7, TAB_ICONS.Server)
+local PageMisc     = createTab("Misc",     "Misc",     8, TAB_ICONS.Misc)
+local PageConfig   = createTab("Config",   "Config",   9, TAB_ICONS.Config)
+
+-- WELCOME
+do
+	local Hero = Instance.new("Frame")
+	Hero.Size = UDim2.new(1,0,0,130)
+	Hero.BackgroundColor3 = THEME.card
+	Hero.BackgroundTransparency = 0.35
+	Hero.BorderSizePixel = 0
+	Hero.ZIndex = 8
+	Hero.Parent = PageWelcome
+	corner(Hero, 10)
+	stroke(Hero, THEME.accent2, 1.2, 0.4)
+	local HeroText = Instance.new("TextLabel")
+	HeroText.Size = UDim2.new(1,-24,0,52)
+	HeroText.Position = UDim2.fromOffset(14,12)
+	HeroText.BackgroundTransparency = 1
+	HeroText.Text = "KHUB"
+	HeroText.Font = Enum.Font.GothamBlack
+	HeroText.TextSize = 48
+	HeroText.TextColor3 = Color3.new(1,1,1)
+	HeroText.TextXAlignment = Enum.TextXAlignment.Left
+	HeroText.ZIndex = 10
+	HeroText.Parent = Hero
+	local HeroGrad = Instance.new("UIGradient")
+	HeroGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, THEME.accent),
+		ColorSequenceKeypoint.new(0.35, Color3.new(1,1,1)),
+		ColorSequenceKeypoint.new(0.6, THEME.accent2),
+		ColorSequenceKeypoint.new(1, THEME.gold),
+	})
+	HeroGrad.Parent = HeroText
+	task.spawn(function()
+		while HeroText.Parent do
+			local t = (tick() % 3) / 3
+			HeroGrad.Offset = Vector2.new(-1.4 + t * 2.8, 0)
+			task.wait(0.03)
+		end
+	end)
+	local HeroBy = Instance.new("TextLabel")
+	HeroBy.Size = UDim2.new(1,-24,0,18)
+	HeroBy.Position = UDim2.fromOffset(16,68)
+	HeroBy.BackgroundTransparency = 1
+	HeroBy.Text = "by Kyiel Pambid"
+	HeroBy.Font = Enum.Font.GothamBold
+	HeroBy.TextSize = 13
+	HeroBy.TextColor3 = THEME.gold
+	HeroBy.TextXAlignment = Enum.TextXAlignment.Left
+	HeroBy.ZIndex = 10
+	HeroBy.Parent = Hero
+	local HeroType = Instance.new("TextLabel")
+	HeroType.Size = UDim2.new(1,-24,0,16)
+	HeroType.Position = UDim2.fromOffset(16,92)
+	HeroType.BackgroundTransparency = 1
+	HeroType.Text = ""
+	HeroType.Font = Enum.Font.Code
+	HeroType.TextSize = 11
+	HeroType.TextColor3 = THEME.dim
+	HeroType.TextXAlignment = Enum.TextXAlignment.Left
+	HeroType.ZIndex = 10
+	HeroType.Parent = Hero
+	task.spawn(function()
+		local phrases = {
+			"Join Discord for more scripts",
+			"Subscribe on my channel",
+			"Toggle: RightShift / RightCtrl / K",
+			"KHUB · Ride a Pet",
+		}
+		while HeroType.Parent do
+			for _, phrase in ipairs(phrases) do
+				HeroType.Text = ""
+				for i = 1, #phrase do
+					HeroType.Text = string.sub(phrase, 1, i)
+					task.wait(0.028)
+				end
+				task.wait(1.8)
+				for i = #phrase, 1, -1 do
+					HeroType.Text = string.sub(phrase, 1, i)
+					task.wait(0.012)
+				end
+				task.wait(0.2)
+			end
+		end
+	end)
+	greenGuide(PageWelcome, "")
+	local c = section(PageWelcome, "PROFILE")
+	addLabel(c, "hey, " .. (player.DisplayName or player.Name) .. " :)", 13, THEME.gold)
+	addLabel(c, "@" .. player.Name, 11, THEME.dim)
+	addLabel(c, "user id · " .. tostring(player.UserId), 10, THEME.dim)
+	local statusSec = section(PageWelcome, "FARM STATUS")
+	local statusLbl = addLabel(statusSec, "Idle", 12, THEME.green)
+	RunService.Heartbeat:Connect(function()
+		if statusLbl and statusLbl.Text ~= H.Status then
+			statusLbl.Text = H.Status
+		end
+	end)
+	local links = section(PageWelcome, "JOIN & SUBSCRIBE")
+	addButton(links, "JOIN DISCORD", function()
+		pcall(function() if setclipboard then setclipboard(DISCORD) end end)
+	end, Color3.fromRGB(45,70,160))
+	addButton(links, "SUBSCRIBE YOUTUBE", function()
+		pcall(function() if setclipboard then setclipboard(YOUTUBE) end end)
+	end, Color3.fromRGB(150,40,50))
+end
+
+-- FARM
+do
+	greenGuide(PageFarm, "ON Auto Collect · set Min Rarity · Steal Method Instant for fast return")
+	local st = section(PageFarm, "AUTO COLLECT EGGS")
+	addToggle(st, "Auto Collect Eggs", function() return Farm.Collect end, function(v)
+		Farm.Collect = v
+		Farm.Wake()
+	end)
+	addDropdown(st, "Steal Method", { "Tween", "Instant" }, "Tween", function(v)
+		Farm.StealMethod = tostring(v) == "Instant" and "Instant" or "Tween"
+	end)
+	addDropdown(st, "Steal Approach", { "Normal", "Under Map", "Over Map" }, "Under Map", function(v)
+		Farm.StealApproach = (v == "Normal" or v == "Over Map") and v or "Under Map"
+	end)
+	addDropdown(st, "Min Egg Rarity", H.RarityChoices, "Any", function(v)
+		Farm.minRarity = H.RarityRank[tostring(v)] or 0
+	end)
+	addDropdown(st, "Collect Priority", { "Highest Luck", "Highest Rarity", "Nearest", "Farthest" }, "Highest Rarity", function(v)
+		Farm.priority = tostring(v)
+	end)
+	addSlider(st, "Travel Speed", 100, 10000, 2000, 50, function(v)
+		H.FlySpeed = v
+	end)
+	addSlider(st, "Fast Return Speed", 100, 10000, 1976, 50, function(v)
+		Farm.ReturnSpeed = v
+	end)
+	local ph = section(PageFarm, "AUTO PLANT & HATCH")
+	addToggle(ph, "Auto Plant Eggs", function() return Farm.Plant end, function(v)
+		Farm.Plant = v
+		plantCD = 0
+		Farm.Wake()
+	end)
+	addDropdown(ph, "Plant Min Rarity", H.RarityChoices, "Any", function(v)
+		Farm.plantMinRarity = H.RarityRank[tostring(v)] or 0
+	end)
+	addToggle(ph, "Auto Hatch Eggs", function() return Farm.Hatch end, function(v)
+		Farm.Hatch = v
+		Farm.Wake()
+	end)
+end
+
+-- PETS
+do
+	greenGuide(PagePets, "Place best pets · swap weak · auto feed")
+	local c = section(PagePets, "AUTO PETS")
+	addToggle(c, "Auto Place Best Pets", function() return Farm.Place end, function(v)
+		Farm.Place = v
+		Farm.Wake()
+	end)
+	addToggle(c, "Swap Weaker Pets", function() return Farm.Swap end, function(v)
+		Farm.Swap = v
+		Farm.Wake()
+	end)
+	addToggle(c, "Auto Feed Pets", function() return Farm.Feed end, function(v)
+		Farm.Feed = v
+		table.clear(feedCD)
+		Farm.Wake()
+	end)
+end
+
+-- SHOP
+do
+	greenGuide(PageShop, "Auto buy food / radars · keep cash reserve")
+	local c = section(PageShop, "AUTO SHOP")
+	addToggle(c, "Auto Buy Food", function() return Shop.BuyFood end, function(v) Shop.BuyFood = v end)
+	addToggle(c, "Auto Buy Radars", function() return Shop.BuyGears end, function(v) Shop.BuyGears = v end)
+	addSlider(c, "Keep Cash", 0, 10000000, 0, 1000, function(v) Shop.keepCash = v end)
+	-- select first few foods by default empty = all when empty map treated as all in bestFood
+end
+
+-- PROGRESS
+do
+	greenGuide(PageProgress, "")
+	local c = section(PageProgress, "AUTO PROGRESS")
+	addToggle(c, "Auto Rebirth", function() return Progress.AutoRebirth end, function(v) Progress.AutoRebirth = v end)
+	addToggle(c, "Auto Claim Index Reward", function() return Progress.AutoIndex end, function(v) Progress.AutoIndex = v end)
+end
+
+-- PLAYER
+do
+	greenGuide(PagePlayer, "")
+	local c = section(PagePlayer, "MOVEMENT")
+	addToggle(c, "Speed Boost", function() return PlayerMod.SpeedBoost end, function(v) PlayerMod.SpeedBoost = v end)
+	addSlider(c, "Boost Speed", 16, 1300, 60, 1, function(v) PlayerMod.Speed = v end)
+	addToggle(c, "Infinite Jump", function() return PlayerMod.InfJump end, function(v) PlayerMod.InfJump = v end)
+	addToggle(c, "Noclip", function() return PlayerMod.Noclip end, function(v) PlayerMod.Noclip = v end)
+	addToggle(c, "Instant Pickup", function() return PlayerMod.InstantPickup end, function(v)
+		PlayerMod.InstantPickup = v
+		if v then applyInstantPrompts() else clearInstantPrompts() end
+	end)
+end
+
+-- SERVER
+do
+	greenGuide(PageServer, "Rejoin / hop helpers")
+	local c = section(PageServer, "SERVER")
+	addButton(c, "Rejoin", function()
+		pcall(function()
+			TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
+		end)
+	end)
+	addButton(c, "Copy Job Id", function()
+		pcall(function() if setclipboard then setclipboard(game.JobId) end end)
+	end)
+	addButton(c, "Server Hop (Least Players)", function()
+		task.spawn(function()
+			local ok, data = pcall(function()
+				return HttpService:JSONDecode(game:HttpGet(
+					"https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&excludeFullGames=true&limit=100"
+				))
+			end)
+			if not ok or type(data) ~= "table" or type(data.data) ~= "table" then return end
+			for _, s in ipairs(data.data) do
+				if s.id ~= game.JobId and (s.playing or 0) < (s.maxPlayers or 0) then
+					pcall(function()
+						TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, player)
+					end)
+					return
+				end
+			end
+		end)
+	end)
+end
+
+-- MISC
+do
+	greenGuide(PageMisc, "")
+	local c = section(PageMisc, "PERFORMANCE")
+	addToggle(c, "Optimizer (Best FPS)", function() return false end, function(v)
+		if v then
+			pcall(function()
+				settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+				Lighting.GlobalShadows = false
+				Lighting.FogEnd = 9e9
+			end)
+			pcall(function()
+				for _, d in ipairs(Workspace:GetDescendants()) do
+					if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Smoke") or d:IsA("Fire") then
+						d.Enabled = false
+					elseif d:IsA("BasePart") then
+						d.CastShadow = false
+					end
+				end
+			end)
+		end
+	end)
+	addLabel(c, "Anti AFK is always on", 11, THEME.dim)
+end
+
+-- CONFIG
+do
+	greenGuide(PageConfig, "Save toggles if executor supports writefile")
+	local c = section(PageConfig, "SAVE / LOAD")
+	addButton(c, "Save Config", function()
+		local data = {
+			collect = Farm.Collect, plant = Farm.Plant, hatch = Farm.Hatch,
+			place = Farm.Place, swap = Farm.Swap, feed = Farm.Feed,
+			steal = Farm.StealMethod, approach = Farm.StealApproach,
+			fly = H.FlySpeed, ret = Farm.ReturnSpeed,
+			buyFood = Shop.BuyFood, buyGear = Shop.BuyGears,
+			rebirth = Progress.AutoRebirth, index = Progress.AutoIndex,
+			speed = PlayerMod.SpeedBoost, speedVal = PlayerMod.Speed,
+			infJump = PlayerMod.InfJump, noclip = PlayerMod.Noclip,
+		}
+		pcall(function()
+			if writefile then writefile("KHUB_RideAPet_config.json", HttpService:JSONEncode(data)) end
+		end)
+	end, Color3.fromRGB(30,70,50))
+	addButton(c, "Load Config", function()
+		pcall(function()
+			if not (readfile and isfile and isfile("KHUB_RideAPet_config.json")) then return end
+			local data = HttpService:JSONDecode(readfile("KHUB_RideAPet_config.json"))
+			if data.collect then Farm.Collect = true end
+			if data.plant then Farm.Plant = true end
+			if data.hatch then Farm.Hatch = true end
+			if data.place then Farm.Place = true end
+			if data.swap then Farm.Swap = true end
+			if data.feed then Farm.Feed = true end
+			if data.steal then Farm.StealMethod = data.steal end
+			if data.approach then Farm.StealApproach = data.approach end
+			if data.fly then H.FlySpeed = data.fly end
+			if data.ret then Farm.ReturnSpeed = data.ret end
+			if data.buyFood then Shop.BuyFood = true end
+			if data.buyGear then Shop.BuyGears = true end
+			if data.rebirth then Progress.AutoRebirth = true end
+			if data.index then Progress.AutoIndex = true end
+			if data.speed then PlayerMod.SpeedBoost = true end
+			if data.speedVal then PlayerMod.Speed = data.speedVal end
+			if data.infJump then PlayerMod.InfJump = true end
+			if data.noclip then PlayerMod.Noclip = true end
+			Farm.Wake()
+		end)
+	end)
+end
+
+-- Orb
+local Orb = Instance.new("ImageButton")
+Orb.Size = UDim2.new(0,48,0,48)
+Orb.Position = UDim2.new(0,16,0.5,-24)
+Orb.BackgroundColor3 = THEME.card
+Orb.Image = LOGO_ID
+Orb.ScaleType = Enum.ScaleType.Fit
+Orb.Visible = false
+Orb.ZIndex = 50
+Orb.Parent = ScreenGui
+corner(Orb, 24)
+stroke(Orb, THEME.accent, 2, 0.2)
+
+local function setVisible(on)
+	Main.Visible = on
+	Orb.Visible = not on
+end
+CloseBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
+Orb.MouseButton1Click:Connect(function() setVisible(true) end)
+
+do
+	local dragging, dragStart, startPos
+	Orb.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = Orb.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local d = input.Position - dragStart
+			Orb.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset+d.X, startPos.Y.Scale, startPos.Y.Offset+d.Y)
+		end
+	end)
+end
+
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.RightShift or i.KeyCode == Enum.KeyCode.RightControl or i.KeyCode == Enum.KeyCode.K then
+		setVisible(not Main.Visible)
+	end
+end)
+
+switchTab("Welcome")
+task.defer(refreshSidebarCanvas)
+print("[KHUB] Ride a Pet loaded · compact UI · tab icons")
+print("[KHUB] Toggle: RightShift / RightCtrl / K")
