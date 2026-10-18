@@ -1,1518 +1,3553 @@
---[[
-    KHUB · Cheating During Testing  v4
-    Improved: Floating Radar (outside UI) · Box Tab UI · Dark Violet Theme
-    Teacher ESP (red highlight + name) · Desk ESP · All Players Violet on Radar
-    3s Answer Load with Countdown · Auto Pencil + Auto Answer · Highlights persist
-    Credits: Yvaine & Kyiel · UI by Khub
-    Discord: https://discord.gg/rU9FyNEUQ7
-    Toggle: RightShift / RightCtrl / K
-]]
-
 repeat task.wait() until game:IsLoaded()
 
--- ══════════════════════════════════════════════════════════
---  SERVICES
--- ══════════════════════════════════════════════════════════
-local Players           = game:GetService("Players")
-local TweenService      = game:GetService("TweenService")
-local UserInputService  = game:GetService("UserInputService")
-local CoreGui           = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace         = game:GetService("Workspace")
-local RunService        = game:GetService("RunService")
-local HttpService       = game:GetService("HttpService")
+local Stats = game:GetService("Stats")
 
-local player  = Players.LocalPlayer
-local Camera  = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local player = LocalPlayer
 
--- ══════════════════════════════════════════════════════════
---  THEME  (Dark Violet palette, more vivid blocks)
--- ══════════════════════════════════════════════════════════
-local THEME = {
-    bg       = Color3.fromRGB(8,   5,  18),   -- near-black violet
-    rail     = Color3.fromRGB(14,  9,  30),
-    card     = Color3.fromRGB(22,  14, 44),   -- richer card bg
-    cardAlt  = Color3.fromRGB(28,  16, 55),   -- alternate card
-    accent   = Color3.fromRGB(160, 80, 255),  -- bright violet
-    accentDk = Color3.fromRGB(90,  30, 180),  -- dark violet
-    gold     = Color3.fromRGB(255, 200, 100),
-    text     = Color3.fromRGB(230, 215, 255),
-    dim      = Color3.fromRGB(140, 110, 190),
-    mute     = Color3.fromRGB(80,  55, 120),
-    stroke   = Color3.fromRGB(110, 55, 190),
-    danger   = Color3.fromRGB(255,  60,  60),
-    safe     = Color3.fromRGB(60,  220, 120),
-    caution  = Color3.fromRGB(255, 190,  50),
-    hi       = Color3.fromRGB(255, 230,  50),
-    violet   = Color3.fromRGB(180,  80, 255),
-    violetDk = Color3.fromRGB(100,  30, 200),
-    cyan     = Color3.fromRGB(80,  200, 255),
-    pink     = Color3.fromRGB(255, 100, 200),
+-- polyfills
+if not table.clear then
+	function table.clear(t)
+		for k in pairs(t) do t[k] = nil end
+	end
+end
+if not table.find then
+	function table.find(t, v)
+		for i, x in ipairs(t) do if x == v then return i end end
+		return nil
+	end
+end
+
+
+local LOGO_ID = "rbxassetid://116838166946511"
+local BG_ID   = "rbxassetid://127230219966945"
+local DISCORD = "https://discord.gg/EKPb7BRDH8"
+local YOUTUBE = "https://www.youtube.com/@kyielpambid"
+local CONFIG_FOLDER = "KHUB_CheatingDuringTesting_Configs"
+
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+local Icons = {
+	home = "rbxassetid://6031097226",
+	welcome = "rbxassetid://6031097226",
+	settings = "rbxassetid://6031280882",
+	save = "rbxassetid://6031260796",
+	config = "rbxassetid://6031260796",
+	user = "rbxassetid://6034287594",
+	info = "rbxassetid://6031071053",
+	server = "rbxassetid://6034949389",
+	main = "rbxassetid://6034509993",
+	player = "rbxassetid://6034287594",
 }
 
-local BAR_COLS = {
-    Color3.fromRGB(80,  20, 180),
-    Color3.fromRGB(160, 60, 255),
-    Color3.fromRGB(255,180,  60),
-    Color3.fromRGB(255,240, 180),
-    Color3.fromRGB(255,100, 200),
-    Color3.fromRGB(80, 200, 255),
-    Color3.fromRGB(80,  20, 180),
+
+local function resolveIcon(name)
+	if not name then return Icons.home end
+	local key = string.lower(tostring(name))
+	return Icons[key] or Icons.home or "rbxassetid://6031097226"
+end
+
+local Keybinds = {
+	ToggleUI = Enum.KeyCode.RightShift,
 }
 
--- ══════════════════════════════════════════════════════════
---  STATE
--- ══════════════════════════════════════════════════════════
-local State = {
-    AutoFlow          = true,
-    AntiCaught        = true,
-    Radar             = true,
-    TeacherESP        = true,
-    DeskESP           = true,
-    SafeDistance      = 24,
-    PhotoSafeDistance = 28,
-    DelayAnswer       = 0.18,
-    DelayPhoto        = 1.4,
-    DelayLoad         = 3.0,
-    Running           = false,
-    SavedAnswers      = {},
-    Phase             = "idle",
-    HighlightFrames   = {},
+local function keyName(kc)
+	if not kc or kc == Enum.KeyCode.Unknown then return "None" end
+	return tostring(kc):gsub("Enum.KeyCode.", "")
+end
+
+local function keyFromName(name)
+	if not name or name == "" or name == "None" then return Enum.KeyCode.Unknown end
+	local ok, kc = pcall(function() return Enum.KeyCode[name] end)
+	return (ok and kc) or Enum.KeyCode.Unknown
+end
+
+
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- CHEATING DURING TESTING ENGINE (original bot logic)
+--------------------------------------------------------------------
+local RS = ReplicatedStorage
+local WS = Workspace
+
+-- Wait for game remotes (same as original)
+local PlayerAnswerTable = RS:WaitForChild("PlayerAnswerTable", 30)
+local ToolEvents = RS:WaitForChild("ToolEvents", 30)
+local ToolAction = ToolEvents and ToolEvents:WaitForChild("ToolAction", 10)
+local PlayAnimation = ToolEvents and ToolEvents:WaitForChild("PlayAnimation", 10)
+local ShopInventoryAction = RS:WaitForChild("ShopInventoryAction", 30)
+local PhoneDisplay = ToolEvents and ToolEvents:FindFirstChild("PhoneDisplay")
+if not PhoneDisplay and ToolEvents then
+	PhoneDisplay = ToolEvents:WaitForChild("PhoneDisplay", 10)
+end
+
+local FACE_DOT = -0.25
+
+_G.BOT_TUNES = _G.BOT_TUNES or {
+	STABLE_TIME = 0.8,
+	FACE_MEMORY = 1.2,
+	CYCLE_COOLDOWN = 2.5,
+	ANXIETY_PENCIL = 85,
 }
 
-local TeacherESPHighlights  = {}
-local DeskESPHighlights     = {}
-local TeacherNameBillboards = {}
-local SavedLabelRef
-local StatusRef
-local PhaseRef
-local CountdownRef
-
--- ══════════════════════════════════════════════════════════
---  REMOTES
--- ══════════════════════════════════════════════════════════
-local RS            = ReplicatedStorage
-local TE            = RS:WaitForChild("ToolEvents", 8)
-local RemPlayAnim   = TE and TE:FindFirstChild("PlayAnimation")
-local RemToolAction = TE and TE:FindFirstChild("ToolAction")
-local RemAnswer     = RS:FindFirstChild("PlayerAnswerTable")
-
-if not RemAnswer then
-    task.spawn(function()
-        RemAnswer = RS:WaitForChild("PlayerAnswerTable", 15)
-    end)
+local function tune(key, default)
+	local t = _G.BOT_TUNES
+	local v = t and t[key]
+	if type(v) == "number" then
+		return v
+	end
+	return default
 end
 
--- ══════════════════════════════════════════════════════════
---  HELPERS
--- ══════════════════════════════════════════════════════════
-local function lerpColor(a, b, t)
-    return Color3.new(
-        a.R+(b.R-a.R)*t,
-        a.G+(b.G-a.G)*t,
-        a.B+(b.B-a.B)*t
-    )
+if _G.BOT then
+	_G.BOT.enabled = false
+end
+if _G.BOT_CLEANUP then
+	pcall(_G.BOT_CLEANUP)
 end
 
-local function corner(p, r)
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, r or 8)
-    c.Parent = p; return c
+local BOT = {
+	enabled = true,
+	doPhoto = true,
+	pause = false,
+	key = {},
+	submitted = {},
+	correctCount = 0,
+	wrongCount = 0,
+	log = {},
+	phoneResults = {},
+	lastPhotoAt = 0,
+	lastAct = 0,
+	anxiety = 0,
+	pencilMode = false,
+	dead = false,
+	safeSince = nil,
+	cycleActive = false,
+	cycleStart = nil,
+	abortCount = 0,
+	teacherInfo = "-",
+	phoneState = "-",
+	totalQ = 0,
+	pendingCount = 0,
+	lastSeq = nil,
+	lastFaceTime = 0,
+	lastLook = nil,
+	lastAbortAt = 0,
+	resumeSince = nil,
+	triedCollect = nil,
+	interCollect = nil,
+	phoneIdleSince = nil,
+	forensics = {},
+}
+_G.BOT = BOT
+
+local function botLog(msg)
+	table.insert(BOT.log, tostring(msg))
+	if #BOT.log > 40 then
+		table.remove(BOT.log, 1)
+	end
 end
 
-local function mkStroke(p, col, th, tr)
-    local s = Instance.new("UIStroke")
-    s.Color       = col or THEME.stroke
-    s.Thickness   = th  or 1.2
-    s.Transparency = tr or 0.4
-    s.Parent = p; return s
+-- Phone answer capture
+if not _G.PDHooked and PhoneDisplay then
+	_G.PDHooked = true
+	PhoneDisplay.OnClientEvent:Connect(function(name, action, a, b)
+		if not _G.BOT then
+			return
+		end
+		table.insert(_G.BOT.phoneResults, { name = name, action = action, a = a, b = b })
+		if #_G.BOT.phoneResults > 60 then
+			table.remove(_G.BOT.phoneResults, 1)
+		end
+		if action == "SetAnswer" and type(a) == "string" then
+			local text = a:gsub("<br%s*/?>", "\n")
+			for num, letter in text:gmatch("(%d+)%s*[%.:%-]?%s*([A-D])") do
+				local n = tonumber(num)
+				if n and not _G.BOT.key[n] then
+					_G.BOT.key[n] = letter
+				end
+			end
+			_G.BOT.lastCaptureAt = os.clock()
+			_G.BOT.lastPhotoAt = os.clock()
+			_G.BOT.cycleActive = false
+			_G.BOT.cycleStart = nil
+			botLog("Answer received")
+			pcall(function()
+				if PlayAnimation then
+					PlayAnimation:FireServer("Phone1", "stop")
+				end
+				local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+				if hum then
+					hum:UnequipTools()
+				end
+			end)
+			task.wait(0.3)
+			pcall(function()
+				local char = LocalPlayer.Character
+				if char and not char:FindFirstChild("Pencil") then
+					local pencil = LocalPlayer.Backpack:FindFirstChild("Pencil")
+					local hum = char:FindFirstChildOfClass("Humanoid")
+					if pencil and hum then
+						hum:EquipTool(pencil)
+					end
+				end
+			end)
+		end
+	end)
+elseif not PhoneDisplay then
+	warn("[KHUB] PhoneDisplay remote missing — answer capture disabled")
 end
 
-local function gradient(p, c0, c1, rot)
-    local g = Instance.new("UIGradient", p)
-    g.Color    = ColorSequence.new(c0, c1)
-    g.Rotation = rot or 0
-    return g
+local function findPhone()
+	local char = LocalPlayer.Character
+	return (char and char:FindFirstChild("Phone1")) or LocalPlayer.Backpack:FindFirstChild("Phone1")
 end
 
-local function setPhase(ph)
-    State.Phase = ph
-    if PhaseRef and PhaseRef.Parent then
-        local labels = {
-            idle    = "⏸  idle",
-            photo   = "📷  taking photo",
-            load    = "📱  loading answers",
-            answer  = "✍  answering",
-            danger  = "⚠  teacher near",
-        }
-        PhaseRef.Text = labels[ph] or ph
-        local cols = {
-            idle    = THEME.dim,
-            photo   = THEME.gold,
-            load    = THEME.accent,
-            answer  = THEME.safe,
-            danger  = THEME.danger,
-        }
-        PhaseRef.TextColor3 = cols[ph] or THEME.text
-    end
+local function lowerPhone()
+	pcall(function()
+		if PlayAnimation then
+			PlayAnimation:FireServer("Phone1", "stop")
+		end
+		local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum:UnequipTools()
+		end
+	end)
 end
 
-local function notify(msg)
-    print("[KHUB]", msg)
-    if StatusRef and StatusRef.Parent then
-        StatusRef.Text = msg
-    end
+local function equipPencil(silent)
+	local char = LocalPlayer.Character
+	if not char then
+		return
+	end
+	if char:FindFirstChild("Pencil") then
+		return
+	end
+	local pencil = LocalPlayer.Backpack:FindFirstChild("Pencil")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if pencil and hum then
+		hum:UnequipTools()
+		hum:EquipTool(pencil)
+		if not silent then
+			botLog("Anxiety high -> pencil equipped")
+		end
+	end
 end
 
--- ══════════════════════════════════════════════════════════
---  TEACHER DETECTION
--- ══════════════════════════════════════════════════════════
-local cachedTeacherHRP = nil
-
-local function findTeacherModels()
-    local models = {}
-    for _, m in ipairs(Workspace:GetDescendants()) do
-        if m:IsA("Model") then
-            local n = string.lower(m.Name)
-            if n:find("teacher") or m:GetAttribute("IsTeacher") then
-                table.insert(models, m)
-            end
-        end
-    end
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player then
-            local n = string.lower(p.Name .. (p.DisplayName or ""))
-            if n:find("teacher") and p.Character then
-                table.insert(models, p.Character)
-            end
-        end
-    end
-    return models
+local function getAnxiety()
+	local char = LocalPlayer.Character
+	return tonumber(char and char:GetAttribute("Anxiety")) or 0
 end
 
-local function findTeacherHRP()
-    local models = findTeacherModels()
-    for _, m in ipairs(models) do
-        local r = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
-        if r then cachedTeacherHRP = r; return r end
-    end
-    return cachedTeacherHRP
+local function isDeadOrCaught()
+	local char = LocalPlayer.Character
+	if not char then
+		return true
+	end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if hum and hum.Health <= 0 then
+		return true
+	end
+	if char:GetAttribute("DeathSequenceActive") == true then
+		return true
+	end
+	return false
 end
 
-local function findDeskModels()
-    local desks = {}
-    for _, m in ipairs(Workspace:GetDescendants()) do
-        if m:IsA("Model") or m:IsA("BasePart") then
-            local n = string.lower(m.Name)
-            if n:find("desk") or n:find("table") or n:find("seat") then
-                table.insert(desks, m)
-            end
-        end
-    end
-    return desks
+local function findTeacher()
+	local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+	local seat = hum and hum.SeatPart
+	local classId = seat and seat:GetAttribute("ClassroomId")
+	if not classId and seat and seat:GetAttribute("SeatId") then
+		classId = tostring(seat:GetAttribute("SeatId")):match("^(%a+Class)")
+	end
+	if not classId then
+		classId = LocalPlayer:GetAttribute("AssignedClassroomId")
+	end
+	local bestClass, bestClassDist, bestAny, bestAnyDist = nil, nil, nil, nil
+	local rootPos = hum and hum.RootPart and hum.RootPart.Position or Vector3.zero
+	for _, m in ipairs(WS:GetChildren()) do
+		if m:IsA("Model") and m.Name:find("Teacher") and m:FindFirstChildOfClass("Humanoid") then
+			local hrp = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
+			local dist = hrp and (hrp.Position - rootPos).Magnitude or 9999
+			if m:GetAttribute("TeacherClassroom") == classId then
+				if not bestClass or dist < bestClassDist then
+					bestClass, bestClassDist = m, dist
+				end
+			end
+			if not bestAny or dist < bestAnyDist then
+				bestAny, bestAnyDist = m, dist
+			end
+		end
+	end
+	return bestClass or bestAny
 end
 
-local function distToTeacher()
-    local myChar = player.Character
-    local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return 999 end
-    local t = findTeacherHRP()
-    if not t then return 999 end
-    return (myHRP.Position - t.Position).Magnitude
+local function isBigBlocker(part)
+	return part and part:IsA("BasePart") and part.Size.Magnitude > 8
 end
 
-local function isDanger()       return distToTeacher() < State.SafeDistance      end
-local function isSafeForPhoto() return distToTeacher() >= State.PhotoSafeDistance end
+local function isTeacherSafe()
+	local teacher = findTeacher()
+	if not teacher then
+		BOT.teacherInfo = "no teacher"
+		return true
+	end
+	local hrp = teacher:FindFirstChild("HumanoidRootPart") or teacher.PrimaryPart
+	local head = teacher:FindFirstChild("Head")
+	local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+	local seatOrRoot = (hum and hum.SeatPart) or (LocalPlayer.Character and LocalPlayer.Character.PrimaryPart)
+	if not hrp or not seatOrRoot then
+		BOT.teacherInfo = "position ?"
+		return false
+	end
+	local toUs = seatOrRoot.Position - hrp.Position
+	local dist = toUs.Magnitude
+	local look = hrp.CFrame.LookVector
+	if BOT.lastLook and BOT.lastLook:Dot(look) < 0.95 then
+		BOT.lastFaceTime = os.clock()
+	end
+	BOT.lastLook = look
 
--- ══════════════════════════════════════════════════════════
---  TEACHER ESP  (red highlight + floating name)
--- ══════════════════════════════════════════════════════════
-local function clearTeacherESP()
-    for _, h in pairs(TeacherESPHighlights) do
-        pcall(function() h:Destroy() end)
-    end
-    for _, bb in pairs(TeacherNameBillboards) do
-        pcall(function() bb:Destroy() end)
-    end
-    TeacherESPHighlights  = {}
-    TeacherNameBillboards = {}
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { teacher, LocalPlayer.Character }
+	local origin = (head or hrp).Position
+	local targets = { seatOrRoot.Position + Vector3.new(0, 2.2, 0), seatOrRoot.Position }
+	local seat = hum and hum.SeatPart
+	if seat then
+		local half = seat.Size.X * 0.45
+		table.insert(targets, seat.Position + seat.CFrame.RightVector * half)
+		table.insert(targets, seat.Position - seat.CFrame.RightVector * half)
+	end
+	local blocked = true
+	for _, tgt in ipairs(targets) do
+		local hit = WS:Raycast(origin, tgt - origin, params)
+		if not (hit and isBigBlocker(hit.Instance)) then
+			blocked = false
+			break
+		end
+	end
+	if blocked then
+		BOT.teacherInfo = string.format("d=%.0f fully blocked SAFE", dist)
+		return true
+	end
+
+	local vel = hrp.AssemblyLinearVelocity
+	if vel.Magnitude > 1 then
+		if vel.Unit:Dot(toUs.Unit) > 0.3 then
+			BOT.lastFaceTime = os.clock()
+			BOT.teacherInfo = string.format("d=%.0f approaching RISK", dist)
+			return false
+		end
+		if hrp.CFrame.LookVector:Dot(toUs.Unit) > 0.25 then
+			BOT.lastFaceTime = os.clock()
+			BOT.teacherInfo = string.format("d=%.0f facing us risk", dist)
+			return false
+		end
+		BOT.teacherInfo = string.format("d=%.0f moving away SAFE", dist)
+		return true
+	end
+
+	if dist < 4 then
+		BOT.teacherInfo = string.format("d=%.0f right next to us RISK!", dist)
+		return false
+	end
+
+	local bodyDot = hrp.CFrame.LookVector:Dot(toUs.Unit)
+	local headDot = head and head.CFrame.LookVector:Dot(toUs.Unit) or bodyDot
+	if bodyDot > 0.25 or headDot > 0.25 then
+		BOT.lastFaceTime = os.clock()
+	end
+	local safe = bodyDot < FACE_DOT and headDot < FACE_DOT
+	BOT.teacherInfo = string.format("d=%.0f bd=%.2f hd=%.2f %s", dist, bodyDot, headDot, safe and "SAFE" or "LOOKING!")
+	return safe
 end
 
-local function applyTeacherESP()
-    clearTeacherESP()
-    if not State.TeacherESP then return end
-    for _, m in ipairs(findTeacherModels()) do
-        -- red highlight
-        local h = Instance.new("Highlight")
-        h.FillColor        = Color3.fromRGB(255, 40, 40)
-        h.OutlineColor     = Color3.fromRGB(255, 180, 180)
-        h.FillTransparency = 0.45
-        h.OutlineTransparency = 0.1
-        h.Parent           = m
-        TeacherESPHighlights[m] = h
-
-        -- floating name billboard above head
-        local head = m:FindFirstChild("Head")
-        if head then
-            local bb = Instance.new("BillboardGui")
-            bb.Size            = UDim2.new(0, 120, 0, 28)
-            bb.StudsOffset     = Vector3.new(0, 3.2, 0)
-            bb.AlwaysOnTop     = true
-            bb.Parent          = head
-            TeacherNameBillboards[m] = bb
-
-            local bg = Instance.new("Frame", bb)
-            bg.Size              = UDim2.new(1, 0, 1, 0)
-            bg.BackgroundColor3  = Color3.fromRGB(18, 5, 5)
-            bg.BackgroundTransparency = 0.15
-            bg.BorderSizePixel   = 0
-            corner(bg, 5)
-            mkStroke(bg, THEME.danger, 1.5, 0.1)
-
-            local lbl = Instance.new("TextLabel", bg)
-            lbl.Size              = UDim2.new(1, 0, 1, 0)
-            lbl.BackgroundTransparency = 1
-            lbl.Text              = "👁 TEACHER — " .. m.Name
-            lbl.Font              = Enum.Font.GothamBold
-            lbl.TextSize          = 11
-            lbl.TextColor3        = THEME.danger
-            lbl.TextScaled        = true
-        end
-    end
+local function paintSubmitted()
+	local pg = LocalPlayer.PlayerGui
+	local gui = pg:FindFirstChild("AnswerPaperScreenGui")
+	if gui then
+		for _, child in ipairs(gui:GetChildren()) do
+			if child:IsA("GuiObject") and child.Name ~= "CloseButton" and child.Name ~= "MobileCloseButton" then
+				for q, ans in pairs(BOT.submitted) do
+					local qFrame = child:FindFirstChild(tostring(q))
+					local btn = qFrame and qFrame:FindFirstChild(ans)
+					if btn and btn:IsA("GuiObject") then
+						btn.Visible = true
+						btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+						btn.BackgroundTransparency = 0
+					end
+				end
+			end
+		end
+	end
+	local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+	local seat = hum and hum.SeatPart
+	if seat then
+		for _, d in ipairs(seat:GetDescendants()) do
+			if d:IsA("SurfaceGui") and d.Name == "AnswerPaperSurfaceGui" and d:GetAttribute("OwnerUserId") == LocalPlayer.UserId then
+				local paper = d:FindFirstChild("Paper")
+				for q, ans in pairs(BOT.submitted) do
+					local qFrame = paper and paper:FindFirstChild(tostring(q))
+					local btn = qFrame and qFrame:FindFirstChild(ans)
+					if btn and btn:IsA("GuiObject") then
+						btn.Visible = true
+						btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+						btn.BackgroundTransparency = 0
+					end
+				end
+			end
+		end
+	end
 end
 
--- ══════════════════════════════════════════════════════════
---  DESK ESP  (violet outline highlight)
--- ══════════════════════════════════════════════════════════
-local function clearDeskESP()
-    for _, h in pairs(DeskESPHighlights) do
-        pcall(function() h:Destroy() end)
-    end
-    DeskESPHighlights = {}
+local function submitAnswer(q, ans)
+	if WS:GetAttribute("GameStatus") ~= "Assessment In Progress" then
+		return false
+	end
+	if not PlayerAnswerTable then
+		return false
+	end
+	local seq = WS:GetAttribute("AssessmentSequenceId")
+	local ok, success, correct = pcall(function()
+		return PlayerAnswerTable:InvokeServer(q, ans, nil, seq)
+	end)
+	if ok and success then
+		BOT.submitted[q] = ans
+		if correct then
+			BOT.correctCount = BOT.correctCount + 1
+		else
+			BOT.wrongCount = BOT.wrongCount + 1
+		end
+		botLog(q .. "=" .. ans .. (correct and " CORRECT" or " WRONG"))
+		paintSubmitted()
+		return true
+	end
+	return false
 end
 
-local function applyDeskESP()
-    clearDeskESP()
-    if not State.DeskESP then return end
-    for _, m in ipairs(findDeskModels()) do
-        local h = Instance.new("SelectionBox")
-        h.Color3            = THEME.violet
-        h.LineThickness     = 0.04
-        h.SurfaceTransparency = 0.85
-        h.SurfaceColor3     = THEME.violetDk
-        if m:IsA("Model") then
-            h.Adornee = m.PrimaryPart or m:FindFirstChildWhichIsA("BasePart")
-        else
-            h.Adornee = m
-        end
-        h.Parent = Workspace
-        table.insert(DeskESPHighlights, h)
-    end
-end
-
--- Run ESP on boot
+-- Auto submit answers
 task.spawn(function()
-    task.wait(2)
-    applyTeacherESP()
-    applyDeskESP()
+	while BOT.enabled do
+		local ok, err = pcall(function()
+			local status = WS:GetAttribute("GameStatus")
+			local seq = WS:GetAttribute("AssessmentSequenceId")
+			if BOT.lastSeq ~= seq then
+				BOT.lastSeq = seq
+				BOT.key = {}
+				BOT.submitted = {}
+				BOT.correctCount = 0
+				BOT.wrongCount = 0
+			end
+			if status == "Assessment In Progress" and not isDeadOrCaught() and PlayerAnswerTable then
+				local data = PlayerAnswerTable:InvokeServer()
+				if type(data) == "table" then
+					BOT.totalQ = 0
+					for i = 1, 60 do
+						if data[i] ~= nil then
+							BOT.totalQ = i
+						end
+					end
+					local pending = {}
+					for i = 1, BOT.totalQ or 0 do
+						if BOT.key[i] and data[i] == "UNANSWERED" then
+							table.insert(pending, i)
+						end
+					end
+					BOT.pendingCount = #pending
+					if #pending > 0 then
+						local pick = pending[math.random(#pending)]
+						submitAnswer(pick, BOT.key[pick])
+					end
+				end
+			end
+		end)
+		if not ok then
+			botLog("SUBMIT ERROR: " .. tostring(err))
+		end
+		task.wait(0.5 + math.random() * 0.5)
+	end
 end)
 
--- Re-apply ESP when workspace changes
-Workspace.DescendantAdded:Connect(function(d)
-    if d:IsA("Model") then task.wait(0.5); applyTeacherESP(); applyDeskESP() end
+-- Abort watchdog while photo cycle active
+task.spawn(function()
+	while BOT.enabled do
+		pcall(function()
+			if not BOT.cycleActive then
+				return
+			end
+			local abort, reason = false, ""
+			if isDeadOrCaught() then
+				abort, reason = true, "death"
+			else
+				local teacher = findTeacher()
+				local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+				local seatOrRoot = (hum and hum.SeatPart) or (LocalPlayer.Character and LocalPlayer.Character.PrimaryPart)
+				if teacher and seatOrRoot then
+					local thrp = teacher:FindFirstChild("HumanoidRootPart")
+					if thrp then
+						local toUs = seatOrRoot.Position - thrp.Position
+						local dist = toUs.Magnitude
+						local vel = thrp.AssemblyLinearVelocity
+						if vel.Magnitude > 5 and vel.Unit:Dot(toUs.Unit) > 0.15 then
+							abort, reason = true, string.format("teacher approaching v=%.0f", vel.Magnitude)
+						elseif BOT.cycleStartDist and dist < BOT.cycleStartDist * 0.85 then
+							abort, reason = true, string.format("teacher closing in d=%.0f", dist)
+						elseif not isTeacherSafe() then
+							abort, reason = true, "facing us"
+						end
+					end
+				elseif not isTeacherSafe() then
+					abort, reason = true, "facing us"
+				end
+			end
+			if abort then
+				lowerPhone()
+				BOT.cycleActive = false
+				BOT.cycleStart = nil
+				BOT.abortCount = BOT.abortCount + 1
+				BOT.lastPhotoAt = os.clock()
+				BOT.lastAbortAt = os.clock()
+				BOT.resumeSince = nil
+				botLog("ABORT! " .. reason .. " (#" .. BOT.abortCount .. ")")
+				task.wait(0.3)
+				equipPencil(true)
+			end
+		end)
+		task.wait(0.15)
+	end
 end)
 
--- ══════════════════════════════════════════════════════════
---  TOOL WRAPPERS
--- ══════════════════════════════════════════════════════════
-local function phonePlay(a)
-    pcall(function()
-        if RemPlayAnim then RemPlayAnim:FireServer("Phone1", a) end
-    end)
-end
-local function phoneTool(a)
-    pcall(function()
-        if RemToolAction then RemToolAction:FireServer("Phone1", a) end
-    end)
-end
-local function pencilPlay(a)
-    pcall(function()
-        if RemPlayAnim then RemPlayAnim:FireServer("Pencil", a) end
-    end)
-end
-local function equipTool(namePart)
-    pcall(function()
-        local bp  = player:FindFirstChild("Backpack")
-        local ch  = player.Character
-        if not bp or not ch then return end
-        local hum = ch:FindFirstChildOfClass("Humanoid")
-        for _, t in ipairs(bp:GetChildren()) do
-            if t:IsA("Tool") and string.lower(t.Name):find(namePart) then
-                if hum then hum:EquipTool(t) end; return
-            end
-        end
-    end)
-end
-local function equipPencil() equipTool("pencil"); pencilPlay("Idle") end
-local function equipPhone()  equipTool("phone");  phonePlay("Idle")  end
-local function putAway()
-    pcall(function()
-        local hum = (player.Character or {}):FindFirstChildOfClass("Humanoid")
-        if hum then hum:UnequipTools() end
-    end)
-    phonePlay("stop"); phoneTool("Unequip"); phonePlay("Idle")
-end
+-- Main photo farm loop
+task.spawn(function()
+	while BOT.enabled do
+		local ok, err = pcall(function()
+			local status = WS:GetAttribute("GameStatus")
+			if status ~= "Assessment In Progress" then
+				if (not findPhone() or not LocalPlayer.Backpack:FindFirstChild("Pencil")) and ShopInventoryAction then
+					if not BOT.interCollect or os.clock() - BOT.interCollect > 15 then
+						BOT.interCollect = os.clock()
+						if not findPhone() then
+							ShopInventoryAction:FireServer("Collect", "Phone1")
+						end
+						if not LocalPlayer.Backpack:FindFirstChild("Pencil") then
+							ShopInventoryAction:FireServer("Collect", "Pencil")
+						end
+					end
+				end
+				return
+			end
+			if not BOT.doPhoto or BOT.pause then
+				return
+			end
+			if isDeadOrCaught() then
+				if not BOT.dead then
+					BOT.dead = true
+					BOT.cycleActive = false
+					BOT.cycleStart = nil
+					botLog("Death/caught -> bot paused")
+				end
+				return
+			elseif BOT.dead then
+				BOT.dead = false
+				botLog("Alive -> resuming")
+			end
 
-local function takePhoto()
-    equipPhone(); task.wait(0.15)
-    phonePlay("Idle"); phonePlay("Use"); phoneTool("Use")
-    task.wait(0.2);  phonePlay("Idle")
-end
+			BOT.anxiety = getAnxiety()
+			if BOT.anxiety >= tune("ANXIETY_PENCIL", 85) and not BOT.pencilMode then
+				BOT.pencilMode = true
+				equipPencil()
+				return
+			end
+			if BOT.pencilMode then
+				if BOT.anxiety > 60 then
+					return
+				end
+				BOT.pencilMode = false
+				botLog("Anxiety dropped -> back to phone")
+			end
 
-local function openPhoneAnswers()
-    equipPhone(); task.wait(0.15)
-    phonePlay("Idle"); phonePlay("SecondUse"); phoneTool("SecondUse")
-    task.wait(0.3);  phonePlay("stop"); phoneTool("Unequip"); phonePlay("Idle")
-end
+			local phone = findPhone()
+			if not phone then
+				local seq = WS:GetAttribute("AssessmentSequenceId")
+				if BOT.triedCollect ~= seq and ShopInventoryAction then
+					BOT.triedCollect = seq
+					ShopInventoryAction:FireServer("Collect", "Phone1")
+					task.wait(0.3)
+					ShopInventoryAction:FireServer("Collect", "Pencil")
+					botLog("Phone + pencil requested from locker")
+				end
+				return
+			end
 
--- ══════════════════════════════════════════════════════════
---  SUBMIT ANSWER
--- ══════════════════════════════════════════════════════════
-local function submitAnswer(q, choice)
-    -- *the pencil exhales and marks the bubble with cold certainty*
-    pencilPlay("Idle")
-    pcall(function()
-        local rem = RemAnswer or RS:FindFirstChild("PlayerAnswerTable")
-        if not rem then return end
-        if rem:IsA("RemoteFunction") then
-            rem:InvokeServer(q, choice)
-        elseif rem:IsA("RemoteEvent") then
-            rem:FireServer(q, choice)
-        end
-    end)
-    task.wait(State.DelayAnswer)
-end
+			local state = phone:GetAttribute("PhoneState")
+			if state == nil then
+				if not isTeacherSafe() then
+					return
+				end
+				local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+				if not hum then
+					return
+				end
+				if phone.Parent ~= LocalPlayer.Character then
+					hum:EquipTool(phone)
+				end
+				task.wait(0.6)
+				state = phone:GetAttribute("PhoneState")
+				if state == nil then
+					lowerPhone()
+					return
+				end
+			end
+			BOT.phoneState = state
 
--- ══════════════════════════════════════════════════════════
---  PARSE + READ PHONE GUI ANSWERS
--- ══════════════════════════════════════════════════════════
-local function parseAnswerText(text)
-    local found = {}
-    if not text or text == "" then return found end
-    local up = string.upper(text)
-    for q, a in up:gmatch("(%d+)%s*[%.%):%-%s]%s*([ABCD])") do
-        found[tonumber(q)] = a
-    end
-    for q, a in up:gmatch("(%d+)%s+([ABCD])%f[%s%z%p]") do
-        if not found[tonumber(q)] then found[tonumber(q)] = a end
-    end
-    return found
-end
+			if state == "ReadyToLoad" or state == "Paused" then
+				local sinceAbort = os.clock() - (BOT.lastAbortAt or 0)
+				if sinceAbort < tune("CYCLE_COOLDOWN", 2.5) then
+					if phone.Parent == LocalPlayer.Character then
+						lowerPhone()
+					end
+					return
+				end
+				local faceMem = sinceAbort < 10 and tune("FACE_MEMORY", 1.2) or 1
+				if os.clock() - (BOT.lastFaceTime or 0) < faceMem then
+					return
+				end
+				if isTeacherSafe() then
+					if sinceAbort < 10 then
+						if not BOT.resumeSince then
+							BOT.resumeSince = os.clock()
+							return
+						end
+						if os.clock() - BOT.resumeSince < tune("STABLE_TIME", 0.8) then
+							return
+						end
+					end
+					BOT.resumeSince = nil
+					local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+					if hum then
+						if phone.Parent ~= LocalPlayer.Character then
+							hum:EquipTool(phone)
+						end
+						BOT.lastAct = os.clock()
+						BOT.cycleActive = true
+						BOT.cycleStart = os.clock()
+						local teacher = findTeacher()
+						local seatOrRoot = hum.SeatPart or (LocalPlayer.Character and LocalPlayer.Character.PrimaryPart)
+						BOT.cycleStartDist = teacher and seatOrRoot and teacher.PrimaryPart
+							and (seatOrRoot.Position - teacher.PrimaryPart.Position).Magnitude or nil
+						if PlayAnimation then
+							PlayAnimation:FireServer("Phone1", "SecondUse")
+						end
+						if ToolAction then
+							ToolAction:FireServer(phone, "SecondUse")
+						end
+						botLog(state == "Paused" and "resume load (safe)" or "start load")
+					end
+				else
+					BOT.resumeSince = nil
+					if phone.Parent == LocalPlayer.Character then
+						lowerPhone()
+					end
+				end
+				return
+			end
 
-local function readPhoneAnswers()
-    local answers = {}
-    local function scanGui(root)
-        if not root then return end
-        for _, d in ipairs(root:GetDescendants()) do
-            if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
-                local t = d.Text or ""
-                if #t > 0 then
-                    for q, a in pairs(parseAnswerText(t)) do
-                        answers[q] = a
-                    end
-                end
-            end
-        end
-    end
-    pcall(function() scanGui(player:FindFirstChild("PlayerGui")) end)
-    pcall(function()
-        local ch = player.Character
-        if ch then
-            for _, t in ipairs(ch:GetChildren()) do
-                if t:IsA("Tool") and string.lower(t.Name):find("phone") then
-                    scanGui(t)
-                end
-            end
-        end
-    end)
-    local count = 0
-    for q, a in pairs(answers) do
-        State.SavedAnswers[q] = a; count = count + 1
-    end
-    return count
-end
+			BOT.resumeSince = nil
+			if state == "Loading" or state == "TakingPhoto" then
+				if phone.Parent == LocalPlayer.Character then
+					if not BOT.cycleActive then
+						BOT.cycleActive = true
+						BOT.cycleStart = os.clock()
+					end
+					if BOT.cycleStart and os.clock() - BOT.cycleStart > 10 then
+						lowerPhone()
+						BOT.cycleActive = false
+						BOT.cycleStart = nil
+						BOT.lastPhotoAt = os.clock()
+						botLog("Cycle stuck -> reset")
+					end
+				elseif BOT.cycleActive then
+					BOT.cycleActive = false
+					BOT.cycleStart = nil
+				end
+				return
+			end
 
-local function getMaxQ(tbl)
-    local mx = 0
-    for q in pairs(tbl or {}) do
-        if type(q)=="number" and q>mx then mx=q end
-    end
-    return mx
-end
+			if state ~= "NeedsPhoto" and state ~= "Complete" then
+				return
+			end
 
-local function formatSavedAnswers()
-    local keys = {}
-    for q in pairs(State.SavedAnswers) do table.insert(keys, q) end
-    table.sort(keys)
-    if #keys == 0 then return "No answers yet.\nAuto flow will load them." end
-    local lines = { "📋 Answers  (" .. #keys .. " loaded)" }
-    for _, q in ipairs(keys) do
-        table.insert(lines, string.format("  %2d.  %s", q, State.SavedAnswers[q]))
-    end
-    return table.concat(lines, "\n")
-end
+			if BOT.totalQ and BOT.totalQ > 0 then
+				local known = 0
+				for _ in pairs(BOT.key) do
+					known = known + 1
+				end
+				if known >= BOT.totalQ then
+					return
+				end
+			end
+			if (BOT.pendingCount or 0) > 0 then
+				return
+			end
+			if os.clock() - BOT.lastPhotoAt < tune("CYCLE_COOLDOWN", 2.5) then
+				return
+			end
 
-local function refreshSavedUI()
-    if SavedLabelRef and SavedLabelRef.Parent then
-        SavedLabelRef.Text = formatSavedAnswers()
-    end
-end
+			if isTeacherSafe() then
+				if not BOT.safeSince then
+					BOT.safeSince = os.clock()
+					return
+				end
+				if os.clock() - BOT.safeSince < tune("STABLE_TIME", 0.8) then
+					return
+				end
+			else
+				BOT.safeSince = nil
+				return
+			end
+			BOT.safeSince = nil
+			if os.clock() - (BOT.lastFaceTime or 0) < tune("FACE_MEMORY", 1.2) then
+				return
+			end
 
--- ══════════════════════════════════════════════════════════
---  ANSWER HIGHLIGHTS  (persist even after answered)
--- ══════════════════════════════════════════════════════════
-local function clearHighlights()
-    for _, h in ipairs(State.HighlightFrames) do
-        pcall(function() h:Destroy() end)
-    end
-    State.HighlightFrames = {}
-end
+			local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+			if not hum then
+				return
+			end
+			if phone.Parent ~= LocalPlayer.Character then
+				hum:EquipTool(phone)
+			end
+			local now = os.clock()
+			BOT.lastAct = now
+			BOT.lastPhotoAt = now
+			BOT.cycleActive = true
+			BOT.cycleStart = now
+			BOT.cycleStartDist = nil
+			local teacher = findTeacher()
+			local seatOrRoot = hum.SeatPart or (LocalPlayer.Character and LocalPlayer.Character.PrimaryPart)
+			if teacher and seatOrRoot and teacher.PrimaryPart then
+				BOT.cycleStartDist = (seatOrRoot.Position - teacher.PrimaryPart.Position).Magnitude
+			end
+			if PlayAnimation then
+				PlayAnimation:FireServer("Phone1", "Use")
+			end
+			if ToolAction then
+				ToolAction:FireServer(phone, "Use")
+			end
+			botLog("Photo taken (watchdog active)")
+		end)
+		if not ok then
+			botLog("FARMER ERROR: " .. tostring(err))
+		end
+		task.wait(0.7)
+	end
+end)
 
-local function applyHighlights()
-    -- *highlights stay — answered or not, they burn into the paper*
-    if next(State.SavedAnswers) == nil then return end
-    local pg = player:FindFirstChild("PlayerGui")
-    if not pg then return end
+-- Idle phone lower + keep pencil equipped
+task.spawn(function()
+	while BOT.enabled do
+		pcall(function()
+			if WS:GetAttribute("GameStatus") ~= "Assessment In Progress" then
+				return
+			end
+			if isDeadOrCaught() or BOT.cycleActive then
+				return
+			end
+			local char = LocalPlayer.Character
+			if not char then
+				return
+			end
+			local phone = char:FindFirstChild("Phone1")
+			if phone then
+				local st = phone:GetAttribute("PhoneState")
+				if st == nil or st == "NeedsPhoto" then
+					if not BOT.phoneIdleSince then
+						BOT.phoneIdleSince = os.clock()
+					elseif os.clock() - BOT.phoneIdleSince > 3 then
+						lowerPhone()
+						BOT.phoneIdleSince = nil
+						botLog("Idle phone -> lowered")
+					end
+				else
+					BOT.phoneIdleSince = nil
+				end
+				return
+			end
+			BOT.phoneIdleSince = nil
+			if char:FindFirstChild("Pencil") then
+				return
+			end
+			local pencil = LocalPlayer.Backpack:FindFirstChild("Pencil")
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			if pencil and hum then
+				hum:EquipTool(pencil)
+			end
+		end)
+		task.wait(1)
+	end
+end)
 
-    -- kill old highlights first, then re-stamp
-    clearHighlights()
-
-    local rows = {}
-    for _, inst in ipairs(pg:GetDescendants()) do
-        if inst:IsA("Frame") or inst:IsA("ScrollingFrame") then
-            local letters = {}
-            for _, k in ipairs(inst:GetChildren()) do
-                if k:IsA("TextButton") or k:IsA("TextLabel") then
-                    local t = (k.Text or ""):upper():gsub("%s","")
-                    if t=="A" or t=="B" or t=="C" or t=="D" then
-                        letters[t] = k
-                    end
-                end
-            end
-            local cnt = 0; for _ in pairs(letters) do cnt=cnt+1 end
-            if cnt >= 2 then
-                table.insert(rows, { frame=inst, letters=letters })
-            end
-        end
-    end
-    table.sort(rows, function(a,b)
-        return a.frame.AbsolutePosition.Y < b.frame.AbsolutePosition.Y
-    end)
-
-    local applied = 0
-    for i, rowData in ipairs(rows) do
-        local ans = State.SavedAnswers[i]
-        if ans then
-            local target = rowData.letters[ans]
-            if target then
-                local hl = Instance.new("Frame")
-                hl.Size                  = UDim2.new(1,6,1,6)
-                hl.Position              = UDim2.new(0,-3,0,-3)
-                hl.BackgroundColor3      = THEME.hi
-                hl.BackgroundTransparency = 0.45
-                hl.BorderSizePixel       = 0
-                hl.ZIndex                = target.ZIndex + 5
-                hl.Parent               = target
-                corner(hl, 99)
-
-                local st = Instance.new("UIStroke", hl)
-                st.Color = THEME.gold; st.Thickness=2.5; st.Transparency=0.05
-
-                -- question number badge
-                local numLbl = Instance.new("TextLabel", hl)
-                numLbl.Size                  = UDim2.new(0,15,0,11)
-                numLbl.Position              = UDim2.new(0,-7,0,-9)
-                numLbl.BackgroundColor3      = Color3.fromRGB(15,10,30)
-                numLbl.BackgroundTransparency = 0.1
-                numLbl.Text                  = tostring(i)
-                numLbl.Font                  = Enum.Font.GothamBold
-                numLbl.TextSize              = 8
-                numLbl.TextColor3            = THEME.gold
-                numLbl.BorderSizePixel       = 0
-                numLbl.ZIndex                = hl.ZIndex+1
-                corner(numLbl, 3)
-
-                table.insert(State.HighlightFrames, hl)
-                applied = applied+1
-            end
-        end
-    end
-    notify("✨ Highlighted " .. applied .. " answers")
-end
-
--- ══════════════════════════════════════════════════════════
---  SUBMIT ALL SAVED
--- ══════════════════════════════════════════════════════════
-local function submitSaved()
-    local keys = {}
-    for q in pairs(State.SavedAnswers) do table.insert(keys,q) end
-    table.sort(keys)
-    local n = 0
-    for _, q in ipairs(keys) do
-        if State.AntiCaught and isDanger() then
-            equipPencil(); setPhase("danger")
-            notify("Stopped – teacher near"); break
-        end
-        submitAnswer(q, State.SavedAnswers[q])
-        -- highlights persist — don't clear them here
-        n = n+1
-    end
-    return n
-end
-
--- ══════════════════════════════════════════════════════════
---  3-SECOND COUNTDOWN LOAD  (visible in UI)
--- ══════════════════════════════════════════════════════════
-local function doCountdownLoad()
-    -- *the phone screen flickers; numbers descend like a detonator*
-    for i = 3, 1, -1 do
-        notify("📱 Loading answers... " .. i)
-        if CountdownRef and CountdownRef.Parent then
-            CountdownRef.Text = tostring(i)
-            CountdownRef.Visible = true
-        end
-        task.wait(1)
-    end
-    if CountdownRef and CountdownRef.Parent then
-        CountdownRef.Visible = false
-    end
-end
-
--- ══════════════════════════════════════════════════════════
---  AUTO FLOW  photo → 3s countdown load → highlight → answer
--- ══════════════════════════════════════════════════════════
-local function runAutoFlow()
-    if State.Running then return end
-    if not State.AutoFlow then return end
-    State.Running = true
-
-    task.spawn(function()
-        while State.Running and State.AutoFlow do
-            if isDanger() then
-                if State.AntiCaught then
-                    putAway(); equipPencil(); setPhase("danger")
-                end
-                task.wait(0.5); continue
-            end
-
-            -- PHASE 1: take photo
-            if isSafeForPhoto() then
-                setPhase("photo"); notify("📷 Taking photo...")
-                takePhoto(); task.wait(State.DelayPhoto)
-            end
-
-            if isDanger() then task.wait(0.4); continue end
-
-            -- PHASE 2: open phone, countdown 3s, read answers
-            if isSafeForPhoto() then
-                setPhase("load")
-                openPhoneAnswers()
-                doCountdownLoad()
-
-                local count = readPhoneAnswers()
-                refreshSavedUI()
-                if count > 0 then
-                    notify("Loaded " .. count .. " answers ✓")
-                    applyHighlights()
-                else
-                    notify("No answers parsed — retrying next cycle")
-                end
-            end
-
-            if isDanger() then task.wait(0.4); continue end
-
-            -- PHASE 3: auto equip pencil → auto answer all
-            if isSafeForPhoto() and next(State.SavedAnswers) ~= nil then
-                setPhase("answer")
-                equipPencil(); task.wait(0.2)
-                local n = submitSaved()
-                -- re-apply highlights so they stay visible after answering
-                applyHighlights()
-                if n > 0 then notify("✍ Auto answered " .. n .. " questions") end
-                task.wait(0.6)
-            end
-
-            setPhase("idle"); task.wait(2.0)
-        end
-
-        State.Running = false; setPhase("idle")
-    end)
-end
-
--- ══════════════════════════════════════════════════════════
---  CONFIG
--- ══════════════════════════════════════════════════════════
-local CFG_PATH = "KHUB_CDT/config.json"
-local function saveConfig()
-    pcall(function()
-        if not isfolder then return end
-        if not isfolder("KHUB_CDT") then makefolder("KHUB_CDT") end
-        writefile(CFG_PATH, HttpService:JSONEncode({
-            AntiCaught        = State.AntiCaught,
-            SafeDistance      = State.SafeDistance,
-            PhotoSafeDistance = State.PhotoSafeDistance,
-            SavedAnswers      = State.SavedAnswers,
-            Radar             = State.Radar,
-            TeacherESP        = State.TeacherESP,
-            DeskESP           = State.DeskESP,
-        })); notify("Config saved")
-    end)
-end
-local function loadConfig()
-    pcall(function()
-        if not isfile or not isfile(CFG_PATH) then notify("No config"); return end
-        local d = HttpService:JSONDecode(readfile(CFG_PATH))
-        if type(d)~="table" then return end
-        if d.SafeDistance      then State.SafeDistance      = d.SafeDistance      end
-        if d.PhotoSafeDistance then State.PhotoSafeDistance = d.PhotoSafeDistance end
-        if d.AntiCaught ~= nil then State.AntiCaught        = d.AntiCaught        end
-        if d.Radar      ~= nil then State.Radar             = d.Radar             end
-        if d.TeacherESP ~= nil then State.TeacherESP        = d.TeacherESP        end
-        if d.DeskESP    ~= nil then State.DeskESP           = d.DeskESP           end
-        if d.SavedAnswers      then State.SavedAnswers       = d.SavedAnswers; refreshSavedUI() end
-        notify("Config loaded")
-    end)
-end
-
--- ══════════════════════════════════════════════════════════
---  SCREEN GUI ROOT
--- ══════════════════════════════════════════════════════════
-local ParentTarget = (gethui and gethui()) or CoreGui
+-- Caught flag
 pcall(function()
-    local old = ParentTarget:FindFirstChild("KHUB_CDT")
-    if old then old:Destroy() end
+	LocalPlayer:GetAttributeChangedSignal("CaughtCheatingTransitionActive"):Connect(function()
+		if LocalPlayer:GetAttribute("CaughtCheatingTransitionActive") == true and _G.BOT then
+			pcall(function()
+				_G.BOT.CAUGHT_DUMP = table.clone(_G.BOT.forensics)
+			end)
+			botLog("CAUGHT! forensic dump saved")
+		end
+	end)
 end)
+
+botLog("Bot started")
+print("[KHUB] Cheating During Testing engine v9.3 active")
+if not PlayerAnswerTable then
+	warn("[KHUB] PlayerAnswerTable missing")
+end
+if not ToolAction then
+	warn("[KHUB] ToolAction missing")
+end
+if not PlayAnimation then
+	warn("[KHUB] PlayAnimation missing")
+end
+if not ShopInventoryAction then
+	warn("[KHUB] ShopInventoryAction missing")
+end
+
+-- minimal UI state
+local S = {
+	AntiAfk = true,
+	AutoReconnect = true,
+	WalkSpeedEnabled = false,
+	WalkSpeed = 16,
+	InfJump = false,
+	NoClip = false,
+	Fly = false,
+	FlySpeed = 50,
+	FovEnabled = false,
+	Fov = 70,
+	FpsBoost = false,
+	InstantPP = false,
+}
+local function setAntiAfk(on)
+	S.AntiAfk = on == true
+end
+local function setAutoReconnect(on)
+	S.AutoReconnect = on == true
+end
+
+
+local function getHum()
+	local char = LocalPlayer.Character
+	return char and char:FindFirstChildOfClass("Humanoid")
+end
+local function getHRP()
+	local char = LocalPlayer.Character
+	return char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+end
+local function setWalkEnabled(on)
+	S.WalkSpeedEnabled = on == true
+	local hum = getHum()
+	if hum then hum.WalkSpeed = S.WalkSpeedEnabled and (S.WalkSpeed or 16) or 16 end
+end
+local InfJumpConn
+local function setInfJump(on)
+	S.InfJump = on == true
+	if InfJumpConn then InfJumpConn:Disconnect(); InfJumpConn = nil end
+	if not S.InfJump then return end
+	InfJumpConn = UserInputService.JumpRequest:Connect(function()
+		local hum = getHum()
+		if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+	end)
+end
+local NoClipConn
+local function setNoClip(on)
+	S.NoClip = on == true
+	if NoClipConn then NoClipConn:Disconnect(); NoClipConn = nil end
+	if not S.NoClip then return end
+	NoClipConn = RunService.Stepped:Connect(function()
+		local char = LocalPlayer.Character
+		if not char then return end
+		for _, p in ipairs(char:GetDescendants()) do
+			if p:IsA("BasePart") then p.CanCollide = false end
+		end
+	end)
+end
+local InstantPPConn
+local function setInstantPP(on)
+	S.InstantPP = on == true
+	local function hook(p)
+		if p:IsA("ProximityPrompt") then p.HoldDuration = 0 end
+	end
+	if InstantPPConn then InstantPPConn:Disconnect(); InstantPPConn = nil end
+	if not S.InstantPP then return end
+	for _, d in ipairs(Workspace:GetDescendants()) do hook(d) end
+	InstantPPConn = Workspace.DescendantAdded:Connect(hook)
+end
+local FlyConn, FlyBV, FlyBG
+local function setFly(on)
+	S.Fly = on == true
+	if FlyConn then FlyConn:Disconnect(); FlyConn = nil end
+	if FlyBV then pcall(function() FlyBV:Destroy() end); FlyBV = nil end
+	if FlyBG then pcall(function() FlyBG:Destroy() end); FlyBG = nil end
+	if not S.Fly then return end
+	local hrp = getHRP()
+	if not hrp then return end
+	FlyBV = Instance.new("BodyVelocity")
+	FlyBV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+	FlyBV.Velocity = Vector3.zero
+	FlyBV.Parent = hrp
+	FlyBG = Instance.new("BodyGyro")
+	FlyBG.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+	FlyBG.P = 3000
+	FlyBG.Parent = hrp
+	FlyConn = RunService.RenderStepped:Connect(function()
+		if not S.Fly then return end
+		local hrp2 = getHRP()
+		if not hrp2 or not FlyBV or not FlyBG then return end
+		local cam = Workspace.CurrentCamera
+		local move = Vector3.zero
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move = move - Vector3.new(0, 1, 0) end
+		local spd = S.FlySpeed or 50
+		FlyBV.Velocity = move.Magnitude > 0 and move.Unit * spd or Vector3.zero
+		FlyBG.CFrame = cam.CFrame
+	end)
+end
+local function setFpsBoost(on)
+	S.FpsBoost = on == true
+	pcall(function()
+		if S.FpsBoost then settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end
+	end)
+end
+
+
+local THEME = {
+	bg      = Color3.fromRGB(4, 3, 8),
+	title   = Color3.fromRGB(10, 8, 16),
+	sidebar = Color3.fromRGB(6, 5, 12),
+	card    = Color3.fromRGB(18, 16, 32),
+	element = Color3.fromRGB(24, 20, 42),
+	accent  = Color3.fromRGB(80, 230, 255),
+	accent2 = Color3.fromRGB(185, 110, 255),
+	neonPink= Color3.fromRGB(255, 65, 180),
+	green   = Color3.fromRGB(65, 255, 145),
+	gold    = Color3.fromRGB(255, 220, 130),
+	text    = Color3.fromRGB(245, 247, 255),
+	dim     = Color3.fromRGB(150, 160, 195),
+	tabOn   = Color3.fromRGB(34, 28, 64),
+	tabOff  = Color3.fromRGB(14, 12, 28),
+	red     = Color3.fromRGB(255, 85, 115),
+	blue    = Color3.fromRGB(90, 170, 255),
+	purple  = Color3.fromRGB(160, 100, 255),
+}
+
+local function corner(o, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 8)
+	c.Parent = o
+	return c
+end
+
+local function stroke(o, col, th, tr)
+	local s = Instance.new("UIStroke")
+	s.Color = col or THEME.accent
+	s.Thickness = th or 1
+	s.Transparency = tr or 0.2
+	s.Parent = o
+	return s
+end
+
+local function createRipple(btn)
+	btn.ClipsDescendants = true
+	local circle = Instance.new("Frame")
+	circle.AnchorPoint = Vector2.new(0.5, 0.5)
+	circle.Position = UDim2.new(0.5, 0, 0.5, 0)
+	circle.Size = UDim2.new(0, 0, 0, 0)
+	circle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	circle.BackgroundTransparency = 0.65
+	circle.BorderSizePixel = 0
+	circle.ZIndex = (btn.ZIndex or 10) + 1
+	circle.Parent = btn
+	corner(circle, 999)
+	local maxDim = math.max(btn.AbsoluteSize.X, btn.AbsoluteSize.Y) * 2.2
+	if maxDim < 50 then maxDim = 120 end
+	TweenService:Create(circle, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = UDim2.new(0, maxDim, 0, maxDim),
+		BackgroundTransparency = 1,
+	}):Play()
+	task.delay(0.45, function() circle:Destroy() end)
+end
+
+-- ============================================================
+-- DIAMOND RAIN / WIND PARTICLE EFFECT
+-- ============================================================
+local function attachDiamondRain(host, isOrb)
+	-- Floating diamonds that drift around like wind / falling leaves
+	local diamondContainer = Instance.new("Frame")
+	diamondContainer.Name = "DiamondRain"
+	diamondContainer.Size = UDim2.new(2, 0, 2, 0)
+	diamondContainer.Position = UDim2.new(-0.5, 0, -0.5, 0)
+	diamondContainer.BackgroundTransparency = 1
+	diamondContainer.ZIndex = (host.ZIndex or 10) + 3
+	diamondContainer.Parent = host
+
+	task.spawn(function()
+		local diamonds = {}
+		local MAX_DIAMONDS = isOrb and 20 or 12
+
+		local function createDiamond()
+			if #diamonds >= MAX_DIAMONDS then
+				local old = table.remove(diamonds, 1)
+				pcall(function() old:Destroy() end)
+			end
+			local d = Instance.new("Frame")
+			local size = math.random(3, 7)
+			d.Size = UDim2.new(0, size, 0, size)
+			d.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			d.BorderSizePixel = 0
+			d.ZIndex = diamondContainer.ZIndex
+
+			-- Diamond shape via rotation + gradient
+			d.Rotation = 45
+			local grad = Instance.new("UIGradient")
+			grad.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0.0, THEME.accent),
+				ColorSequenceKeypoint.new(0.5, THEME.neonPink),
+				ColorSequenceKeypoint.new(1.0, THEME.accent2),
+			})
+			grad.Parent = d
+
+			local c = Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0, math.random(1, 3))
+			c.Parent = d
+
+			-- Random start position around host
+			local angle = math.random() * math.pi * 2
+			local radius = math.random(20, isOrb and 80 or 60)
+			local cx, cy = 0.5, 0.5
+			local x = cx + math.cos(angle) * (radius / 200)
+			local y = cy + math.sin(angle) * (radius / 200)
+			d.AnchorPoint = Vector2.new(0.5, 0.5)
+			d.Position = UDim2.new(x, 0, y, 0)
+
+			-- Random transparency
+			d.BackgroundTransparency = math.random(20, 60) / 100
+
+			d.Parent = diamondContainer
+			table.insert(diamonds, d)
+
+			-- Float animation: drift outward + fade
+			local driftAngle = angle + (math.random() - 0.5) * 1.5
+			local driftRadius = radius + math.random(40, 80)
+			local targetX = cx + math.cos(driftAngle) * (driftRadius / 200)
+			local targetY = cy + math.sin(driftAngle) * (driftRadius / 200) - 0.1
+			local dur = 1.5 + math.random() * 2.0
+
+			TweenService:Create(d, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Position = UDim2.new(targetX, 0, targetY, 0),
+				BackgroundTransparency = 1,
+				Size = UDim2.new(0, size * 0.3, 0, size * 0.3),
+				Rotation = d.Rotation + math.random(-90, 90),
+			}):Play()
+
+			task.delay(dur, function()
+				pcall(function() d:Destroy() end)
+				for i, v in ipairs(diamonds) do
+					if v == d then table.remove(diamonds, i) break end
+				end
+			end)
+		end
+
+		-- Spawn loop
+		local t0 = os.clock()
+		while host.Parent do
+			local elapsed = os.clock() - t0
+			local spawnRate = isOrb and 0.15 or 0.25
+			if math.sin(elapsed * 3) > 0.8 then
+				createDiamond()
+				task.wait(spawnRate)
+			end
+			task.wait(0.05)
+		end
+	end)
+end
+
+-- ============================================================
+-- ULTIMATE LOGO AURA + SHOCKWAVE + DIAMONDS
+-- ============================================================
+local function attachMegaLogoAura(host, imageObj, isCircle)
+	host.ClipsDescendants = false
+
+	-- Shockwave pulse ring
+	local wave = Instance.new("Frame")
+	wave.AnchorPoint = Vector2.new(0.5, 0.5)
+	wave.Position = UDim2.new(0.5, 0, 0.5, 0)
+	wave.Size = UDim2.new(1, 0, 1, 0)
+	wave.BackgroundTransparency = 1
+	wave.ZIndex = math.max(1, (host.ZIndex or 10) - 2)
+	wave.Parent = host
+	corner(wave, isCircle and 999 or 12)
+
+	local waveStroke = Instance.new("UIStroke")
+	waveStroke.Thickness = 2
+	waveStroke.Color = THEME.accent
+	waveStroke.Transparency = 1
+	waveStroke.Parent = wave
+
+	-- Rotating Neon Glow Rim
+	local ring = Instance.new("Frame")
+	ring.AnchorPoint = Vector2.new(0.5, 0.5)
+	ring.Position = UDim2.new(0.5, 0, 0.5, 0)
+	ring.Size = UDim2.new(1, 8, 1, 8)
+	ring.BackgroundTransparency = 1
+	ring.ZIndex = math.max(1, (host.ZIndex or 10) - 1)
+	ring.Parent = host
+	corner(ring, isCircle and 999 or 12)
+
+	local ringStroke = Instance.new("UIStroke")
+	ringStroke.Thickness = 2
+	ringStroke.Transparency = 0.2
+	ringStroke.Color = Color3.fromRGB(255, 255, 255)
+	ringStroke.Parent = ring
+
+	local ringGrad = Instance.new("UIGradient")
+	ringGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.0, THEME.neonPink),
+		ColorSequenceKeypoint.new(0.35, THEME.accent),
+		ColorSequenceKeypoint.new(0.7, THEME.accent2),
+		ColorSequenceKeypoint.new(1.0, THEME.neonPink),
+	})
+	ringGrad.Parent = ringStroke
+
+	-- Inner Shimmer Core
+	local coreShimmer = Instance.new("Frame")
+	coreShimmer.AnchorPoint = Vector2.new(0.5, 0.5)
+	coreShimmer.Position = UDim2.new(0.5, 0, 0.5, 0)
+	coreShimmer.Size = UDim2.new(1, 0, 1, 0)
+	coreShimmer.BackgroundTransparency = 0.85
+	coreShimmer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	coreShimmer.BorderSizePixel = 0
+	coreShimmer.ZIndex = (host.ZIndex or 10) + 1
+	coreShimmer.Parent = host
+	corner(coreShimmer, isCircle and 999 or 8)
+
+	local coreGrad = Instance.new("UIGradient")
+	coreGrad.Rotation = 45
+	coreGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 255, 255)),
+		ColorSequenceKeypoint.new(0.5, THEME.accent),
+		ColorSequenceKeypoint.new(1.0, THEME.neonPink),
+	})
+	coreGrad.Parent = coreShimmer
+
+	-- Sparkle burst particles
+	local sparkleContainer = Instance.new("Frame")
+	sparkleContainer.Size = UDim2.new(2, 0, 2, 0)
+	sparkleContainer.Position = UDim2.new(-0.5, 0, -0.5, 0)
+	sparkleContainer.BackgroundTransparency = 1
+	sparkleContainer.ZIndex = (host.ZIndex or 10) + 4
+	sparkleContainer.Parent = host
+
+	local function burstSparkles(count, color)
+		for i = 1, count or 8 do
+			local s = Instance.new("Frame")
+			local sz = math.random(2, 5)
+			s.Size = UDim2.new(0, sz, 0, sz)
+			s.AnchorPoint = Vector2.new(0.5, 0.5)
+			s.Position = UDim2.new(0.5, 0, 0.5, 0)
+			s.BackgroundColor3 = color or THEME.gold
+			s.BorderSizePixel = 0
+			s.Rotation = math.random(0, 360)
+			s.ZIndex = sparkleContainer.ZIndex
+			s.Parent = sparkleContainer
+			local c = Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0, sz)
+			c.Parent = s
+
+			local a = math.random() * math.pi * 2
+			local r = math.random(20, 60)
+			TweenService:Create(s, TweenInfo.new(0.6 + math.random() * 0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Position = UDim2.new(0.5 + math.cos(a) * r / 200, 0, 0.5 + math.sin(a) * r / 200, 0),
+				BackgroundTransparency = 1,
+				Size = UDim2.new(0, 0, 0, 0),
+			}):Play()
+			task.delay(1, function() pcall(function() s:Destroy() end) end)
+		end
+	end
+
+	-- Attach diamond rain
+	attachDiamondRain(host, isCircle)
+
+	-- Live Animation Thread
+	task.spawn(function()
+		local t0 = os.clock()
+		local nextWave = t0 + 1.2
+		local nextSparkle = t0 + 0.8
+
+		while host.Parent do
+			local elapsed = os.clock() - t0
+			local sine = (math.sin(elapsed * 4.2) + 1) * 0.5
+
+			ringGrad.Rotation = (elapsed * 90) % 360
+			coreGrad.Rotation = (elapsed * 120) % 360
+
+			ringStroke.Thickness = 1.6 + sine * 1.4
+			ringStroke.Transparency = 0.15 + sine * 0.4
+			coreShimmer.BackgroundTransparency = 0.78 + sine * 0.18
+
+			if os.clock() >= nextWave then
+				nextWave = os.clock() + 2.0
+				wave.Size = UDim2.new(1, 0, 1, 0)
+				waveStroke.Transparency = 0.2
+				waveStroke.Color = math.random() > 0.5 and THEME.accent or THEME.neonPink
+				TweenService:Create(wave, TweenInfo.new(1.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+					Size = UDim2.new(2.2, 0, 2.2, 0),
+				}):Play()
+				TweenService:Create(waveStroke, TweenInfo.new(1.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+					Transparency = 1,
+					Thickness = 0.5,
+				}):Play()
+				burstSparkles(6, THEME.accent)
+			end
+
+			if os.clock() >= nextSparkle then
+				nextSparkle = os.clock() + 1.5 + math.random() * 0.5
+				burstSparkles(3, Color3.fromRGB(255, 255, 255))
+			end
+
+			task.wait(0.03)
+		end
+	end)
+end
+
+local function getParent()
+	local ok, r = pcall(function()
+		if gethui then return gethui() end
+	end)
+	if ok and r then return r end
+	ok, r = pcall(function() return CoreGui end)
+	if ok and r then return r end
+	return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+pcall(function()
+	for _, n in ipairs({"KHUB_CheatingDuringTesting", "KHUB_UI_Only", "HussValley", "StealFromTheRich_UI", "KHUB_UI_Modern", "KHUB_UI_Ultimate"}) do
+		local g = CoreGui:FindFirstChild(n) or (player.PlayerGui and player.PlayerGui:FindFirstChild(n))
+		if g then g:Destroy() end
+	end
+end)
+
+-- VIEWPORT ADAPTIVE SIZING
+local camera = Workspace.CurrentCamera
+local vpSize = camera and camera.ViewportSize or Vector2.new(1280, 720)
+
+local WIN_W = math.clamp(vpSize.X * 0.75, 420, 560)
+local WIN_H = math.clamp(vpSize.Y * 0.75, 320, 420)
+local SIDE_W = isMobile and 100 or 124
+
+if isMobile and vpSize.X < 500 then
+	WIN_W = vpSize.X - 24
+	WIN_H = vpSize.Y - 40
+	SIDE_W = 95
+end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name              = "KHUB_CDT"
-ScreenGui.ResetOnSpawn      = false
-ScreenGui.IgnoreGuiInset    = true
-pcall(function() ScreenGui.Parent = CoreGui end)
-if not ScreenGui.Parent then
-    ScreenGui.Parent = player:WaitForChild("PlayerGui")
+ScreenGui.Name = "KHUB_CheatingDuringTesting"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999
+ScreenGui.IgnoreGuiInset = true
+pcall(function() ScreenGui.ClipToDeviceSafeArea = false end)
+ScreenGui.Parent = getParent()
+
+-- TOAST NOTIFICATIONS
+local ToastHost = Instance.new("Frame")
+ToastHost.Size = UDim2.new(0, 270, 0, 420)
+ToastHost.Position = UDim2.new(1, -290, 0, 50)
+ToastHost.BackgroundTransparency = 1
+ToastHost.ZIndex = 200
+ToastHost.Parent = ScreenGui
+local toastLay = Instance.new("UIListLayout")
+toastLay.SortOrder = Enum.SortOrder.LayoutOrder
+toastLay.Padding = UDim.new(0, 8)
+toastLay.Parent = ToastHost
+
+local function notify(title, desc, ok)
+	local card = Instance.new("Frame")
+	card.Size = UDim2.new(1, 0, 0, 52)
+	card.BackgroundColor3 = Color3.fromRGB(15, 14, 26)
+	card.BackgroundTransparency = 0.1
+	card.BorderSizePixel = 0
+	card.ZIndex = 201
+	card.Parent = ToastHost
+	corner(card, 10)
+	stroke(card, ok and THEME.green or THEME.neonPink, 1.4, 0.25)
+	local icon = Instance.new("TextLabel")
+	icon.Size = UDim2.new(0, 28, 0, 28)
+	icon.Position = UDim2.new(0, 10, 0.5, -14)
+	icon.BackgroundTransparency = 1
+	icon.Text = ok and "✓" or "✦"
+	icon.TextColor3 = ok and THEME.green or THEME.accent
+	icon.Font = Enum.Font.GothamBold
+	icon.TextSize = 18
+	icon.ZIndex = 202
+	icon.Parent = card
+	local t = Instance.new("TextLabel")
+	t.Size = UDim2.new(1, -48, 0, 20)
+	t.Position = UDim2.new(0, 42, 0, 6)
+	t.BackgroundTransparency = 1
+	t.Text = tostring(title)
+	t.Font = Enum.Font.GothamBold
+	t.TextSize = 13
+	t.TextColor3 = THEME.text
+	t.TextXAlignment = Enum.TextXAlignment.Left
+	t.ZIndex = 202
+	t.Parent = card
+	local d = Instance.new("TextLabel")
+	d.Size = UDim2.new(1, -48, 0, 16)
+	d.Position = UDim2.new(0, 42, 0, 28)
+	d.BackgroundTransparency = 1
+	d.Text = tostring(desc or "")
+	d.Font = Enum.Font.Gotham
+	d.TextSize = 11
+	d.TextColor3 = THEME.dim
+	d.TextXAlignment = Enum.TextXAlignment.Left
+	d.ZIndex = 202
+	d.Parent = card
+	card.Position = UDim2.new(1, 30, 0, 0)
+	TweenService:Create(card, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0, 0, 0, 0),
+	}):Play()
+	task.delay(2.8, function()
+		local tw = TweenService:Create(card, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(1, 30, 0, 0),
+			BackgroundTransparency = 1,
+		})
+		tw:Play()
+		tw.Completed:Wait()
+		card:Destroy()
+	end)
 end
 
--- ══════════════════════════════════════════════════════════
---  ████  FLOATING RADAR  (outside main UI, own draggable frame)  ████
--- ══════════════════════════════════════════════════════════
-local RADAR_SIZE  = 150
-local RADAR_RANGE = 80
+-- MAIN CONTAINER
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(0, WIN_W, 0, WIN_H)
+Main.Position = UDim2.new(0.5, -WIN_W / 2, 0.5, -WIN_H / 2)
+Main.BackgroundColor3 = THEME.bg
+Main.BorderSizePixel = 0
+Main.ClipsDescendants = true
+Main.Visible = false
+Main.Parent = ScreenGui
 
-local RadarFrame = Instance.new("Frame", ScreenGui)
-RadarFrame.Name              = "FloatingRadar"
-RadarFrame.Size              = UDim2.new(0, RADAR_SIZE+20, 0, RADAR_SIZE+70)
-RadarFrame.Position          = UDim2.new(1, -(RADAR_SIZE+40), 0, 60)
-RadarFrame.BackgroundColor3  = Color3.fromRGB(8, 4, 20)
-RadarFrame.BorderSizePixel   = 0
-RadarFrame.Active            = true
-RadarFrame.ZIndex            = 60
-corner(RadarFrame, 12)
-local radarFrameStroke = mkStroke(RadarFrame, THEME.violet, 1.8, 0.1)
+-- Floating dots (monochrome-style sparkles on UI background)
+do
+	local dotsHost = Instance.new("Frame")
+	dotsHost.Name = "MonoDots"
+	dotsHost.Size = UDim2.new(1, 0, 1, 0)
+	dotsHost.BackgroundTransparency = 1
+	dotsHost.ZIndex = (Main.ZIndex or 5) + 1
+	dotsHost.ClipsDescendants = true
+	dotsHost.Parent = Main
 
--- header bar (drag handle)
-local RadarHeader = Instance.new("Frame", RadarFrame)
-RadarHeader.Size             = UDim2.new(1, 0, 0, 22)
-RadarHeader.BackgroundColor3 = Color3.fromRGB(20, 8, 50)
-RadarHeader.BorderSizePixel  = 0
-RadarHeader.ZIndex           = 61
-corner(RadarHeader, 10)
+	local function spawnDot()
+		local d = Instance.new("Frame")
+		local sz = math.random(2, 5)
+		d.Size = UDim2.new(0, sz, 0, sz)
+		d.AnchorPoint = Vector2.new(0.5, 0.5)
+		d.Position = UDim2.new(math.random(), 0, math.random(), 0)
+		d.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		d.BackgroundTransparency = math.random(35, 70) / 100
+		d.BorderSizePixel = 0
+		d.ZIndex = dotsHost.ZIndex
+		d.Parent = dotsHost
+		corner(d, sz)
+		local dur = 1.8 + math.random() * 2.2
+		local tx = d.Position.X.Scale + (math.random() - 0.5) * 0.15
+		local ty = d.Position.Y.Scale - (0.05 + math.random() * 0.12)
+		TweenService:Create(d, TweenInfo.new(dur, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+			Position = UDim2.new(math.clamp(tx, 0, 1), 0, math.clamp(ty, 0, 1), 0),
+			BackgroundTransparency = 1,
+			Size = UDim2.new(0, 1, 0, 1),
+		}):Play()
+		task.delay(dur + 0.05, function() pcall(function() d:Destroy() end) end)
+	end
 
-local RadarHeaderLbl = Instance.new("TextLabel", RadarHeader)
-RadarHeaderLbl.Size               = UDim2.new(1, 0, 1, 0)
-RadarHeaderLbl.BackgroundTransparency = 1
-RadarHeaderLbl.Text               = "☽ RADAR"
-RadarHeaderLbl.Font               = Enum.Font.GothamBold
-RadarHeaderLbl.TextSize           = 11
-RadarHeaderLbl.TextColor3         = THEME.violet
-RadarHeaderLbl.ZIndex             = 62
-
--- radar circle
-local RadarCircle = Instance.new("Frame", RadarFrame)
-RadarCircle.Size             = UDim2.new(0, RADAR_SIZE, 0, RADAR_SIZE)
-RadarCircle.Position         = UDim2.new(0.5, -RADAR_SIZE/2, 0, 26)
-RadarCircle.BackgroundColor3 = Color3.fromRGB(5, 3, 14)
-RadarCircle.BorderSizePixel  = 0
-RadarCircle.ClipsDescendants = true
-RadarCircle.ZIndex           = 61
-corner(RadarCircle, 999)
-mkStroke(RadarCircle, Color3.fromRGB(70, 30, 140), 1.5, 0.1)
-
--- inner rings
-for _, sc in ipairs({0.65, 0.35}) do
-    local ring = Instance.new("Frame", RadarCircle)
-    local sz   = math.floor(RADAR_SIZE * sc)
-    ring.Size            = UDim2.new(0, sz, 0, sz)
-    ring.Position        = UDim2.new(0.5, -sz/2, 0.5, -sz/2)
-    ring.BackgroundTransparency = 1
-    ring.BorderSizePixel = 0
-    ring.ZIndex          = 62
-    corner(ring, 999)
-    mkStroke(ring, Color3.fromRGB(60, 20, 110), 1, 0.4)
+	task.spawn(function()
+		while dotsHost.Parent do
+			if Main.Visible then
+				for _ = 1, math.random(1, 3) do
+					spawnDot()
+				end
+			end
+			task.wait(0.35 + math.random() * 0.45)
+		end
+	end)
 end
 
--- crosshairs
-local function mkCross(h)
-    local ln = Instance.new("Frame", RadarCircle)
-    ln.BackgroundColor3 = Color3.fromRGB(45, 20, 80)
-    ln.BorderSizePixel  = 0; ln.ZIndex = 62
-    if h then ln.Size=UDim2.new(1,0,0,1); ln.Position=UDim2.new(0,0,0.5,0)
-    else      ln.Size=UDim2.new(0,1,1,0); ln.Position=UDim2.new(0.5,0,0,0) end
-end
-mkCross(true); mkCross(false)
+corner(Main, 12)
 
--- self dot (green center)
-local SelfDot = Instance.new("Frame", RadarCircle)
-SelfDot.Size             = UDim2.new(0,7,0,7)
-SelfDot.Position         = UDim2.new(0.5,-3.5,0.5,-3.5)
-SelfDot.BackgroundColor3 = THEME.safe
-SelfDot.BorderSizePixel  = 0; SelfDot.ZIndex = 65
-corner(SelfDot, 999)
-
--- teacher dot (red)
-local TeacherDot = Instance.new("Frame", RadarCircle)
-TeacherDot.Size            = UDim2.new(0,10,0,10)
-TeacherDot.BackgroundColor3 = THEME.danger
-TeacherDot.BorderSizePixel = 0; TeacherDot.ZIndex = 66
-TeacherDot.Visible         = false
-corner(TeacherDot, 999)
--- pulsing stroke on teacher dot
-local tDotStroke = mkStroke(TeacherDot, THEME.danger, 2, 0)
-
--- tracker line (center → teacher dot)
-local TrackerLine = Instance.new("Frame", RadarCircle)
-TrackerLine.BackgroundColor3 = THEME.violet
-TrackerLine.BorderSizePixel  = 0
-TrackerLine.AnchorPoint      = Vector2.new(0, 0.5)
-TrackerLine.ZIndex           = 63; TrackerLine.Visible = false
-
--- player dot pool (violet dots for other players)
-local playerDotPool = {}
-local function getPlayerDot(uid)
-    if not playerDotPool[uid] then
-        local d = Instance.new("Frame", RadarCircle)
-        d.Size             = UDim2.new(0,7,0,7)
-        d.BackgroundColor3 = THEME.violet
-        d.BorderSizePixel  = 0; d.ZIndex = 64; d.Visible = false
-        corner(d, 999)
-        mkStroke(d, Color3.fromRGB(200,130,255), 1, 0.3)
-        playerDotPool[uid] = d
-    end
-    return playerDotPool[uid]
-end
-
--- radar status label
-local RadarStatus = Instance.new("TextLabel", RadarFrame)
-RadarStatus.Size             = UDim2.new(1,-6,0,28)
-RadarStatus.Position         = UDim2.new(0,3,0,RADAR_SIZE+30)
-RadarStatus.BackgroundTransparency = 1
-RadarStatus.Font             = Enum.Font.GothamBold
-RadarStatus.TextSize         = 11
-RadarStatus.TextColor3       = THEME.danger
-RadarStatus.Text             = "SCANNING..."
-RadarStatus.ZIndex           = 62
-
--- radar toggle button (top-right of radar)
-local RadarToggleBtn = Instance.new("TextButton", RadarFrame)
-RadarToggleBtn.Size          = UDim2.new(0,18,0,16)
-RadarToggleBtn.Position      = UDim2.new(1,-20,0,3)
-RadarToggleBtn.BackgroundColor3 = Color3.fromRGB(30,10,60)
-RadarToggleBtn.Text          = "×"
-RadarToggleBtn.Font          = Enum.Font.GothamBold
-RadarToggleBtn.TextSize      = 13; RadarToggleBtn.TextColor3 = THEME.dim
-RadarToggleBtn.ZIndex        = 70
-corner(RadarToggleBtn, 4)
-RadarToggleBtn.MouseButton1Click:Connect(function()
-    RadarFrame.Visible = false
-end)
-
--- radar drag
-local rDragging, rDragStart, rDragPos
-RadarHeader.InputBegan:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-        rDragging=true; rDragStart=i.Position; rDragPos=RadarFrame.Position
-    end
-end)
-RadarHeader.InputEnded:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-        rDragging=false
-    end
-end)
-UserInputService.InputChanged:Connect(function(i)
-    if rDragging and rDragStart then
-        local d = i.Position - rDragStart
-        RadarFrame.Position = UDim2.new(
-            rDragPos.X.Scale, rDragPos.X.Offset+d.X,
-            rDragPos.Y.Scale, rDragPos.Y.Offset+d.Y
-        )
-    end
-end)
-
--- world-to-radar projection
-local RADAR_HALF = RADAR_SIZE / 2
-local function worldToRadar(myPos, targetPos)
-    local camCF = Camera.CFrame
-    local look  = camCF.LookVector
-    local fl    = Vector3.new(look.X,0,look.Z)
-    if fl.Magnitude > 0.01 then fl=fl.Unit else fl=Vector3.new(0,0,-1) end
-    local right = Vector3.new(-fl.Z,0,fl.X)
-    local delta = targetPos - myPos
-    local lx    = delta:Dot(right)
-    local lz    = delta:Dot(fl)
-    local scale = RADAR_HALF / RADAR_RANGE
-    local px    = RADAR_HALF + lx*scale
-    local py    = RADAR_HALF - lz*scale
-    local cx,cy = px-RADAR_HALF, py-RADAR_HALF
-    local dist  = math.sqrt(cx*cx+cy*cy)
-    if dist > RADAR_HALF then
-        local norm = RADAR_HALF/dist
-        px = RADAR_HALF + cx*norm
-        py = RADAR_HALF + cy*norm
-    end
-    return px, py
-end
-
--- radar render loop (pulse teacher dot)
-local tPulse = 0
-RunService.RenderStepped:Connect(function(dt)
-    if not State.Radar then return end
-    local myChar = player.Character
-    local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return end
-    local myPos  = myHRP.Position
-
-    -- teacher dot
-    local tHRP = findTeacherHRP()
-    if tHRP then
-        local tx, ty = worldToRadar(myPos, tHRP.Position)
-        TeacherDot.Position = UDim2.new(0,tx-5,0,ty-5)
-        TeacherDot.Visible  = true
-
-        -- pulse stroke
-        tPulse = tPulse + dt*3
-        tDotStroke.Transparency = (math.sin(tPulse)+1)/2 * 0.7
-
-        -- tracker line
-        local dx, dy = tx-RADAR_HALF, ty-RADAR_HALF
-        local len    = math.sqrt(dx*dx+dy*dy)
-        TrackerLine.Size     = UDim2.new(0,math.max(1,len),0,1)
-        TrackerLine.Position = UDim2.new(0,RADAR_HALF,0,RADAR_HALF)
-        TrackerLine.Rotation = math.deg(math.atan2(dy,dx))
-        TrackerLine.Visible  = true
-
-        local dist = (myPos - tHRP.Position).Magnitude
-        if dist < State.SafeDistance then
-            RadarStatus.Text       = string.format("⚠ DANGER  %.0fm", dist)
-            RadarStatus.TextColor3 = THEME.danger
-            radarFrameStroke.Color = THEME.danger
-        elseif dist < State.PhotoSafeDistance then
-            RadarStatus.Text       = string.format("⚡ CAUTION  %.0fm", dist)
-            RadarStatus.TextColor3 = THEME.caution
-            radarFrameStroke.Color = THEME.caution
-        else
-            RadarStatus.Text       = string.format("✓ CLEAR  %.0fm", dist)
-            RadarStatus.TextColor3 = THEME.safe
-            radarFrameStroke.Color = THEME.safe
-        end
-    else
-        TeacherDot.Visible   = false
-        TrackerLine.Visible  = false
-        RadarStatus.Text     = "NO TEACHER"
-        RadarStatus.TextColor3 = THEME.dim
-        radarFrameStroke.Color = THEME.violet
-    end
-
-    -- other player dots (violet)
-    local seen = {}
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            local pHRP = p.Character:FindFirstChild("HumanoidRootPart")
-            if pHRP then
-                seen[p.UserId] = true
-                local dot    = getPlayerDot(p.UserId)
-                local px, py = worldToRadar(myPos, pHRP.Position)
-                dot.Position = UDim2.new(0,px-3,0,py-3)
-                dot.Visible  = true
-            end
-        end
-    end
-    for uid, dot in pairs(playerDotPool) do
-        if not seen[uid] then dot.Visible=false end
-    end
-end)
-
--- ══════════════════════════════════════════════════════════
---  MAIN WINDOW  (tabs as boxes, not full sidebar block)
--- ══════════════════════════════════════════════════════════
-local WIN_W = 460
-local WIN_H = 360
-
-local Win = Instance.new("Frame", ScreenGui)
-Win.Name             = "Window"
-Win.Size             = UDim2.new(0,WIN_W,0,WIN_H)
-Win.Position         = UDim2.new(0.5,-WIN_W/2,0.5,-WIN_H/2)
-Win.BackgroundColor3 = THEME.bg
-Win.BorderSizePixel  = 0
-Win.ClipsDescendants = true
-Win.Active           = true
-Win.ZIndex           = 10
-corner(Win, 12)
-mkStroke(Win, Color3.fromRGB(130,60,220), 1.5, 0.2)
-
--- gradient bg
-gradient(Win,
-    Color3.fromRGB(8,5,20),
-    Color3.fromRGB(14,6,32), 135)
-
--- ── Title bar ──────────────────────────────────────────────
-local TitleBar = Instance.new("Frame", Win)
-TitleBar.Size            = UDim2.new(1,0,0,44)
-TitleBar.BackgroundColor3 = Color3.fromRGB(12,6,28)
-TitleBar.BorderSizePixel = 0; TitleBar.ZIndex = 11
-corner(TitleBar, 10)
-
--- animated top accent stripe
-local TopAccent = Instance.new("Frame", TitleBar)
-TopAccent.Size           = UDim2.new(1,0,0,3)
-TopAccent.BorderSizePixel = 0
-TopAccent.BackgroundColor3 = Color3.new(1,1,1)
-TopAccent.ZIndex         = 20
-local aGrad = Instance.new("UIGradient", TopAccent)
-task.spawn(function()
-    local t=0; local n=#BAR_COLS
-    while TopAccent.Parent do
-        t=t+task.wait(0.025); local kps={}
-        for i=1,n do
-            local fr=(i-1)/(n-1)
-            local ph=(fr+t*0.14)%1
-            local ix=math.floor(ph*(n-1))+1
-            local nx=(ix%(n-1))+1
-            local sub=(ph*(n-1))%1
-            kps[i]=ColorSequenceKeypoint.new(fr, lerpColor(BAR_COLS[ix],BAR_COLS[nx],sub))
-        end
-        aGrad.Color=ColorSequence.new(kps)
-    end
-end)
-
--- logo area
-local LogoLbl = Instance.new("TextLabel", TitleBar)
-LogoLbl.Size             = UDim2.new(0,80,1,0)
-LogoLbl.Position         = UDim2.new(0,10,0,0)
-LogoLbl.BackgroundTransparency = 1
-LogoLbl.Text             = "KHUB"
-LogoLbl.Font             = Enum.Font.GothamBold
-LogoLbl.TextSize         = 18; LogoLbl.ZIndex=12
-local logoGrad = Instance.new("UIGradient", LogoLbl)
-logoGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0,   Color3.fromRGB(200,140,255)),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255,210,120)),
-    ColorSequenceKeypoint.new(1,   Color3.fromRGB(200,140,255)),
+-- Animated RGB Outer Stroke for Main Frame
+local mainStroke = stroke(Main, THEME.accent2, 1.6, 0.2)
+local mainGrad = Instance.new("UIGradient")
+mainGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0.0, THEME.neonPink),
+	ColorSequenceKeypoint.new(0.33, THEME.accent),
+	ColorSequenceKeypoint.new(0.66, THEME.accent2),
+	ColorSequenceKeypoint.new(1.0, THEME.neonPink),
 })
+mainGrad.Parent = mainStroke
+
 task.spawn(function()
-    local t=0
-    while LogoLbl.Parent do
-        t=t+task.wait(0.03)
-        logoGrad.Offset=Vector2.new(math.sin(t*0.8)*0.8,0)
-    end
+	while Main.Parent do
+		mainGrad.Rotation = (tick() * 55) % 360
+		task.wait(0.03)
+	end
 end)
 
-local SubLbl = Instance.new("TextLabel", TitleBar)
-SubLbl.Size             = UDim2.new(0,220,0,12)
-SubLbl.Position         = UDim2.new(0,10,0,26)
+local BgImg = Instance.new("ImageLabel")
+BgImg.Size = UDim2.new(1, 0, 1, 0)
+BgImg.BackgroundTransparency = 1
+BgImg.Image = BG_ID
+BgImg.ImageTransparency = 0.88
+BgImg.ScaleType = Enum.ScaleType.Crop
+BgImg.ZIndex = 1
+BgImg.Parent = Main
+
+-- TITLE BAR
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 68)
+TitleBar.BackgroundColor3 = THEME.title
+TitleBar.BackgroundTransparency = 0.25
+TitleBar.BorderSizePixel = 0
+TitleBar.ZIndex = 10
+TitleBar.Parent = Main
+
+local LogoWrap = Instance.new("Frame")
+LogoWrap.Size = UDim2.new(0, 38, 0, 38)
+LogoWrap.Position = UDim2.new(0, 12, 0.5, -19)
+LogoWrap.BackgroundColor3 = Color3.fromRGB(12, 10, 20)
+LogoWrap.BorderSizePixel = 0
+LogoWrap.ClipsDescendants = false
+LogoWrap.ZIndex = 12
+LogoWrap.Parent = TitleBar
+corner(LogoWrap, 9)
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.new(1, 0, 1, 0)
+Logo.BackgroundTransparency = 1
+Logo.Image = LOGO_ID
+Logo.ScaleType = Enum.ScaleType.Fit
+Logo.ZIndex = 14
+Logo.Parent = LogoWrap
+corner(Logo, 9)
+attachMegaLogoAura(LogoWrap, Logo, false)
+
+local TitleLbl = Instance.new("TextLabel")
+TitleLbl.Size = UDim2.new(1, -130, 0, 22)
+TitleLbl.Position = UDim2.new(0, 58, 0, 13)
+TitleLbl.BackgroundTransparency = 1
+TitleLbl.Text = "KHUB · CHEAT TEST"
+TitleLbl.TextColor3 = Color3.new(1, 1, 1)
+TitleLbl.Font = Enum.Font.GothamBlack
+TitleLbl.TextSize = 16
+TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
+TitleLbl.ZIndex = 11
+TitleLbl.Parent = TitleBar
+
+local TitleGrad = Instance.new("UIGradient")
+TitleGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0.0, THEME.accent),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
+	ColorSequenceKeypoint.new(1.0, THEME.neonPink),
+})
+TitleGrad.Parent = TitleLbl
+
+task.spawn(function()
+	while TitleLbl.Parent do
+		TitleGrad.Offset = Vector2.new(math.sin(tick() * 1.4) * 0.5, 0)
+		task.wait(0.03)
+	end
+end)
+
+local SubLbl = Instance.new("TextLabel")
+SubLbl.Size = UDim2.new(1, -130, 0, 16)
+SubLbl.Position = UDim2.new(0, 58, 0, 37)
 SubLbl.BackgroundTransparency = 1
-SubLbl.Text             = "Steal an Egg  •  KHUB  |  Cheating During Testing"
-SubLbl.Font             = Enum.Font.Code
-SubLbl.TextSize         = 9
-SubLbl.TextColor3       = THEME.dim
-SubLbl.ZIndex           = 12
+SubLbl.Text = "KHUB · by Kyiel Pambid"
+SubLbl.TextColor3 = THEME.dim
+SubLbl.Font = Enum.Font.Gotham
+SubLbl.TextSize = 11
+SubLbl.TextXAlignment = Enum.TextXAlignment.Left
+SubLbl.ZIndex = 11
+SubLbl.Parent = TitleBar
 
--- status strip inside title bar
-local statCard = Instance.new("Frame", TitleBar)
-statCard.Size            = UDim2.new(0,170,0,22)
-statCard.Position        = UDim2.new(0,230,0.5,-11)
-statCard.BackgroundColor3 = Color3.fromRGB(14,8,32)
-statCard.BorderSizePixel = 0; statCard.ZIndex=12
-corner(statCard,6); mkStroke(statCard,THEME.stroke,1,0.5)
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -38, 0, 19)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(46, 18, 30)
+CloseBtn.BackgroundTransparency = 0.2
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = THEME.red
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.ZIndex = 12
+CloseBtn.Parent = TitleBar
+corner(CloseBtn, 7)
+stroke(CloseBtn, THEME.red, 1, 0.4)
 
-StatusRef = Instance.new("TextLabel", statCard)
-StatusRef.Size           = UDim2.new(1,-6,1,0)
-StatusRef.Position       = UDim2.new(0,3,0,0)
-StatusRef.BackgroundTransparency=1
-StatusRef.Text           = "Ready"
-StatusRef.Font           = Enum.Font.Gotham
-StatusRef.TextSize       = 9; StatusRef.TextColor3=THEME.dim
-StatusRef.TextXAlignment = Enum.TextXAlignment.Left
-StatusRef.ZIndex         = 13; StatusRef.TextTruncate=Enum.TextTruncate.AtEnd
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 30, 0, 30)
+MinBtn.Position = UDim2.new(1, -74, 0, 19)
+MinBtn.BackgroundColor3 = Color3.fromRGB(24, 26, 48)
+MinBtn.BackgroundTransparency = 0.2
+MinBtn.Text = "—"
+MinBtn.TextColor3 = THEME.text
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 14
+MinBtn.ZIndex = 12
+MinBtn.Parent = TitleBar
+corner(MinBtn, 7)
+stroke(MinBtn, THEME.blue, 1, 0.4)
 
-local MinBtn = Instance.new("TextButton", TitleBar)
-MinBtn.Size          = UDim2.new(0,24,0,20)
-MinBtn.Position      = UDim2.new(1,-28,0.5,-10)
-MinBtn.BackgroundColor3 = Color3.fromRGB(30,12,55)
-MinBtn.Text          = "–"; MinBtn.Font=Enum.Font.GothamBold
-MinBtn.TextSize      = 14; MinBtn.TextColor3=THEME.dim
-MinBtn.ZIndex        = 15
-corner(MinBtn,5); mkStroke(MinBtn,THEME.stroke,1,0.5)
-
--- ── TAB ROW  (box tabs, not sidebar block) ─────────────────
-local TAB_NAMES = { "Main", "Answers", "ESP", "Settings" }
-local tabBtns   = {}
-
-local TabRow = Instance.new("Frame", Win)
-TabRow.Size            = UDim2.new(1,-20,0,28)
-TabRow.Position        = UDim2.new(0,10,0,48)
-TabRow.BackgroundTransparency = 1
-TabRow.ZIndex          = 11
-
--- layout for tab buttons
-local tabLayout = Instance.new("UIListLayout", TabRow)
-tabLayout.FillDirection = Enum.FillDirection.Horizontal
-tabLayout.Padding       = UDim.new(0,4)
-tabLayout.SortOrder     = Enum.SortOrder.LayoutOrder
-
-for i, name in ipairs(TAB_NAMES) do
-    local b = Instance.new("TextButton", TabRow)
-    b.LayoutOrder        = i
-    b.Size               = UDim2.new(0.24,0,1,0)
-    b.BackgroundColor3   = (i==1) and Color3.fromRGB(50,20,110) or Color3.fromRGB(20,10,45)
-    b.BackgroundTransparency = (i==1) and 0 or 0.3
-    b.Text               = name
-    b.Font               = Enum.Font.GothamBold
-    b.TextSize           = 11
-    b.TextColor3         = (i==1) and THEME.gold or THEME.dim
-    b.AutoButtonColor    = false
-    b.ZIndex             = 12
-    corner(b, 7)
-    if i==1 then mkStroke(b, THEME.accent, 1.2, 0.3) end
-    tabBtns[name] = b
+-- DRAGGABLE TITLEBAR
+do
+	local dragging, dragStart, startPos = false, nil, nil
+	TitleBar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = Main.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
 end
 
--- phase pill (right of tabs)
-local PhasePill = Instance.new("Frame", Win)
-PhasePill.Size           = UDim2.new(0,140,0,26)
-PhasePill.Position       = UDim2.new(1,-150,0,49)
-PhasePill.BackgroundColor3 = Color3.fromRGB(12,7,28)
-PhasePill.BorderSizePixel= 0; PhasePill.ZIndex=12
-corner(PhasePill,7); mkStroke(PhasePill,THEME.stroke,1,0.5)
+-- BODY & SIDEBAR
+local Body = Instance.new("Frame")
+Body.Size = UDim2.new(1, 0, 1, -96)
+Body.Position = UDim2.new(0, 0, 0, 68)
+Body.BackgroundTransparency = 1
+Body.ZIndex = 5
+Body.Parent = Main
 
-PhaseRef = Instance.new("TextLabel", PhasePill)
-PhaseRef.Size            = UDim2.new(1,-6,1,0)
-PhaseRef.Position        = UDim2.new(0,3,0,0)
-PhaseRef.BackgroundTransparency=1
-PhaseRef.Text            = "⏸  idle"
-PhaseRef.Font            = Enum.Font.GothamBold
-PhaseRef.TextSize        = 9; PhaseRef.TextColor3=THEME.dim
-PhaseRef.TextXAlignment  = Enum.TextXAlignment.Left; PhaseRef.ZIndex=13
+local Footer = Instance.new("Frame")
+Footer.Size = UDim2.new(0, SIDE_W, 0, 28)
+Footer.Position = UDim2.new(0, 0, 1, -28)
+Footer.BackgroundColor3 = Color3.fromRGB(8, 10, 18)
+Footer.BackgroundTransparency = 0.2
+Footer.BorderSizePixel = 0
+Footer.ZIndex = 20
+Footer.Parent = Main
+corner(Footer, 6)
+stroke(Footer, THEME.green, 1.2, 0.3)
 
--- countdown big number (center of screen, shows during load)
-CountdownRef = Instance.new("TextLabel", ScreenGui)
-CountdownRef.Size            = UDim2.new(0,80,0,80)
-CountdownRef.Position        = UDim2.new(0.5,-40,0.5,-40)
-CountdownRef.BackgroundColor3 = Color3.fromRGB(10,5,25)
-CountdownRef.BackgroundTransparency = 0.1
-CountdownRef.Text            = "3"
-CountdownRef.Font            = Enum.Font.GothamBold
-CountdownRef.TextSize        = 52
-CountdownRef.TextColor3      = THEME.accent
-CountdownRef.TextStrokeColor3 = THEME.violet
-CountdownRef.TextStrokeTransparency = 0.3
-CountdownRef.ZIndex          = 80; CountdownRef.Visible=false
-corner(CountdownRef, 16); mkStroke(CountdownRef, THEME.violet, 2.5, 0.1)
+local FootLabel = Instance.new("TextLabel")
+FootLabel.Size = UDim2.new(1, -6, 1, 0)
+FootLabel.Position = UDim2.new(0, 3, 0, 0)
+FootLabel.BackgroundTransparency = 1
+FootLabel.Text = "kyiel pambid · active"
+FootLabel.Font = Enum.Font.GothamBold
+FootLabel.TextSize = 10
+FootLabel.TextColor3 = THEME.green
+FootLabel.TextXAlignment = Enum.TextXAlignment.Center
+FootLabel.ZIndex = 21
+FootLabel.Parent = Footer
 
--- ── PAGE CONTAINER ─────────────────────────────────────────
-local Pages = {}
-local function makePage(name)
-    local p = Instance.new("ScrollingFrame", Win)
-    p.Name               = name
-    p.Size               = UDim2.new(1,-16,1,-84)
-    p.Position           = UDim2.new(0,8,0,80)
-    p.BackgroundTransparency = 1
-    p.BorderSizePixel    = 0
-    p.ScrollBarThickness = 3
-    p.ScrollBarImageColor3 = THEME.mute
-    p.CanvasSize         = UDim2.new(0,0,0,480)
-    p.ZIndex             = 11; p.Visible=false
-    Pages[name]=p; return p
-end
-
-local pageMain    = makePage("Main")
-local pageAnswers = makePage("Answers")
-local pageESP     = makePage("ESP")
-local pageSet     = makePage("Settings")
-pageMain.Visible  = true
-
-local currentTab  = "Main"
-local function switchTab(name)
-    currentTab = name
-    for n, pg in pairs(Pages) do pg.Visible=(n==name) end
-    for n, b in pairs(tabBtns) do
-        local on = (n==name)
-        b.BackgroundColor3       = on and Color3.fromRGB(50,20,110) or Color3.fromRGB(20,10,45)
-        b.BackgroundTransparency = on and 0 or 0.3
-        b.TextColor3             = on and THEME.gold or THEME.dim
-        local ex = b:FindFirstChildOfClass("UIStroke"); if ex then ex:Destroy() end
-        if on then mkStroke(b, THEME.accent, 1.2, 0.3) end
-    end
-end
-for name, b in pairs(tabBtns) do
-    b.MouseButton1Click:Connect(function() switchTab(name) end)
-end
-
--- ── Widget helpers ─────────────────────────────────────────
-local function row(parent, y)
-    local f = Instance.new("Frame", parent)
-    f.Size            = UDim2.new(1,0,0,30)
-    f.Position        = UDim2.new(0,0,0,y)
-    f.BackgroundColor3 = THEME.card
-    f.BorderSizePixel = 0; f.ZIndex=12
-    corner(f,8); mkStroke(f, THEME.stroke, 1, 0.5)
-    gradient(f, THEME.card, Color3.fromRGB(18,10,38), 0)
-    return f
-end
-
-local function lbl(parent, text, y, sz, col, bold)
-    local l = Instance.new("TextLabel", parent)
-    l.Size            = UDim2.new(1,-10,0,sz+4)
-    l.Position        = UDim2.new(0,6,0,y)
-    l.BackgroundTransparency=1
-    l.Text            = text; l.Font=bold and Enum.Font.GothamBold or Enum.Font.Gotham
-    l.TextSize        = sz; l.TextColor3=col
-    l.TextXAlignment  = Enum.TextXAlignment.Left
-    l.ZIndex          = 13; l.TextWrapped=true
-    return l
-end
-
-local function toggle(parent, text, y, default, cb)
-    local r   = row(parent, y)
-    local lab = Instance.new("TextLabel", r)
-    lab.Size            = UDim2.new(1,-64,1,0)
-    lab.Position        = UDim2.new(0,8,0,0)
-    lab.BackgroundTransparency=1
-    lab.Text            = text; lab.Font=Enum.Font.Gotham
-    lab.TextSize        = 11; lab.TextColor3=THEME.text
-    lab.TextXAlignment  = Enum.TextXAlignment.Left; lab.ZIndex=13
-    local btn = Instance.new("TextButton", r)
-    btn.Size            = UDim2.new(0,46,0,21)
-    btn.Position        = UDim2.new(1,-52,0.5,-10)
-    btn.BackgroundColor3 = default and Color3.fromRGB(45,120,65) or Color3.fromRGB(50,18,80)
-    btn.Text            = default and "ON" or "OFF"
-    btn.Font            = Enum.Font.GothamBold
-    btn.TextSize        = 11; btn.TextColor3=Color3.new(1,1,1)
-    btn.ZIndex          = 14
-    corner(btn,6)
-    mkStroke(btn, default and THEME.safe or THEME.mute, 1, 0.4)
-    local on=default
-    btn.MouseButton1Click:Connect(function()
-        on=not on
-        btn.Text=on and "ON" or "OFF"
-        btn.BackgroundColor3=on and Color3.fromRGB(45,120,65) or Color3.fromRGB(50,18,80)
-        local ex=btn:FindFirstChildOfClass("UIStroke"); if ex then ex:Destroy() end
-        mkStroke(btn, on and THEME.safe or THEME.mute, 1, 0.4)
-        cb(on)
-    end)
-    return btn
-end
-
-local function bigBtn(parent, text, y, fn, accent, h)
-    h = h or 27
-    local b = Instance.new("TextButton", parent)
-    b.Size            = UDim2.new(1,0,0,h)
-    b.Position        = UDim2.new(0,0,0,y)
-    b.BackgroundColor3 = Color3.fromRGB(30,14,65)
-    b.Text            = text
-    b.Font            = Enum.Font.GothamBold
-    b.TextSize        = 11; b.TextColor3=THEME.text
-    b.ZIndex          = 12
-    corner(b,8); mkStroke(b, accent or THEME.accent, 1.2, 0.4)
-    gradient(b, Color3.fromRGB(30,14,65), Color3.fromRGB(50,20,100), 90)
-    b.MouseButton1Click:Connect(fn)
-    return b
-end
-
--- ══════════════════════════════════════════════════════════
---  PAGE · MAIN
--- ══════════════════════════════════════════════════════════
-local yM = 0
-toggle(pageMain, "⚡  Auto Flow (photo→load→answer)", yM, true, function(v)
-    State.AutoFlow=v
-    if v then runAutoFlow(); notify("Auto flow started")
-    else State.Running=false; notify("Auto flow stopped") end
-end)
-toggle(pageMain, "🚨  Anti Caught (pencil on danger)", yM+34, true, function(v) State.AntiCaught=v end)
-
-local yMb = yM + 74
-bigBtn(pageMain, "📷  Take Photo Now",              yMb,    function()
-    if not isSafeForPhoto() then notify("Not safe – CLEAR zone required"); return end
-    takePhoto(); notify("Photo taken ✓")
-end)
-bigBtn(pageMain, "📱  Load & Highlight (3s countdown)", yMb+31, function()
-    if isDanger() then notify("Too close!"); return end
-    setPhase("load"); notify("Loading...")
-    openPhoneAnswers(); doCountdownLoad()
-    local c=readPhoneAnswers(); refreshSavedUI(); applyHighlights()
-    notify("Loaded "..c.." Q · highlighted "..#State.HighlightFrames); setPhase("idle")
-end)
-bigBtn(pageMain, "✍  Auto Pencil + Submit All",     yMb+62, function()
-    equipPencil(); task.wait(0.2)
-    local n=submitSaved(); applyHighlights()
-    notify("Submitted "..n.." answers · highlights preserved")
-end)
-bigBtn(pageMain, "🖊  Equip Pencil",                yMb+93, equipPencil, THEME.dim)
-bigBtn(pageMain, "❌  Clear Highlights",             yMb+124, function()
-    clearHighlights(); notify("Highlights cleared")
-end, THEME.mute)
-
--- show radar button
-bigBtn(pageMain, "☽  Show Radar",                  yMb+155, function()
-    RadarFrame.Visible=true; notify("Radar shown")
-end, THEME.violet)
-
--- ══════════════════════════════════════════════════════════
---  PAGE · ANSWERS
--- ══════════════════════════════════════════════════════════
-local yAns = 0
-bigBtn(pageAnswers, "📱  Load + Highlight (3s)", yAns, function()
-    if isDanger() then notify("Too close"); return end
-    setPhase("load"); notify("Loading...")
-    openPhoneAnswers(); doCountdownLoad()
-    local c=readPhoneAnswers(); refreshSavedUI(); applyHighlights()
-    notify("Done – "..c.." Q"); setPhase("idle")
-end)
-bigBtn(pageAnswers, "✍  Submit All",   yAns+31, function()
-    equipPencil(); task.wait(0.2)
-    local n=submitSaved(); applyHighlights(); notify("Submitted "..n)
-end)
-bigBtn(pageAnswers, "🗑  Clear Saved", yAns+62, function()
-    State.SavedAnswers={}; clearHighlights(); refreshSavedUI(); notify("Cleared")
-end, THEME.mute)
-
--- answer list box (shows loaded Q+A with numbers)
-local cBox = Instance.new("Frame", pageAnswers)
-cBox.Size            = UDim2.new(1,0,0,280)
-cBox.Position        = UDim2.new(0,0,0,yAns+96)
-cBox.BackgroundColor3 = Color3.fromRGB(16,9,36)
-cBox.BorderSizePixel = 0; cBox.ZIndex=12
-corner(cBox,10); mkStroke(cBox, THEME.violet, 1.5, 0.3)
-gradient(cBox, Color3.fromRGB(16,9,36), Color3.fromRGB(22,12,48), 90)
-
-local cBoxHeader = Instance.new("Frame", cBox)
-cBoxHeader.Size            = UDim2.new(1,0,0,22)
-cBoxHeader.BackgroundColor3 = Color3.fromRGB(30,12,70)
-cBoxHeader.BorderSizePixel = 0; cBoxHeader.ZIndex=13
-corner(cBoxHeader, 8)
-local cBoxHdrLbl = Instance.new("TextLabel", cBoxHeader)
-cBoxHdrLbl.Size             = UDim2.new(1,0,1,0)
-cBoxHdrLbl.BackgroundTransparency=1
-cBoxHdrLbl.Text             = "📋  Loaded Answers"
-cBoxHdrLbl.Font             = Enum.Font.GothamBold
-cBoxHdrLbl.TextSize         = 10; cBoxHdrLbl.TextColor3=THEME.gold
-cBoxHdrLbl.ZIndex           = 14
-
-SavedLabelRef = Instance.new("TextLabel", cBox)
-SavedLabelRef.Size           = UDim2.new(1,-12,1,-28)
-SavedLabelRef.Position       = UDim2.new(0,6,0,26)
-SavedLabelRef.BackgroundTransparency=1
-SavedLabelRef.Text           = formatSavedAnswers()
-SavedLabelRef.Font           = Enum.Font.Code
-SavedLabelRef.TextSize       = 11; SavedLabelRef.TextColor3=THEME.text
-SavedLabelRef.TextXAlignment = Enum.TextXAlignment.Left
-SavedLabelRef.TextYAlignment = Enum.TextYAlignment.Top
-SavedLabelRef.TextWrapped    = true; SavedLabelRef.ZIndex=13
-
--- ══════════════════════════════════════════════════════════
---  PAGE · ESP
--- ══════════════════════════════════════════════════════════
-local yE=0
-lbl(pageESP, "Teacher ESP", yE, 11, THEME.gold, true)
-toggle(pageESP, "🔴  Teacher Highlight (red)", yE+16, true, function(v)
-    State.TeacherESP=v
-    if v then applyTeacherESP() else clearTeacherESP() end
-end)
-toggle(pageESP, "🟣  Desk ESP (violet outline)", yE+50, true, function(v)
-    State.DeskESP=v
-    if v then applyDeskESP() else clearDeskESP() end
-end)
-toggle(pageESP, "☽  Radar Visible",             yE+84, true, function(v)
-    RadarFrame.Visible=v
-end)
-
-bigBtn(pageESP, "🔄  Refresh All ESP",  yE+122, function()
-    applyTeacherESP(); applyDeskESP(); notify("ESP refreshed")
-end)
-bigBtn(pageESP, "🗑  Clear All ESP",    yE+153, function()
-    clearTeacherESP(); clearDeskESP(); notify("ESP cleared")
-end, THEME.mute)
-
--- ══════════════════════════════════════════════════════════
---  PAGE · SETTINGS
--- ══════════════════════════════════════════════════════════
-local cCred = Instance.new("Frame", pageSet)
-cCred.Size            = UDim2.new(1,0,0,54)
-cCred.BackgroundColor3 = Color3.fromRGB(18,10,40)
-cCred.BorderSizePixel = 0; cCred.ZIndex=12
-corner(cCred,8); mkStroke(cCred, THEME.violet, 1.5, 0.3)
-gradient(cCred, Color3.fromRGB(18,10,40), Color3.fromRGB(28,14,60), 135)
-lbl(cCred, "Credits",                          6,  11, THEME.gold, true)
-lbl(cCred, "Yvaine & Kyiel · UI by Khub",      22, 12, THEME.text, true)
-lbl(cCred, "Steal an Egg • KHUB · CDT v4",     37, 9,  THEME.violet, false)
-lbl(cCred, "Toggle: RightShift / RightCtrl / K", 48, 9, THEME.dim, false)
-
-local yS=60
-bigBtn(pageSet, "💾  Save Config",  yS,    saveConfig)
-bigBtn(pageSet, "📂  Load Config",  yS+31, loadConfig)
-bigBtn(pageSet, "📋  Copy Discord", yS+62, function()
-    pcall(function() if setclipboard then setclipboard("https://discord.gg/rU9FyNEUQ7") end end)
-    notify("Discord copied")
-end)
-bigBtn(pageSet, "📺  Copy YouTube", yS+93, function()
-    pcall(function() if setclipboard then setclipboard("https://www.youtube.com/@kyielpambid") end end)
-    notify("YouTube copied")
-end)
-
--- ══════════════════════════════════════════════════════════
---  FLOATING ORB  (minimized icon)
--- ══════════════════════════════════════════════════════════
-local Orb = Instance.new("ImageButton", ScreenGui)
-Orb.Name            = "Orb"
-Orb.Size            = UDim2.new(0,44,0,44)
-Orb.Position        = UDim2.new(0,20,1,-78)
-Orb.BackgroundColor3= THEME.accentDk
-Orb.Image           = "rbxassetid://140466936910510"
-Orb.ScaleType       = Enum.ScaleType.Fit
-Orb.Visible         = false; Orb.ZIndex=50
-corner(Orb,22)
-local orbStroke=mkStroke(Orb, THEME.accent, 1.8, 0.1)
-
-local ORB_COLS={THEME.accent,THEME.gold,THEME.cyan,THEME.pink}
-
--- pulse ring
-local rng1 = Instance.new("Frame", Orb)
-rng1.Size=UDim2.new(1,0,1,0); rng1.AnchorPoint=Vector2.new(0.5,0.5)
-rng1.Position=UDim2.new(0.5,0,0.5,0)
-rng1.BackgroundTransparency=1; rng1.ZIndex=49
-corner(rng1,99)
-local rs1=Instance.new("UIStroke",rng1)
-rs1.Color=THEME.gold; rs1.Thickness=1.8; rs1.Transparency=0.1
+local FootGrad = Instance.new("UIGradient")
+FootGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0.00, THEME.green),
+	ColorSequenceKeypoint.new(0.50, THEME.accent),
+	ColorSequenceKeypoint.new(1.00, THEME.neonPink),
+})
+FootGrad.Parent = FootLabel
 
 task.spawn(function()
-    local ci=1
-    while rng1.Parent do
-        rng1.Size=UDim2.new(1,0,1,0); rs1.Transparency=0.08
-        TweenService:Create(rng1,TweenInfo.new(1.1,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),
-            {Size=UDim2.new(1,18,1,18)}):Play()
-        TweenService:Create(rs1,TweenInfo.new(1.1,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),
-            {Transparency=1}):Play()
-        task.wait(1.4); ci=(ci%#ORB_COLS)+1; rs1.Color=ORB_COLS[ci]
-    end
+	while FootLabel.Parent do
+		FootGrad.Offset = Vector2.new(math.sin(tick() * 1.5) * 0.6, 0)
+		task.wait(0.03)
+	end
 end)
 
-local orbBase=Orb.Position
+local Sidebar = Instance.new("ScrollingFrame")
+Sidebar.Size = UDim2.new(0, SIDE_W, 1, 0)
+Sidebar.BackgroundColor3 = THEME.sidebar
+Sidebar.BackgroundTransparency = 0.35
+Sidebar.BorderSizePixel = 0
+Sidebar.ScrollBarThickness = 3
+Sidebar.ScrollBarImageColor3 = THEME.accent
+Sidebar.ScrollingEnabled = true
+Sidebar.ScrollingDirection = Enum.ScrollingDirection.Y
+Sidebar.CanvasSize = UDim2.new(0, 0, 0, 0)
+Sidebar.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Sidebar.ClipsDescendants = true
+Sidebar.ZIndex = 6
+Sidebar.Parent = Body
+
+local sideLay = Instance.new("UIListLayout")
+sideLay.SortOrder = Enum.SortOrder.LayoutOrder
+sideLay.Padding = UDim.new(0, 5)
+sideLay.Parent = Sidebar
+local sidePad = Instance.new("UIPadding")
+sidePad.PaddingTop = UDim.new(0, 6)
+sidePad.PaddingLeft = UDim.new(0, 6)
+sidePad.PaddingRight = UDim.new(0, 6)
+sidePad.PaddingBottom = UDim.new(0, 10)
+sidePad.Parent = Sidebar
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -SIDE_W, 1, 0)
+Content.Position = UDim2.new(0, SIDE_W, 0, 0)
+Content.BackgroundTransparency = 1
+Content.ZIndex = 6
+Content.Parent = Body
+
+local pages, tabButtons = {}, {}
+
+local function switchTab(id)
+	for name, pg in pairs(pages) do
+		if name == id then
+			pg.Visible = true
+			pg.Position = UDim2.new(0, 18, 0, 0)
+			TweenService:Create(pg, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Position = UDim2.new(0, 0, 0, 0),
+			}):Play()
+		else
+			pg.Visible = false
+		end
+	end
+	for name, btn in pairs(tabButtons) do
+		local active = (name == id)
+		TweenService:Create(btn, TweenInfo.new(0.2), {
+			BackgroundColor3 = active and THEME.tabOn or THEME.tabOff,
+			BackgroundTransparency = active and 0.25 or 0.55,
+		}):Play()
+		local ind = btn:FindFirstChild("ActiveBar")
+		if ind then ind.Visible = active end
+		local ic = btn:FindFirstChild("TabIcon")
+		if ic then
+			TweenService:Create(ic, TweenInfo.new(0.2), {
+				ImageColor3 = active and THEME.accent or THEME.dim,
+			}):Play()
+		end
+	end
+end
+
+local function createTab(id, label, order, iconName)
+	local btn = Instance.new("TextButton")
+	btn.Name = id
+	btn.Size = UDim2.new(1, 0, 0, 34)
+	btn.BackgroundColor3 = THEME.tabOff
+	btn.BackgroundTransparency = 0.55
+	btn.Text = ""
+	btn.LayoutOrder = order
+	btn.ZIndex = 8
+	btn.Parent = Sidebar
+	corner(btn, 7)
+	local bar = Instance.new("Frame")
+	bar.Name = "ActiveBar"
+	bar.Size = UDim2.new(0, 3, 0.65, 0)
+	bar.Position = UDim2.new(0, 2, 0.18, 0)
+	bar.BackgroundColor3 = THEME.green
+	bar.BorderSizePixel = 0
+	bar.Visible = false
+	bar.ZIndex = 9
+	bar.Parent = btn
+	corner(bar, 2)
+	local iconImg = Instance.new("ImageLabel")
+	iconImg.Name = "TabIcon"
+	iconImg.Size = UDim2.new(0, 15, 0, 15)
+	iconImg.Position = UDim2.new(0, 8, 0.5, -8)
+	iconImg.BackgroundTransparency = 1
+	iconImg.Image = resolveIcon(iconName)
+	iconImg.ImageColor3 = THEME.dim
+	iconImg.ZIndex = 9
+	iconImg.Parent = btn
+	local txt = Instance.new("TextLabel")
+	txt.Size = UDim2.new(1, -28, 1, 0)
+	txt.Position = UDim2.new(0, 26, 0, 0)
+	txt.BackgroundTransparency = 1
+	txt.Text = label
+	txt.TextColor3 = THEME.text
+	txt.Font = Enum.Font.GothamMedium
+	txt.TextSize = 12
+	txt.TextXAlignment = Enum.TextXAlignment.Left
+	txt.ZIndex = 9
+	txt.Parent = btn
+	tabButtons[id] = btn
+	local page = Instance.new("ScrollingFrame")
+	page.Name = id
+	page.Size = UDim2.new(1, 0, 1, 0)
+	page.BackgroundTransparency = 1
+	page.BorderSizePixel = 0
+	page.ScrollBarThickness = 3
+	page.ScrollBarImageColor3 = THEME.accent
+	page.CanvasSize = UDim2.new(0, 0, 0, 0)
+	page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	page.ScrollingEnabled = true
+	page.Visible = false
+	page.ZIndex = 7
+	page.Parent = Content
+	local lay = Instance.new("UIListLayout")
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Padding = UDim.new(0, 8)
+	lay.Parent = page
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 8)
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.PaddingBottom = UDim.new(0, 14)
+	pad.Parent = page
+	pages[id] = page
+	btn.MouseButton1Click:Connect(function()
+		createRipple(btn)
+		switchTab(id)
+	end)
+	return page
+end
+
+local function tabMessages(parent, lines)
+	if not lines or #lines == 0 then return end
+	local box = Instance.new("Frame")
+	box.Size = UDim2.new(1, 0, 0, 0)
+	box.AutomaticSize = Enum.AutomaticSize.Y
+	box.BackgroundColor3 = Color3.fromRGB(10, 12, 22)
+	box.BackgroundTransparency = 0.25
+	box.BorderSizePixel = 0
+	box.ZIndex = 9
+	box.Parent = parent
+	corner(box, 8)
+	stroke(box, THEME.green, 1.2, 0.4)
+	local lay = Instance.new("UIListLayout")
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Padding = UDim.new(0, 4)
+	lay.Parent = box
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 8)
+	pad.PaddingBottom = UDim.new(0, 8)
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.Parent = box
+	for i, raw in ipairs(lines) do
+		local col, msg = THEME.green, raw
+		if string.sub(raw, 1, 2) == "<>" then
+			col = THEME.green; msg = string.gsub(string.sub(raw, 3), "^%s+", "")
+		elseif string.sub(raw, 1, 1) == "$" then
+			col = THEME.neonPink; msg = string.gsub(string.sub(raw, 2), "^%s+", "")
+		elseif string.sub(raw, 1, 1) == ">" then
+			col = THEME.blue; msg = string.gsub(string.sub(raw, 2), "^%s+", "")
+		end
+		local l = Instance.new("TextLabel")
+		l.Size = UDim2.new(1, 0, 0, 0)
+		l.AutomaticSize = Enum.AutomaticSize.Y
+		l.BackgroundTransparency = 1
+		l.Text = msg
+		l.TextColor3 = col
+		l.Font = Enum.Font.GothamMedium
+		l.TextSize = 11
+		l.TextWrapped = true
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.LayoutOrder = i
+		l.ZIndex = 10
+		l.Parent = box
+	end
+	return box
+end
+
+local function section(parent, title)
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1, 0, 0, 0)
+	f.AutomaticSize = Enum.AutomaticSize.Y
+	f.BackgroundColor3 = THEME.card
+	f.BackgroundTransparency = 0.35
+	f.BorderSizePixel = 0
+	f.ZIndex = 8
+	f.Parent = parent
+	corner(f, 8)
+	stroke(f, THEME.accent2, 1, 0.55)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 8)
+	pad.PaddingBottom = UDim.new(0, 8)
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.Parent = f
+	local lay = Instance.new("UIListLayout")
+	lay.Padding = UDim.new(0, 6)
+	lay.Parent = f
+	local h = Instance.new("TextLabel")
+	h.Size = UDim2.new(1, 0, 0, 16)
+	h.BackgroundTransparency = 1
+	h.Text = title
+	h.TextColor3 = THEME.accent
+	h.Font = Enum.Font.GothamBold
+	h.TextSize = 12
+	h.TextXAlignment = Enum.TextXAlignment.Left
+	h.ZIndex = 9
+	h.Parent = f
+	return f
+end
+
+local function addToggle(parent, text, default, callback)
+	local on = default == true
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 32)
+	row.BackgroundColor3 = THEME.element
+	row.BackgroundTransparency = 0.35
+	row.BorderSizePixel = 0
+	row.ZIndex = 9
+	row.Parent = parent
+	corner(row, 6)
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -54, 1, 0)
+	lbl.Position = UDim2.new(0, 8, 0, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.TextColor3 = THEME.text
+	lbl.Font = Enum.Font.GothamMedium
+	lbl.TextSize = 12
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 10
+	lbl.Parent = row
+	local outer = Instance.new("Frame")
+	outer.Size = UDim2.new(0, 38, 0, 18)
+	outer.Position = UDim2.new(1, -44, 0.5, -9)
+	outer.BackgroundColor3 = Color3.fromRGB(45, 48, 68)
+	outer.ZIndex = 10
+	outer.Parent = row
+	corner(outer, 9)
+	local kn = Instance.new("Frame")
+	kn.Size = UDim2.new(0, 14, 0, 14)
+	kn.Position = UDim2.new(0, 2, 0.5, -7)
+	kn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	kn.ZIndex = 11
+	kn.Parent = outer
+	corner(kn, 7)
+	local function paint()
+		TweenService:Create(outer, TweenInfo.new(0.2), {
+			BackgroundColor3 = on and THEME.green or Color3.fromRGB(45, 48, 68),
+		}):Play()
+		TweenService:Create(kn, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Position = on and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7),
+		}):Play()
+	end
+	paint()
+	local hit = Instance.new("TextButton")
+	hit.Size = UDim2.new(1, 0, 1, 0)
+	hit.BackgroundTransparency = 1
+	hit.Text = ""
+	hit.ZIndex = 12
+	hit.Parent = row
+	hit.MouseButton1Click:Connect(function()
+		createRipple(hit)
+		on = not on
+		paint()
+		notify(text, on and "Enabled" or "Disabled", on)
+		if callback then callback(on) end
+	end)
+	return row
+end
+
+local function addSlider(parent, text, min, max, default, callback)
+	local value = default or min
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 50)
+	row.BackgroundColor3 = THEME.element
+	row.BackgroundTransparency = 0.35
+	row.BorderSizePixel = 0
+	row.ZIndex = 9
+	row.Parent = parent
+	corner(row, 6)
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, -12, 0, 18)
+	lbl.Position = UDim2.new(0, 8, 0, 4)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text .. ": " .. tostring(value)
+	lbl.TextColor3 = THEME.text
+	lbl.Font = Enum.Font.GothamMedium
+	lbl.TextSize = 12
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 10
+	lbl.Parent = row
+	local bar = Instance.new("Frame")
+	bar.Size = UDim2.new(1, -16, 0, 8)
+	bar.Position = UDim2.new(0, 8, 0, 32)
+	bar.BackgroundColor3 = Color3.fromRGB(40, 42, 60)
+	bar.BorderSizePixel = 0
+	bar.ZIndex = 10
+	bar.Parent = row
+	corner(bar, 4)
+	local fill = Instance.new("Frame")
+	local ratio = (value - min) / math.max(1, (max - min))
+	fill.Size = UDim2.new(ratio, 0, 1, 0)
+	fill.BackgroundColor3 = THEME.accent
+	fill.BorderSizePixel = 0
+	fill.ZIndex = 11
+	fill.Parent = bar
+	corner(fill, 4)
+	local fillGrad = Instance.new("UIGradient")
+	fillGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.0, THEME.neonPink),
+		ColorSequenceKeypoint.new(1.0, THEME.accent),
+	})
+	fillGrad.Parent = fill
+	local dragging = false
+	local function setFromX(x)
+		local rel = math.clamp((x - bar.AbsolutePosition.X) / math.max(1, bar.AbsoluteSize.X), 0, 1)
+		value = math.floor(min + rel * (max - min) + 0.5)
+		fill.Size = UDim2.new(rel, 0, 1, 0)
+		lbl.Text = text .. ": " .. tostring(value)
+		if callback then callback(value) end
+	end
+	bar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true; setFromX(input.Position.X)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			setFromX(input.Position.X)
+		end
+	end)
+	return row
+end
+
+local function addButton(parent, text, cb, col)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, 0, 0, 34)
+	b.BackgroundColor3 = col or Color3.fromRGB(30, 36, 62)
+	b.BackgroundTransparency = 0.25
+	b.Text = text
+	b.TextColor3 = THEME.text
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 12
+	b.ZIndex = 9
+	b.Parent = parent
+	corner(b, 7)
+	stroke(b, col or THEME.accent, 1, 0.45)
+	b.MouseButton1Click:Connect(function()
+		createRipple(b)
+		notify(text, "Triggered", true)
+		if cb then cb() end
+	end)
+	return b
+end
+
+local function addLabel(parent, text, size, col)
+	local l = Instance.new("TextLabel")
+	l.Size = UDim2.new(1, 0, 0, 0)
+	l.AutomaticSize = Enum.AutomaticSize.Y
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.TextColor3 = col or THEME.dim
+	l.Font = Enum.Font.Gotham
+	l.TextSize = size or 11
+	l.TextWrapped = true
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.ZIndex = 9
+	l.Parent = parent
+	return l
+end
+
+local function addTextbox(parent, text, placeholder, callback)
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 54)
+	row.BackgroundTransparency = 1
+	row.ZIndex = 9
+	row.Parent = parent
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, 0, 0, 16)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.TextColor3 = THEME.text
+	lbl.Font = Enum.Font.GothamMedium
+	lbl.TextSize = 12
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.ZIndex = 10
+	lbl.Parent = row
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(1, 0, 0, 30)
+	box.Position = UDim2.new(0, 0, 0, 22)
+	box.BackgroundColor3 = THEME.element
+	box.BackgroundTransparency = 0.25
+	box.PlaceholderText = placeholder or ""
+	box.Text = ""
+	box.TextColor3 = THEME.text
+	box.Font = Enum.Font.Gotham
+	box.TextSize = 12
+	box.ClearTextOnFocus = false
+	box.ZIndex = 10
+	box.Parent = row
+	corner(box, 6)
+	stroke(box, THEME.accent2, 1, 0.5)
+	box.FocusLost:Connect(function() pcall(callback, box.Text) end)
+	return box
+end
+
+
+local function addDropdown(parent, text, options, multi, callback)
+	options = options or {}
+	local selected, open = {}, false
+	local row = Instance.new("Frame")
+	row.Size = UDim2.new(1, 0, 0, 36)
+	row.BackgroundTransparency = 1
+	row.ZIndex = 9
+	row.Parent = parent
+	row.ClipsDescendants = false
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, 0, 0, 32)
+	btn.BackgroundColor3 = THEME.element
+	btn.BackgroundTransparency = 0.25
+	btn.Text = text .. ": (none)"
+	btn.TextColor3 = THEME.text
+	btn.Font = Enum.Font.GothamMedium
+	btn.TextSize = 12
+	btn.TextXAlignment = Enum.TextXAlignment.Left
+	btn.ZIndex = 10
+	btn.Parent = row
+	corner(btn, 6)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.Parent = btn
+	local list = Instance.new("ScrollingFrame")
+	list.Size = UDim2.new(1, 0, 0, 0)
+	list.Position = UDim2.new(0, 0, 0, 34)
+	list.BackgroundColor3 = THEME.card
+	list.BackgroundTransparency = 0.1
+	list.BorderSizePixel = 0
+	list.Visible = false
+	list.ZIndex = 30
+	list.ScrollBarThickness = 3
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.CanvasSize = UDim2.new(0, 0, 0, 0)
+	list.Parent = row
+	corner(list, 6)
+	local lay = Instance.new("UIListLayout")
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Parent = list
+	local function refreshLabel()
+		local names = {}
+		for k, v in pairs(selected) do if v then table.insert(names, tostring(k)) end end
+		table.sort(names)
+		if #names == 0 then btn.Text = text .. ": (none)"
+		elseif not multi then btn.Text = text .. ": " .. (names[1] or "none")
+		elseif #names <= 2 then btn.Text = text .. ": " .. table.concat(names, ", ")
+		else btn.Text = text .. ": " .. #names .. " selected" end
+	end
+	local function rebuild()
+		for _, ch in ipairs(list:GetChildren()) do
+			if ch:IsA("TextButton") then ch:Destroy() end
+		end
+		for i, opt in ipairs(options) do
+			local o = Instance.new("TextButton")
+			o.Size = UDim2.new(1, 0, 0, 26)
+			o.BackgroundColor3 = selected[opt] and Color3.fromRGB(40, 90, 60) or THEME.element
+			o.BackgroundTransparency = 0.3
+			o.Text = (selected[opt] and "✓ " or "  ") .. opt
+			o.TextColor3 = selected[opt] and THEME.green or THEME.text
+			o.Font = Enum.Font.Gotham
+			o.TextSize = 11
+			o.TextXAlignment = Enum.TextXAlignment.Left
+			o.LayoutOrder = i
+			o.ZIndex = 31
+			o.Parent = list
+			corner(o, 4)
+			local op = Instance.new("UIPadding")
+			op.PaddingLeft = UDim.new(0, 8)
+			op.Parent = o
+			o.MouseButton1Click:Connect(function()
+				if multi then
+					selected[opt] = not selected[opt]
+				else
+					table.clear(selected)
+					selected[opt] = true
+					open = false
+					list.Visible = false
+					row.Size = UDim2.new(1, 0, 0, 36)
+				end
+				rebuild()
+				refreshLabel()
+				if callback then
+					if multi then callback(selected) else callback(opt) end
+				end
+			end)
+		end
+		list.Size = UDim2.new(1, 0, 0, math.min(26 * math.max(#options, 1) + 4, 140))
+	end
+	btn.MouseButton1Click:Connect(function()
+		open = not open
+		list.Visible = open
+		row.Size = UDim2.new(1, 0, 0, open and (36 + math.min(26 * math.max(#options, 1) + 4, 140)) or 36)
+		if open then rebuild() end
+	end)
+	rebuild()
+	refreshLabel()
+	return {
+		SetOptions = function(_, opts) options = opts or {}; rebuild(); refreshLabel() end,
+		SetValue = function(_, val)
+			table.clear(selected)
+			if multi and type(val) == "table" then
+				for _, v in ipairs(val) do selected[v] = true end
+			elseif val then
+				selected[val] = true
+			end
+			rebuild(); refreshLabel()
+		end,
+	}
+end
+
+local function collapsibleSection(parent, title)
+	local wrap = Instance.new("Frame")
+	wrap.Size = UDim2.new(1, 0, 0, 0)
+	wrap.AutomaticSize = Enum.AutomaticSize.Y
+	wrap.BackgroundTransparency = 1
+	wrap.ZIndex = 8
+	wrap.Parent = parent
+
+	local header = Instance.new("TextButton")
+	header.Size = UDim2.new(1, 0, 0, 28)
+	header.BackgroundColor3 = THEME.card
+	header.BackgroundTransparency = 0.25
+	header.Text = ""
+	header.ZIndex = 9
+	header.Parent = wrap
+	corner(header, 6)
+	stroke(header, THEME.accent2, 1, 0.55)
+
+	local titleLbl = Instance.new("TextLabel")
+	titleLbl.Size = UDim2.new(1, -40, 1, 0)
+	titleLbl.Position = UDim2.new(0, 10, 0, 0)
+	titleLbl.BackgroundTransparency = 1
+	titleLbl.Text = title
+	titleLbl.TextColor3 = THEME.gold
+	titleLbl.Font = Enum.Font.GothamBold
+	titleLbl.TextSize = 12
+	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+	titleLbl.ZIndex = 10
+	titleLbl.Parent = header
+
+	local chev = Instance.new("TextLabel")
+	chev.Size = UDim2.new(0, 28, 1, 0)
+	chev.Position = UDim2.new(1, -30, 0, 0)
+	chev.BackgroundTransparency = 1
+	chev.Text = "↓"
+	chev.TextColor3 = THEME.accent
+	chev.Font = Enum.Font.GothamBold
+	chev.TextSize = 14
+	chev.ZIndex = 10
+	chev.Parent = header
+
+	local body = Instance.new("Frame")
+	body.Size = UDim2.new(1, 0, 0, 0)
+	body.AutomaticSize = Enum.AutomaticSize.Y
+	body.Position = UDim2.new(0, 0, 0, 30)
+	body.BackgroundTransparency = 1
+	body.ZIndex = 9
+	body.Visible = true
+	body.Parent = wrap
+
+	local blay = Instance.new("UIListLayout")
+	blay.SortOrder = Enum.SortOrder.LayoutOrder
+	blay.Padding = UDim.new(0, 6)
+	blay.Parent = body
+	local bpad = Instance.new("UIPadding")
+	bpad.PaddingTop = UDim.new(0, 4)
+	bpad.PaddingBottom = UDim.new(0, 6)
+	bpad.PaddingLeft = UDim.new(0, 2)
+	bpad.PaddingRight = UDim.new(0, 2)
+	bpad.Parent = body
+
+	local expanded = true
+	header.MouseButton1Click:Connect(function()
+		expanded = not expanded
+		body.Visible = expanded
+		chev.Text = expanded and "↓" or "↑"
+	end)
+	return body
+end
+
+-- ============================================================
+-- TABS DEFINITION
+-- ============================================================
+local PageWelcome  = createTab("Welcome",  "Welcome",  1, "welcome")
+local PageMain     = createTab("Main",     "Main",     2, "main")
+local PagePlayer   = createTab("Player",   "Player",   3, "player")
+local PageSettings = createTab("Settings", "Settings", 4, "settings")
+local PageServer   = createTab("Server",   "Server",   5, "server")
+
+-- WELCOME PAGE
+do
+	local Hero = Instance.new("Frame")
+	Hero.Size = UDim2.new(1, 0, 0, 134)
+	Hero.BackgroundColor3 = THEME.card
+	Hero.BackgroundTransparency = 0.35
+	Hero.BorderSizePixel = 0
+	Hero.ZIndex = 8
+	Hero.Parent = PageWelcome
+	corner(Hero, 10)
+	stroke(Hero, THEME.neonPink, 1.2, 0.4)
+
+	local HeroText = Instance.new("TextLabel")
+	HeroText.Size = UDim2.new(1, -24, 0, 52)
+	HeroText.Position = UDim2.fromOffset(14, 12)
+	HeroText.BackgroundTransparency = 1
+	HeroText.Text = "KHUB"
+	HeroText.Font = Enum.Font.GothamBlack
+	HeroText.TextSize = 48
+	HeroText.TextColor3 = Color3.new(1, 1, 1)
+	HeroText.TextXAlignment = Enum.TextXAlignment.Left
+	HeroText.ZIndex = 10
+	HeroText.Parent = Hero
+	local HeroGrad = Instance.new("UIGradient")
+	HeroGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.00, THEME.accent),
+		ColorSequenceKeypoint.new(0.35, Color3.new(1, 1, 1)),
+		ColorSequenceKeypoint.new(0.65, THEME.neonPink),
+		ColorSequenceKeypoint.new(1.00, THEME.gold),
+	})
+	HeroGrad.Offset = Vector2.new(-1.4, 0)
+	HeroGrad.Parent = HeroText
+	task.spawn(function()
+		while HeroText.Parent do
+			local t = (tick() % 3) / 3
+			HeroGrad.Offset = Vector2.new(-1.4 + t * 2.8, 0)
+			task.wait(0.03)
+		end
+	end)
+
+	local HeroBy = Instance.new("TextLabel")
+	HeroBy.Size = UDim2.new(1, -24, 0, 18)
+	HeroBy.Position = UDim2.fromOffset(16, 68)
+	HeroBy.BackgroundTransparency = 1
+	HeroBy.Text = "by Kyiel Pambid"
+	HeroBy.Font = Enum.Font.GothamBold
+	HeroBy.TextSize = 13
+	HeroBy.TextColor3 = THEME.gold
+	HeroBy.TextXAlignment = Enum.TextXAlignment.Left
+	HeroBy.ZIndex = 10
+	HeroBy.Parent = Hero
+
+	local HeroType = Instance.new("TextLabel")
+	HeroType.Size = UDim2.new(1, -24, 0, 16)
+	HeroType.Position = UDim2.fromOffset(16, 92)
+	HeroType.BackgroundTransparency = 1
+	HeroType.Text = ""
+	HeroType.Font = Enum.Font.Code
+	HeroType.TextSize = 11
+	HeroType.TextColor3 = THEME.dim
+	HeroType.TextXAlignment = Enum.TextXAlignment.Left
+	HeroType.ZIndex = 10
+	HeroType.Parent = Hero
+
+	task.spawn(function()
+		local phrases = {
+			"PC & Mobile Cross-Platform Ready",
+			"Join Discord for updates & scripts",
+			"Subscribe to YouTube: @kyielpambid",
+			"Toggle Key: RightShift / Mobile Orb",
+			"KHUB Ultimate Edition ✦",
+		}
+		while HeroType.Parent do
+			for _, phrase in ipairs(phrases) do
+				if not HeroType.Parent then break end
+				HeroType.Text = ""
+				for i = 1, #phrase do
+					if not HeroType.Parent then break end
+					HeroType.Text = string.sub(phrase, 1, i)
+					task.wait(0.026)
+				end
+				task.wait(1.8)
+				for i = #phrase, 1, -1 do
+					if not HeroType.Parent then break end
+					HeroType.Text = string.sub(phrase, 1, i)
+					task.wait(0.012)
+				end
+				task.wait(0.2)
+			end
+		end
+	end)
+
+	local c = section(PageWelcome, "USER PROFILE")
+	local PF = Instance.new("Frame")
+	PF.Size = UDim2.new(1, 0, 0, 80)
+	PF.BackgroundColor3 = THEME.element
+	PF.BackgroundTransparency = 0.35
+	PF.BorderSizePixel = 0
+	PF.ZIndex = 9
+	PF.Parent = c
+	corner(PF, 8)
+
+	local Avatar = Instance.new("ImageLabel")
+	Avatar.Size = UDim2.fromOffset(56, 56)
+	Avatar.Position = UDim2.new(0, 10, 0.5, -28)
+	Avatar.BackgroundColor3 = Color3.fromRGB(30, 36, 68)
+	Avatar.ZIndex = 10
+	Avatar.Parent = PF
+	corner(Avatar, 28)
+	stroke(Avatar, THEME.accent, 1.4, 0.3)
+	pcall(function()
+		local content, isReady = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+		if isReady then Avatar.Image = content end
+	end)
+
+	local name = Instance.new("TextLabel")
+	name.Size = UDim2.new(1, -80, 0, 20)
+	name.Position = UDim2.new(0, 76, 0, 12)
+	name.BackgroundTransparency = 1
+	name.Text = "Welcome, " .. (player.DisplayName or player.Name) .. "!"
+	name.TextColor3 = THEME.gold
+	name.Font = Enum.Font.GothamBold
+	name.TextSize = 13
+	name.TextXAlignment = Enum.TextXAlignment.Left
+	name.ZIndex = 10
+	name.Parent = PF
+
+	local uname = Instance.new("TextLabel")
+	uname.Size = UDim2.new(1, -80, 0, 16)
+	uname.Position = UDim2.new(0, 76, 0, 34)
+	uname.BackgroundTransparency = 1
+	uname.Text = "@" .. player.Name
+	uname.TextColor3 = THEME.dim
+	uname.Font = Enum.Font.Gotham
+	uname.TextSize = 11
+	uname.TextXAlignment = Enum.TextXAlignment.Left
+	uname.ZIndex = 10
+	uname.Parent = PF
+
+	local uid = Instance.new("TextLabel")
+	uid.Size = UDim2.new(1, -80, 0, 14)
+	uid.Position = UDim2.new(0, 76, 0, 54)
+	uid.BackgroundTransparency = 1
+	uid.Text = "Device: " .. (isMobile and "Mobile Touch" or "PC Keyboard") .. " · ID: " .. tostring(player.UserId)
+	uid.TextColor3 = THEME.dim
+	uid.Font = Enum.Font.Code
+	uid.TextSize = 10
+	uid.TextXAlignment = Enum.TextXAlignment.Left
+	uid.ZIndex = 10
+	uid.Parent = PF
+
+	local links = section(PageWelcome, "COMMUNITY")
+	addButton(links, "JOIN DISCORD FOR MORE SCRIPTS", function()
+		pcall(function() if setclipboard then setclipboard(DISCORD) end end)
+	end, Color3.fromRGB(48, 68, 160))
+	addButton(links, "SUBSCRIBE ON YOUTUBE", function()
+		pcall(function() if setclipboard then setclipboard(YOUTUBE) end end)
+	end, Color3.fromRGB(160, 42, 54))
+end
+
+
+
+-- MAIN PAGE (Ouroboros layout)
+-- MAIN PAGE
+do
+	tabMessages(PageMain, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Enable Auto Photo during assessment. Waits until the teacher looks away.",
+		"$ High anxiety auto-equips pencil. Report issues on Discord.",
+		"> Pause stops photo cycles without killing the bot.",
+	})
+	local info = section(PageMain, "LIVE STATUS")
+	_G._CDT_status = addLabel(info, "Status: waiting...", 12, THEME.text)
+	_G._CDT_teacher = addLabel(info, "Teacher: -", 12, THEME.dim)
+	_G._CDT_anxiety = addLabel(info, "Anxiety: 0", 12, THEME.dim)
+	_G._CDT_paper = addLabel(info, "Paper: Correct 0 / Wrong 0", 12, THEME.dim)
+
+	local acts = section(PageMain, "CONTROLS")
+	addToggle(acts, "Auto Photo", true, function(v)
+		if BOT then BOT.doPhoto = v end
+		if botLog then botLog("Auto Photo " .. (v and "ON" or "OFF")) end
+	end)
+	addToggle(acts, "Pause", false, function(v)
+		if BOT then BOT.pause = v end
+		if botLog then botLog("Pause " .. (v and "ON" or "OFF")) end
+	end)
+	addButton(acts, "Equip Pencil", function()
+		if equipPencil then equipPencil(true) end
+		if botLog then botLog("pencil (manual)") end
+	end)
+	addButton(acts, "Lower Phone (Abort)", function()
+		if lowerPhone then lowerPhone() end
+		if BOT and BOT.cycleActive then
+			BOT.cycleActive = false
+			BOT.lastAbortAt = os.clock()
+			BOT.abortCount = (BOT.abortCount or 0) + 1
+		end
+		if botLog then botLog("abort (manual)") end
+	end)
+
+	local answers = section(PageMain, "ANSWER KEY")
+	_G._CDT_key = addLabel(answers, "No answers yet", 11, THEME.text)
+	_G._CDT_stats = addLabel(answers, "Correct: 0 / Wrong: 0 · Known: 0", 12, THEME.dim)
+
+	local timing = section(PageMain, "PHOTO TIMING")
+	addSlider(timing, "Stable Safety Window (s)", 0, 3, 0.8, function(v)
+		_G.BOT_TUNES = _G.BOT_TUNES or {}
+		_G.BOT_TUNES.STABLE_TIME = v
+	end)
+	addSlider(timing, "Face Memory (s)", 0, 5, 1.2, function(v)
+		_G.BOT_TUNES = _G.BOT_TUNES or {}
+		_G.BOT_TUNES.FACE_MEMORY = v
+	end)
+	addSlider(timing, "Cycle Cooldown (s)", 0, 10, 2.5, function(v)
+		_G.BOT_TUNES = _G.BOT_TUNES or {}
+		_G.BOT_TUNES.CYCLE_COOLDOWN = v
+	end)
+	addSlider(timing, "Anxiety Pencil Threshold", 50, 95, 85, function(v)
+		_G.BOT_TUNES = _G.BOT_TUNES or {}
+		_G.BOT_TUNES.ANXIETY_PENCIL = math.floor(v)
+	end)
+
+	local logs = section(PageMain, "BOT LOG")
+	_G._CDT_log = addLabel(logs, "...", 11, THEME.dim)
+end
+
 task.spawn(function()
-    local t=0
-    while Orb.Parent do
-        t=t+task.wait(0.033)
-        if Orb.Visible then
-            Orb.Position=UDim2.new(orbBase.X.Scale,orbBase.X.Offset,
-                orbBase.Y.Scale,orbBase.Y.Offset+math.sin(t*1.8)*3)
-        end
-    end
+	while true do
+		if BOT and BOT.enabled then
+			pcall(function()
+				BOT.anxiety = getAnxiety and getAnxiety() or 0
+				if paintSubmitted then paintSubmitted() end
+				if Workspace and Workspace:GetAttribute("GameStatus") == "Assessment In Progress" and isTeacherSafe then
+					isTeacherSafe()
+				end
+				local status = tostring(Workspace and Workspace:GetAttribute("GameStatus") or "-")
+				local seq = tostring(Workspace and Workspace:GetAttribute("AssessmentSequenceId") or "-")
+				if _G._CDT_status then
+					_G._CDT_status.Text = string.format("%s | Seq %s\nQ: %s | Phone: %s %s",
+						status, seq, tostring(BOT.totalQ or 0), tostring(BOT.phoneState or "-"),
+						BOT.cycleActive and "[PHOTO]" or "")
+				end
+				if _G._CDT_teacher then
+					_G._CDT_teacher.Text = "Teacher: " .. tostring(BOT.teacherInfo or "-") .. (BOT.dead and "\nCAUGHT" or "")
+				end
+				if _G._CDT_anxiety then
+					local a = tostring(math.floor(BOT.anxiety or 0))
+					if BOT.pencilMode then a = a .. " (PENCIL)" end
+					if (BOT.abortCount or 0) > 0 then a = a .. " · aborts " .. BOT.abortCount end
+					_G._CDT_anxiety.Text = "Anxiety: " .. a
+				end
+				if _G._CDT_paper then
+					_G._CDT_paper.Text = string.format("Correct: %d / Wrong: %d", BOT.correctCount or 0, BOT.wrongCount or 0)
+				end
+				local keys = {}
+				for q, ans in pairs(BOT.key or {}) do
+					local mark = BOT.submitted[q] and (BOT.submitted[q] == ans and "+" or "?") or "-"
+					table.insert(keys, q .. ":" .. ans .. mark)
+				end
+				table.sort(keys, function(a, b)
+					return (tonumber(a:match("^(%d+)")) or 0) < (tonumber(b:match("^(%d+)")) or 0)
+				end)
+				if _G._CDT_key then _G._CDT_key.Text = #keys > 0 and table.concat(keys, "  ") or "No answers yet" end
+				if _G._CDT_stats then
+					_G._CDT_stats.Text = string.format("Correct: %d / Wrong: %d · Known: %d/%s",
+						BOT.correctCount or 0, BOT.wrongCount or 0, #keys, tostring(BOT.totalQ or "?"))
+				end
+				if _G._CDT_log and BOT.log then
+					local lines = {}
+					for i = math.max(1, #BOT.log - 10), #BOT.log do
+						if BOT.log[i] then table.insert(lines, BOT.log[i]) end
+					end
+					_G._CDT_log.Text = #lines > 0 and table.concat(lines, "\n") or "..."
+				end
+			end)
+		end
+		task.wait(0.5)
+	end
 end)
 
-task.spawn(function()
-    local t,ci=0,1
-    while Orb.Parent do
-        t=t+task.wait(0.033)
-        local frac=(math.sin(t*0.7)+1)/2
-        local nxt=(ci%#ORB_COLS)+1
-        orbStroke.Color=lerpColor(ORB_COLS[ci],ORB_COLS[nxt],frac)
-        if frac>0.98 then ci=nxt end
-    end
-end)
 
--- ══════════════════════════════════════════════════════════
---  VISIBILITY / DRAG
--- ══════════════════════════════════════════════════════════
+do
+	tabMessages(PagePlayer, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> WalkSpeed + amount slider, Infinite Jump, NoClip, Instant Prompt.",
+		"$ Fly + Fly Speed slider (WASD / Space / LeftCtrl).",
+		"> Same Player layout as Ouroboros.",
+	})
+	local mov = collapsibleSection(PagePlayer, "MOVEMENT")
+	addToggle(mov, "WalkSpeed", false, function(v)
+		setWalkEnabled(v)
+		notify("WalkSpeed", v and "ON" or "OFF", true)
+	end)
+	addSlider(mov, "WalkSpeed Amount", 16, 250, 32, function(v)
+		S.WalkSpeed = v
+		if S.WalkSpeedEnabled then
+			local hum = getHum()
+			if hum then hum.WalkSpeed = v end
+		end
+	end)
+	addToggle(mov, "Infinite Jump", false, function(v)
+		setInfJump(v)
+		notify("Inf Jump", v and "ON" or "OFF", true)
+	end)
+	addToggle(mov, "NoClip", false, function(v)
+		setNoClip(v)
+		notify("NoClip", v and "ON" or "OFF", true)
+	end)
+	addToggle(mov, "Instant ProximityPrompt", false, function(v)
+		setInstantPP(v)
+		notify("Instant Prompt", v and "ON" or "OFF", true)
+	end)
+
+	local fly = collapsibleSection(PagePlayer, "FLY")
+	addToggle(fly, "Fly", false, function(v)
+		setFly(v)
+		notify("Fly", v and "ON" or "OFF", true)
+	end)
+	addSlider(fly, "Fly Speed", 10, 400, 60, function(v)
+		S.FlySpeed = v
+	end)
+end
+
+-- SETTINGS PAGE
+do
+	tabMessages(PageSettings, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> UI-only shell for Cheating During Testing.",
+		"$ Tap floating Orb or press RightShift to toggle anytime.",
+		"> Config save keeps keybinds for later feature wiring.",
+	})
+	local cfgName = "default"
+	
+	local util = collapsibleSection(PageSettings, "UTILITIES")
+	addToggle(util, "Anti-AFK", true, function(v) setAntiAfk(v) end)
+	addToggle(util, "No Gameplay Paused", true, function(v) S.NoGameplayPaused = v end)
+	addToggle(util, "Auto Reconnect on Kick", false, function(v) setAutoReconnect(v) end)
+	addToggle(util, "Disable 3D Rendering", false, function(v) setDisable3D(v) end)
+	addToggle(util, "FPS Boost", false, function(v) setFpsBoost(v) end)
+
+	local cfg = section(PageSettings, "CONFIG MANAGER")
+	addTextbox(cfg, "Config Name", "default", function(t)
+		cfgName = (t and t:gsub("%s+", "") ~= "") and t:gsub("%s+", "") or "default"
+	end)
+	addButton(cfg, "Save Config", function()
+		pcall(function()
+			if isfolder and not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+			if writefile then
+				writefile(CONFIG_FOLDER .. "/" .. cfgName .. ".json", HttpService:JSONEncode({
+					Keybinds = { ToggleUI = keyName(Keybinds.ToggleUI) },
+					savedAt = os.date("%c"),
+				}))
+			end
+		end)
+		notify("Config Saved", cfgName .. ".json stored", true)
+	end, Color3.fromRGB(30, 80, 55))
+	addButton(cfg, "Load Config", function()
+		local ok, raw = pcall(function() return readfile(CONFIG_FOLDER .. "/" .. cfgName .. ".json") end)
+		if ok and raw then
+			local ok2, d = pcall(function() return HttpService:JSONDecode(raw) end)
+			if ok2 and type(d) == "table" and type(d.Keybinds) == "table" then
+				if d.Keybinds.ToggleUI then Keybinds.ToggleUI = keyFromName(d.Keybinds.ToggleUI) end
+				notify("Config Loaded", cfgName .. ".json", true)
+			else notify("Config Error", "Invalid data format", false) end
+		else notify("Config Error", "File not found", false) end
+	end)
+	addButton(cfg, "Delete Config", function()
+		pcall(function() delfile(CONFIG_FOLDER .. "/" .. cfgName .. ".json") end)
+		notify("Config", "Deleted: " .. cfgName, true)
+	end)
+
+	local listeningBind = nil
+	local bindLabels = {}
+	local function addKeybindRow(parent, label, bindKey)
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, 0, 0, 34)
+		row.BackgroundColor3 = THEME.element
+		row.BackgroundTransparency = 0.35
+		row.BorderSizePixel = 0
+		row.ZIndex = 9
+		row.Parent = parent
+		corner(row, 6)
+		local lbl = Instance.new("TextLabel")
+		lbl.Size = UDim2.new(1, -114, 1, 0)
+		lbl.Position = UDim2.new(0, 8, 0, 0)
+		lbl.BackgroundTransparency = 1
+		lbl.Text = label
+		lbl.TextColor3 = THEME.text
+		lbl.Font = Enum.Font.GothamMedium
+		lbl.TextSize = 12
+		lbl.TextXAlignment = Enum.TextXAlignment.Left
+		lbl.ZIndex = 10
+		lbl.Parent = row
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(0, 98, 0, 24)
+		btn.Position = UDim2.new(1, -104, 0.5, -12)
+		btn.BackgroundColor3 = Color3.fromRGB(30, 36, 62)
+		btn.BackgroundTransparency = 0.15
+		btn.Text = keyName(Keybinds[bindKey])
+		btn.TextColor3 = THEME.accent
+		btn.Font = Enum.Font.GothamBold
+		btn.TextSize = 11
+		btn.ZIndex = 11
+		btn.Parent = row
+		corner(btn, 5)
+		stroke(btn, THEME.accent2, 1, 0.5)
+		bindLabels[bindKey] = btn
+		btn.MouseButton1Click:Connect(function()
+			createRipple(btn)
+			if listeningBind then return end
+			listeningBind = bindKey
+			btn.Text = "..."
+			btn.TextColor3 = THEME.gold
+			notify("Keybind", "Press key (Esc to clear)", true)
+			local conn
+			conn = UserInputService.InputBegan:Connect(function(input)
+				if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+				local kc = input.KeyCode
+				if kc == Enum.KeyCode.Escape then
+					Keybinds[bindKey] = Enum.KeyCode.Unknown
+					btn.Text = "None"
+					btn.TextColor3 = THEME.dim
+					notify("Keybind", label .. " cleared", false)
+				else
+					Keybinds[bindKey] = kc
+					btn.Text = keyName(kc)
+					btn.TextColor3 = THEME.accent
+					notify("Keybind", label .. " → " .. keyName(kc), true)
+				end
+				listeningBind = nil
+				if conn then conn:Disconnect() end
+			end)
+		end)
+		return row
+	end
+	local kb = section(PageSettings, "CONTROLS & KEYBINDS")
+	addLabel(kb, "PC: Click button then press key. Esc clears keybind.", 11, THEME.dim)
+	addKeybindRow(kb, "Toggle UI", "ToggleUI")
+	addButton(kb, "Reset Keybinds to Default", function()
+		Keybinds.ToggleUI = Enum.KeyCode.RightShift
+		for k, btn in pairs(bindLabels) do
+			btn.Text = keyName(Keybinds[k])
+			btn.TextColor3 = Keybinds[k] == Enum.KeyCode.Unknown and THEME.dim or THEME.accent
+		end
+		notify("Keybinds", "Reset to RightShift", true)
+	end, Color3.fromRGB(55, 42, 32))
+end
+
+
+-- SERVER PAGE (classic links)
+do
+	tabMessages(PageServer, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Community links and session tools.",
+		"$ Copy Discord / YouTube anytime.",
+		"> Rejoin if the server lags.",
+	})
+	local links = collapsibleSection(PageServer, "LINKS")
+	addButton(links, "Copy Discord Invite", function()
+		pcall(function() if setclipboard then setclipboard(DISCORD) end end)
+		notify("Copied", "Discord", true)
+	end, Color3.fromRGB(48, 68, 160))
+	addButton(links, "Copy YouTube Channel", function()
+		pcall(function() if setclipboard then setclipboard(YOUTUBE) end end)
+		notify("Copied", "YouTube", true)
+	end, Color3.fromRGB(160, 42, 54))
+
+	local session = collapsibleSection(PageServer, "SESSION")
+	local playersLbl = addLabel(session, "Players · 0/0", 12, THEME.dim)
+	local jobLbl = addLabel(session, "Job · ...", 11, THEME.dim)
+	task.spawn(function()
+		while playersLbl.Parent do
+			pcall(function()
+				playersLbl.Text = string.format("Players · %d/%d", #Players:GetPlayers(), Players.MaxPlayers)
+				jobLbl.Text = "Job · " .. string.sub(tostring(game.JobId), 1, 20)
+			end)
+			task.wait(1.5)
+		end
+	end)
+	addButton(session, "Rejoin Place", function()
+		pcall(function() TeleportService:Teleport(game.PlaceId, player) end)
+	end)
+	addButton(session, "Copy Job ID", function()
+		pcall(function() if setclipboard then setclipboard(tostring(game.JobId)) end end)
+		notify("Copied", "Job ID", true)
+	end)
+end
+
+
+-- FLOATING ORB (MOBILE & MINIMIZE TOGGLE)
+local OrbWrap = Instance.new("Frame")
+OrbWrap.Size = UDim2.new(0, 52, 0, 52)
+OrbWrap.Position = UDim2.new(0, 16, 0.5, -26)
+OrbWrap.BackgroundColor3 = Color3.fromRGB(12, 10, 20)
+OrbWrap.BorderSizePixel = 0
+OrbWrap.ClipsDescendants = false
+OrbWrap.Visible = false
+OrbWrap.ZIndex = 50
+OrbWrap.Parent = ScreenGui
+corner(OrbWrap, 26)
+
+local Orb = Instance.new("ImageButton")
+Orb.Size = UDim2.new(1, 0, 1, 0)
+Orb.BackgroundTransparency = 1
+Orb.Image = LOGO_ID
+Orb.ScaleType = Enum.ScaleType.Fit
+Orb.ZIndex = 52
+Orb.Parent = OrbWrap
+corner(Orb, 26)
+attachMegaLogoAura(OrbWrap, Orb, true)
+
+-- SMOOTH SPRING OPEN / CLOSE ANIMATIONS
+local isOpening = false
 local function setVisible(on)
-    Win.Visible=on; Orb.Visible=not on
+	if isOpening then return end
+	isOpening = true
+	if on then
+		Main.Visible = true
+		Main.Size = UDim2.new(0, WIN_W * 0.85, 0, WIN_H * 0.85)
+		Main.Position = UDim2.new(0.5, -WIN_W * 0.425, 0.5, -WIN_H * 0.425)
+		TweenService:Create(Main, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = UDim2.new(0, WIN_W, 0, WIN_H),
+			Position = UDim2.new(0.5, -WIN_W / 2, 0.5, -WIN_H / 2),
+		}):Play()
+		OrbWrap.Visible = false
+	else
+		local tw = TweenService:Create(Main, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Size = UDim2.new(0, WIN_W * 0.8, 0, WIN_H * 0.8),
+			Position = UDim2.new(0.5, -WIN_W * 0.4, 0.5, -WIN_H * 0.4),
+		})
+		tw:Play()
+		tw.Completed:Wait()
+		Main.Visible = false
+		OrbWrap.Visible = true
+	end
+	isOpening = false
 end
 
-MinBtn.MouseButton1Click:Connect(function() setVisible(false) end)
-Orb.MouseButton1Click:Connect(function()   setVisible(true)  end)
-
--- main window drag
-local dragging, dragStart, startPos
-TitleBar.InputBegan:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-        dragging=true; dragStart=i.Position; startPos=Win.Position
-    end
+CloseBtn.MouseButton1Click:Connect(function()
+	createRipple(CloseBtn)
+	setVisible(false)
 end)
-TitleBar.InputEnded:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-        dragging=false
-    end
+MinBtn.MouseButton1Click:Connect(function()
+	createRipple(MinBtn)
+	setVisible(false)
+end)
+Orb.MouseButton1Click:Connect(function()
+	createRipple(Orb)
+	setVisible(true)
 end)
 
--- orb drag
-local orbDrag,orbStart,orbPos
-Orb.InputBegan:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-        orbDrag=true; orbStart=i.Position; orbPos=Orb.Position
-    end
-end)
-Orb.InputEnded:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-        orbDrag=false
-    end
+-- DRAGGABLE ORB
+do
+	local dragging, dragStart, startPos = false, nil, nil
+	Orb.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = OrbWrap.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			OrbWrap.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+-- KEYBOARD TOGGLE
+UserInputService.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.UserInputType ~= Enum.UserInputType.Keyboard then return end
+	local kc = i.KeyCode
+	if (Keybinds.ToggleUI ~= Enum.KeyCode.Unknown and kc == Keybinds.ToggleUI)
+		or kc == Enum.KeyCode.RightControl
+		or kc == Enum.KeyCode.K then
+		setVisible(not Main.Visible)
+	end
 end)
 
-UserInputService.InputChanged:Connect(function(i)
-    if i.UserInputType~=Enum.UserInputType.MouseMovement and
-       i.UserInputType~=Enum.UserInputType.Touch then return end
-    if dragging and dragStart then
-        local d=i.Position-dragStart
-        Win.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,
-                                 startPos.Y.Scale,startPos.Y.Offset+d.Y)
-    end
-    if orbDrag and orbStart then
-        local d=i.Position-orbStart
-        orbBase=UDim2.new(orbPos.X.Scale,orbPos.X.Offset+d.X,
-                           orbPos.Y.Scale,orbPos.Y.Offset+d.Y)
-        Orb.Position=orbBase
-    end
+local function playKHUBIntro()
+	local _I,_U,_C,_TI,_Us,_tw,_ts,_UD,_mc,_mf,_ma,_mh,_mx,_mn,_ti,_tr,_EGB,_ESQ,_ESB,_EDO,_EDI,_BgT,_BgC,_BSP,_TC3,_ZI,_TSz=Instance.new,UDim2.new,Color3.fromRGB,TweenInfo.new,UDim2.fromScale,task.wait,task.spawn,UDim.new,math.clamp,math.floor,math.abs,math.huge,math.max,math.min,table.insert,table.remove,Enum.Font.GothamBold,Enum.EasingStyle.Quad,Enum.EasingStyle.Back,Enum.EasingDirection.Out,Enum.EasingDirection.InOut,"BackgroundTransparency","BackgroundColor3","BorderSizePixel","TextColor3","ZIndex","TextSize"
+
+	local Players=game:GetService("Players")
+	local TweenService=game:GetService("TweenService")
+	local Lighting=game:GetService("Lighting")
+	local RunService=game:GetService("RunService")
+	local TextService=game:GetService("TextService")
+	local UserInputService=game:GetService("UserInputService")
+
+	local player=Players.LocalPlayer
+	local playerGui=player:WaitForChild("PlayerGui")
+
+	pcall(function()
+		local old=playerGui:FindFirstChild("KHUBIntro")
+		if old then old:Destroy() end
+	end)
+
+	local screenGui=_I("ScreenGui")
+	screenGui.Name="KHUBIntro"
+	screenGui.IgnoreGuiInset=true
+	screenGui.ResetOnSpawn=false
+	screenGui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+	screenGui.DisplayOrder=2000
+	screenGui.Parent=playerGui
+
+	local introSound=nil
+	local blur=nil
+	local skipped=false
+	local skipConn=nil
+	local finished=false
+
+	local SOUND_ID=(_G and _G.__KHUBIntroSoundId and tonumber(_G.__KHUBIntroSoundId)) or 120267378058133
+	local SKIP_SECONDS=10
+
+	local MAIN_COLOR=_C(157,78,221)
+	local GLOW_COLOR=_C(110,40,180)
+	local LIGHT_COLOR=_C(210,140,255)
+	local ACCENT_COLOR=_C(247,215,148)
+	local WHITE=_C(255,255,255)
+	local BLACK=_C(0,0,0)
+
+	local function cleanupAll()
+		if finished then return end
+		finished=true
+		skipped=true
+		pcall(function()
+			if introSound then introSound:Stop(); introSound:Destroy(); introSound=nil end
+		end)
+		pcall(function()
+			if blur then blur:Destroy(); blur=nil end
+		end)
+		pcall(function()
+			if screenGui then screenGui:Destroy(); screenGui=nil end
+		end)
+		pcall(function()
+			if skipConn then skipConn:Disconnect(); skipConn=nil end
+		end)
+		-- kill any leftover KHUBIntro
+		pcall(function()
+			local pg=player:FindFirstChild("PlayerGui")
+			if pg then
+				local o=pg:FindFirstChild("KHUBIntro")
+				if o then o:Destroy() end
+			end
+		end)
+	end
+
+	local function requestSkip()
+		if skipped then return end
+		skipped=true
+		cleanupAll()
+	end
+
+	local function waitOrSkip(sec)
+		local t0=os.clock()
+		while not skipped and (os.clock()-t0)<sec do
+			task.wait(0.03)
+		end
+		return skipped
+	end
+
+	-- hard safety: never let intro hang more than 18s
+	task.delay(8, function()
+		if not finished then
+			warn("[KHUB] Intro timeout 8s — force cleanup")
+			cleanupAll()
+		end
+	end)
+
+	-- SKIP BUTTON
+	do
+		local skipBtn=_I("TextButton")
+		skipBtn.Name="SkipBtn"
+		skipBtn.Size=_U(0,100,0,36)
+		skipBtn.Position=_U(1,-118,0,20)
+		skipBtn.BackgroundColor3=_C(20,16,32)
+		skipBtn.BackgroundTransparency=0.1
+		skipBtn.BorderSizePixel=0
+		skipBtn.Text="SKIP  ›"
+		skipBtn.Font=Enum.Font.GothamBold
+		skipBtn.TextSize=14
+		skipBtn.TextColor3=_C(245,247,255)
+		skipBtn.ZIndex=100
+		skipBtn.Parent=screenGui
+		local sc=_I("UICorner")
+		sc.CornerRadius=_UD(0,8)
+		sc.Parent=skipBtn
+		local ss=_I("UIStroke")
+		ss.Color=MAIN_COLOR
+		ss.Thickness=1.5
+		ss.Transparency=0.2
+		ss.Parent=skipBtn
+		skipBtn.MouseButton1Click:Connect(function()
+			requestSkip()
+		end)
+		skipConn=UserInputService.InputBegan:Connect(function(input,gp)
+			if gp then return end
+			if input.KeyCode==Enum.KeyCode.Space or input.KeyCode==Enum.KeyCode.Return then
+				requestSkip()
+			end
+		end)
+	end
+
+	blur=_I("BlurEffect")
+	blur.Size=0
+	blur.Parent=Lighting
+
+	local overlay=_I("Frame")
+	overlay.Size=_Us(1,1)
+	overlay[_BgC]=_C(0,0,0)
+	overlay[_BgT]=0.3
+	overlay[_BSP]=0
+	overlay[_ZI]=1
+	overlay.Parent=screenGui
+
+	local darkOverlay=_I("Frame")
+	darkOverlay.Size=_Us(1,1)
+	darkOverlay[_BgC]=_C(8,3,18)
+	darkOverlay[_BgT]=0.5
+	darkOverlay[_BSP]=0
+	darkOverlay[_ZI]=1
+	darkOverlay.Parent=screenGui
+
+	local vignette=_I("ImageLabel")
+	vignette.Size=_Us(1,1)
+	vignette[_BgT]=1
+	vignette.Image="rbxassetid://195611797"
+	vignette.ImageColor3=BLACK
+	vignette.ImageTransparency=0.35
+	vignette[_ZI]=2
+	vignette.Parent=screenGui
+
+	local container=_I("Frame")
+	container.Size=_U(0,900,0,200)
+	container.AnchorPoint=Vector2.new(0.5,0.5)
+	container.Position=_U(0.5,0,0.5,0)
+	container[_BgT]=1
+	container[_BSP]=0
+	container.ClipsDescendants=false
+	container[_ZI]=5
+	container.Parent=screenGui
+
+	local particleContainer=_I("Frame")
+	particleContainer.Size=_Us(1,1)
+	particleContainer[_BgT]=1
+	particleContainer[_ZI]=8
+	particleContainer.Parent=screenGui
+
+	local function createParticle()
+		if skipped or not screenGui then return end
+		local p=_I("Frame")
+		p.Size=_U(0,math.random(3,6),0,math.random(3,6))
+		p.Position=_U(0.5+math.random(-30,30)/100,0,0.5+math.random(-20,20)/100,0)
+		p[_BgC]=math.random()<0.5 and MAIN_COLOR or LIGHT_COLOR
+		p[_BgT]=0
+		p[_BSP]=0
+		p[_ZI]=8
+		p.Parent=particleContainer
+		local _corner=_I("UICorner")
+		_corner.CornerRadius=_UD(1,0)
+		_corner.Parent=p
+		local floatDur=1.5+math.random()*1.5
+		local tween=TweenService:Create(p,_TI(floatDur,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),{
+			Position=_U(0.5+math.random(-40,40)/100,0,0.5+math.random(-40,20)/100,0),
+			BackgroundTransparency=1,
+			Size=_U(0,0,0,0)
+		})
+		tween:Play()
+		tween.Completed:Connect(function() p:Destroy() end)
+	end
+
+	local leftLabel=_I("TextLabel")
+	leftLabel.Size=_U(0,550,1,0)
+	leftLabel.AnchorPoint=Vector2.new(1,0.5)
+	leftLabel.Position=_U(0.5,-12,0.5,0)
+	leftLabel[_BgT]=1
+	leftLabel.Text="KHUB"
+	leftLabel[_TC3]=WHITE
+	leftLabel.TextStrokeColor3=BLACK
+	leftLabel.TextStrokeTransparency=0
+	leftLabel.Font=Enum.Font.GothamBlack
+	leftLabel[_TSz]=92
+	leftLabel.TextXAlignment=Enum.TextXAlignment.Right
+	leftLabel.TextTransparency=1
+	leftLabel[_ZI]=5
+	leftLabel.Visible=true
+	leftLabel.Parent=container
+
+	local rightLabel=_I("TextLabel")
+	rightLabel.Size=_U(0,450,1,0)
+	rightLabel.AnchorPoint=Vector2.new(0,0.5)
+	rightLabel.Position=_U(0.5,-12,0.5,0)
+	rightLabel[_BgT]=1
+	rightLabel.Text="PANEL"
+	rightLabel[_TC3]=MAIN_COLOR
+	rightLabel.TextStrokeColor3=BLACK
+	rightLabel.TextStrokeTransparency=0
+	rightLabel.Font=Enum.Font.GothamBlack
+	rightLabel[_TSz]=92
+	rightLabel.TextXAlignment=Enum.TextXAlignment.Left
+	rightLabel.TextTransparency=1
+	rightLabel[_ZI]=5
+	rightLabel.Visible=true
+	rightLabel.Parent=container
+
+	local mainLabel=_I("TextLabel")
+	mainLabel.Size=_U(1,0,1,0)
+	mainLabel.AnchorPoint=Vector2.new(0.5,0.5)
+	mainLabel.Position=_U(0.5,0,0.5,0)
+	mainLabel[_BgT]=1
+	mainLabel.Text="KHUB PANEL"
+	mainLabel[_TC3]=WHITE
+	mainLabel.TextStrokeColor3=BLACK
+	mainLabel.TextStrokeTransparency=0
+	mainLabel.Font=Enum.Font.GothamBlack
+	mainLabel[_TSz]=88
+	mainLabel.TextXAlignment=Enum.TextXAlignment.Center
+	mainLabel.TextTransparency=1
+	mainLabel[_ZI]=5
+	mainLabel.Parent=container
+
+	local lightBeam=_I("Frame")
+	lightBeam.Size=_U(0,0,1.1,0)
+	lightBeam.AnchorPoint=Vector2.new(0,0.5)
+	lightBeam.Position=_U(0,-20,0.5,0)
+	lightBeam[_BgC]=MAIN_COLOR
+	lightBeam[_BgT]=0.5
+	lightBeam[_BSP]=0
+	lightBeam[_ZI]=6
+	lightBeam.Parent=container
+
+	local beamGlow=_I("Frame")
+	beamGlow.Size=_U(0,0,1.3,0)
+	beamGlow.AnchorPoint=Vector2.new(0,0.5)
+	beamGlow.Position=_U(0,-20,0.5,0)
+	beamGlow[_BgC]=GLOW_COLOR
+	beamGlow[_BgT]=0.7
+	beamGlow[_BSP]=0
+	beamGlow[_ZI]=5
+	beamGlow.Parent=container
+
+	local beamSparkles=_I("Frame")
+	beamSparkles.Size=_U(0,0,1,0)
+	beamSparkles.AnchorPoint=Vector2.new(0,0.5)
+	beamSparkles.Position=_U(0,-20,0.5,0)
+	beamSparkles[_BgC]=WHITE
+	beamSparkles[_BgT]=0.8
+	beamSparkles[_BSP]=0
+	beamSparkles[_ZI]=7
+	beamSparkles.Parent=container
+
+	local subLabel=_I("TextLabel")
+	subLabel.Size=_U(1,0,0,45)
+	subLabel.AnchorPoint=Vector2.new(0.5,0)
+	subLabel.Position=_U(0.5,0,0.5,85)
+	subLabel[_BgT]=1
+	subLabel.Text="SCRIPT HUB"
+	subLabel[_TC3]=MAIN_COLOR
+	subLabel.Font=Enum.Font.GothamBold
+	subLabel[_TSz]=16
+	subLabel.TextXAlignment=Enum.TextXAlignment.Center
+	subLabel.TextTransparency=1
+	subLabel[_ZI]=5
+	subLabel.Parent=screenGui
+
+	local subLabel2=_I("TextLabel")
+	subLabel2.Size=_U(1,0,0,28)
+	subLabel2.AnchorPoint=Vector2.new(0.5,0)
+	subLabel2.Position=_U(0.5,0,0.5,120)
+	subLabel2[_BgT]=1
+	subLabel2.Text="BY KYIEL PAMBID"
+	subLabel2[_TC3]=ACCENT_COLOR
+	subLabel2.Font=Enum.Font.GothamBold
+	subLabel2[_TSz]=13
+	subLabel2.TextXAlignment=Enum.TextXAlignment.Center
+	subLabel2.TextTransparency=1
+	subLabel2[_ZI]=5
+	subLabel2.Parent=screenGui
+
+	local accentBar=_I("Frame")
+	accentBar.Size=_U(0,0,0,3)
+	accentBar.AnchorPoint=Vector2.new(0.5,0)
+	accentBar.Position=_U(0.5,0,0.5,78)
+	accentBar[_BgC]=MAIN_COLOR
+	accentBar[_BgT]=0
+	accentBar[_BSP]=0
+	accentBar[_ZI]=5
+	accentBar.Parent=screenGui
+	local _accentCorner=_I("UICorner")
+	_accentCorner.CornerRadius=_UD(0,3)
+	_accentCorner.Parent=accentBar
+
+	local flashFrame=_I("Frame")
+	flashFrame.Size=_Us(1,1)
+	flashFrame[_BgC]=WHITE
+	flashFrame[_BgT]=1
+	flashFrame[_BSP]=0
+	flashFrame[_ZI]=10
+	flashFrame.Parent=screenGui
+
+	local glitchContainer=_I("Frame")
+	glitchContainer.Size=_U(1,0,1,0)
+	glitchContainer[_BgT]=1
+	glitchContainer[_ZI]=6
+	glitchContainer.Parent=screenGui
+
+	local dripContainer=_I("Frame")
+	dripContainer.Size=_U(1,0,1,0)
+	dripContainer[_BgT]=1
+	dripContainer[_ZI]=7
+	dripContainer.Parent=screenGui
+
+	local function doFlash(color,alpha,duration)
+		if skipped or not screenGui then return end
+		flashFrame[_BgC]=color or WHITE
+		flashFrame[_BgT]=1-(alpha or 0.85)
+		task.delay(duration or 0.06,function()
+			if skipped or not screenGui then return end
+			pcall(function()
+				TweenService:Create(flashFrame,_TI(0.1,_ESQ),{BackgroundTransparency=1}):Play()
+			end)
+		end)
+	end
+
+	local function runLightBeam()
+		if skipped or not screenGui then return end
+		lightBeam.Size=_U(0,50,1.1,0)
+		beamGlow.Size=_U(0,75,1.3,0)
+		beamSparkles.Size=_U(0,50,1,0)
+		lightBeam[_BgT]=0.35
+		beamGlow[_BgT]=0.55
+		beamSparkles[_BgT]=0.75
+		local beamTween=TweenService:Create(lightBeam,_TI(0.8,_ESQ,_EDI),{Position=_U(1,20,0.5,0)})
+		beamTween:Play()
+		TweenService:Create(beamGlow,_TI(0.8,_ESQ,_EDI),{Position=_U(1,20,0.5,0)}):Play()
+		TweenService:Create(beamSparkles,_TI(0.8,_ESQ,_EDI),{Position=_U(1,20,0.5,0)}):Play()
+		local pulseCount=0
+		local pulseConnection
+		pulseConnection=RunService.Heartbeat:Connect(function()
+			if skipped then
+				if pulseConnection then pulseConnection:Disconnect() end
+				return
+			end
+			pulseCount=pulseCount+1
+			if pulseCount%3==0 then
+				local p=0.3+math.sin(pulseCount*0.5)*0.15
+				lightBeam[_BgT]=0.3-(p*0.2)
+				beamGlow[_BgT]=0.5-(p*0.1)
+				beamSparkles[_BgT]=0.7-(p*0.15)
+			end
+		end)
+		-- don't block forever
+		local t0=os.clock()
+		while beamTween.PlaybackState==Enum.PlaybackState.Playing and not skipped and (os.clock()-t0)<1.2 do
+			task.wait(0.03)
+		end
+		if pulseConnection then pulseConnection:Disconnect() end
+		if skipped or not screenGui then return end
+		pcall(function()
+			TweenService:Create(lightBeam,_TI(0.25),{BackgroundTransparency=1,Size=_U(0,0,1.1,0)}):Play()
+			TweenService:Create(beamGlow,_TI(0.25),{BackgroundTransparency=1,Size=_U(0,0,1.3,0)}):Play()
+			TweenService:Create(beamSparkles,_TI(0.25),{BackgroundTransparency=1,Size=_U(0,0,1,0)}):Play()
+		end)
+	end
+
+	local glitchChars={"!","#","%","/","[","]","░","▒","▓","—","=","*","^","~","¦","¤"}
+
+	local function glitchText(lbl,original)
+		if skipped or not screenGui then return end
+		for i=1,4 do
+			if skipped then return end
+			local s=""
+			for c in original:gmatch(".") do
+				s=s..(math.random()<0.35 and glitchChars[math.random(#glitchChars)] or c)
+			end
+			lbl.Text=s
+			_tw(0.03)
+		end
+		if not skipped then lbl.Text=original end
+	end
+
+	local function addGlitchBar()
+		if skipped or not screenGui then return end
+		local bar=_I("Frame")
+		bar.Size=_U(1,0,0,math.random(2,12))
+		bar.Position=_U(0,0,math.random(10,90)/100,0)
+		bar[_BgC]=MAIN_COLOR
+		bar[_BgT]=math.random(45,70)/100
+		bar[_BSP]=0
+		bar[_ZI]=6
+		bar.Parent=glitchContainer
+		task.delay(0.1,function()
+			if bar and bar.Parent then
+				TweenService:Create(bar,_TI(0.1),{BackgroundTransparency=1}):Play()
+				task.delay(0.1,function() bar:Destroy() end)
+			end
+		end)
+	end
+
+	local function shakeScreen(intensity,duration)
+		if skipped or not screenGui then return end
+		local startTime=tick()
+		local steps=math.ceil(duration/0.05)
+		for _=1,steps do
+			if skipped then return end
+			local elapsed=tick()-startTime
+			local cur=intensity*(1-(elapsed/duration))
+			if cur<1 then cur=1 end
+			local ox=math.random(-_mf(cur),_mf(cur))
+			local oy=math.random(-_mf(cur*0.5),_mf(cur*0.5))
+			leftLabel.Position=_U(0.5,-12+ox,0.5,oy)
+			rightLabel.Position=_U(0.5,12+ox,0.5,oy)
+			_tw(0.05)
+		end
+		if skipped or not screenGui then return end
+		pcall(function()
+			TweenService:Create(leftLabel,_TI(0.05),{Position=_U(0.5,-12,0.5,0)}):Play()
+			TweenService:Create(rightLabel,_TI(0.05),{Position=_U(0.5,12,0.5,0)}):Play()
+		end)
+	end
+
+	local function setupAudio()
+		introSound=_I("Sound")
+		introSound.SoundId="rbxassetid://"..SOUND_ID
+		introSound.Volume=0.7
+		introSound.PlayOnRemove=false
+		introSound.Looped=false
+		introSound.Parent=screenGui
+		-- don't block forever on Loaded
+		local loaded=false
+		pcall(function()
+			if introSound.IsLoaded then
+				loaded=true
+			else
+				local conn
+				conn=introSound.Loaded:Connect(function()
+					loaded=true
+					if conn then conn:Disconnect() end
+				end)
+				local t0=os.clock()
+				while not loaded and not skipped and (os.clock()-t0)<3 do
+					task.wait(0.05)
+				end
+				if conn then pcall(function() conn:Disconnect() end) end
+			end
+		end)
+		if skipped then return end
+		pcall(function()
+			introSound:Play()
+			introSound.TimePosition=SKIP_SECONDS
+		end)
+		return introSound
+	end
+
+	local function fadeOutAudio(duration)
+		if not introSound then return end
+		local startVolume=introSound.Volume
+		local steps=10
+		for i=1,steps do
+			if skipped or not introSound then break end
+			introSound.Volume=startVolume*(1-(i/steps))
+			_tw(duration/steps)
+		end
+		if introSound then
+			introSound.Volume=0
+			pcall(function() introSound:Stop() end)
+		end
+	end
+
+	local function stopAudio()
+		if introSound then
+			pcall(function() introSound:Stop() end)
+			pcall(function() introSound:Destroy() end)
+			introSound=nil
+		end
+	end
+
+	local activeDrips=0
+
+	local function createDrip(startX,startY,width,height,duration,delay)
+		if skipped then return end
+		_tw(delay)
+		if skipped or not screenGui then return end
+		activeDrips=activeDrips+1
+		local drip=_I("Frame")
+		drip.Size=_U(0,width,0,height)
+		drip.Position=_U(0.5,startX,0.5,startY)
+		drip[_BgC]=MAIN_COLOR
+		drip[_BgT]=0.25
+		drip[_BSP]=0
+		drip[_ZI]=7
+		drip.Parent=dripContainer
+		local _dripCorner=_I("UICorner")
+		_dripCorner.CornerRadius=_UD(0,4)
+		_dripCorner.Parent=drip
+		local stretch=TweenService:Create(drip,_TI(duration*0.35),{Size=_U(0,width,0,height+22),BackgroundTransparency=0.1})
+		stretch:Play()
+		_tw(duration*0.35)
+		if skipped then
+			pcall(function() drip:Destroy() end)
+			activeDrips=math.max(0,activeDrips-1)
+			return
+		end
+		local fall=TweenService:Create(drip,_TI(duration*0.65,_ESQ,Enum.EasingDirection.In),{
+			Position=_U(0.5,startX+math.random(-3,3),0.5,startY+90),
+			BackgroundTransparency=1
+		})
+		fall:Play()
+		fall.Completed:Connect(function()
+			drip:Destroy()
+			activeDrips=math.max(0,activeDrips-1)
+		end)
+	end
+
+	local function startDripping()
+		if skipped or not screenGui then return end
+		local fullText="KHUB"
+		local font=Enum.Font.GothamBlack
+		local textSize=92
+		local textBoundsFull=TextService:GetTextSize(fullText,textSize,font,Vector2.new(_mh,_mh))
+		local textHeight=textBoundsFull.Y
+		local delayCounter=0
+		local drips={}
+		for i=1,#fullText do
+			local char=fullText:sub(i,i)
+			local charBounds=TextService:GetTextSize(char,textSize,font,Vector2.new(_mh,_mh))
+			local charWidth=charBounds.X
+			local precedingWidth=0
+			if i>1 then
+				precedingWidth=TextService:GetTextSize(fullText:sub(1,i-1),textSize,font,Vector2.new(_mh,_mh)).X
+			end
+			local totalTextWidth=textBoundsFull.X
+			local charCenterX=-totalTextWidth/2+precedingWidth+charWidth/2
+			local startY=textHeight/2+3
+			local dripWidth=_mc(_mf(charWidth*0.35),3,7)
+			local dripHeight=math.random(4,7)
+			local dur=0.5+math.random()*0.2
+			local del=delayCounter*0.07
+			_ti(drips,{
+				startX=charCenterX+math.random(-2,2),
+				startY=startY+math.random(0,4),
+				width=dripWidth,
+				height=dripHeight,
+				duration=dur,
+				delay=del
+			})
+			delayCounter=delayCounter+1
+		end
+		for _,d in ipairs(drips) do
+			if skipped then break end
+			createDrip(d.startX,d.startY,d.width,d.height,d.duration,d.delay)
+		end
+	end
+
+	-- MAIN SEQUENCE
+	setupAudio()
+	if skipped then cleanupAll(); return end
+
+	leftLabel.Position=_U(-0.9,0,-0.6,0)
+	rightLabel.Position=_U(1.9,0,1.6,0)
+	leftLabel.Rotation=-30
+	rightLabel.Rotation=30
+
+	pcall(function()
+		TweenService:Create(blur,_TI(0.7),{Size=18}):Play()
+		TweenService:Create(overlay,_TI(0.7),{BackgroundTransparency=0.2}):Play()
+		TweenService:Create(darkOverlay,_TI(0.7),{BackgroundTransparency=0.4}):Play()
+	end)
+
+	if waitOrSkip(0.35) then cleanupAll(); return end
+
+	TweenService:Create(leftLabel,_TI(0.45),{TextTransparency=0}):Play()
+	TweenService:Create(rightLabel,_TI(0.45),{TextTransparency=0}):Play()
+	TweenService:Create(leftLabel,_TI(0.55,Enum.EasingStyle.Elastic,_EDO),{Position=_U(0.5,-240,0.5,-80),Rotation=-15}):Play()
+	TweenService:Create(rightLabel,_TI(0.55,Enum.EasingStyle.Elastic,_EDO),{Position=_U(0.5,140,0.5,80),Rotation=15}):Play()
+
+	if waitOrSkip(0.45) then cleanupAll(); return end
+
+	local smooth=_TI(0.4,_ESQ,_EDO)
+	TweenService:Create(leftLabel,smooth,{Position=_U(0.5,-180,0.5,-50),Rotation=-8}):Play()
+	TweenService:Create(rightLabel,smooth,{Position=_U(0.5,90,0.5,50),Rotation=8}):Play()
+
+	if waitOrSkip(0.35) then cleanupAll(); return end
+
+	TweenService:Create(leftLabel,smooth,{Position=_U(0.5,-120,0.5,-25),Rotation=-4}):Play()
+	TweenService:Create(rightLabel,smooth,{Position=_U(0.5,40,0.5,25),Rotation=4}):Play()
+
+	if waitOrSkip(0.3) then cleanupAll(); return end
+
+	TweenService:Create(leftLabel,smooth,{Position=_U(0.5,-60,0.5,-10),Rotation=-2}):Play()
+	TweenService:Create(rightLabel,smooth,{Position=_U(0.5,-10,0.5,10),Rotation=2}):Play()
+
+	if waitOrSkip(0.25) then cleanupAll(); return end
+
+	_ts(function()
+		for i=1,30 do
+			if skipped then break end
+			createParticle()
+			_tw(0.05)
+		end
+	end)
+
+	local glitchEnd=tick()+1.1
+	while tick()<glitchEnd do
+		if skipped then cleanupAll(); return end
+		local ox=math.random(-20,20)
+		local oy=math.random(-10,10)
+		leftLabel.Position=_U(0.5,-60+ox,0.5,-10+oy)
+		rightLabel.Position=_U(0.5,-10+ox,0.5,10+oy)
+		if math.random()<0.35 then _ts(glitchText,leftLabel,"KHUB") end
+		if math.random()<0.35 then _ts(glitchText,rightLabel,"PANEL") end
+		if math.random()<0.4 then addGlitchBar() end
+		if math.random()<0.1 then doFlash(MAIN_COLOR,0.2,0.03) end
+		_tw(0.045)
+	end
+
+	if skipped then cleanupAll(); return end
+
+	leftLabel.Visible=false
+	rightLabel.Visible=false
+	mainLabel.TextTransparency=0
+
+	doFlash(MAIN_COLOR,0.5,0.05)
+	if waitOrSkip(0.08) then cleanupAll(); return end
+
+	TweenService:Create(mainLabel,_TI(0.15,_ESB,Enum.EasingDirection.In),{TextSize=92}):Play()
+	if waitOrSkip(0.15) then cleanupAll(); return end
+
+	TweenService:Create(mainLabel,_TI(0.1),{TextSize=88}):Play()
+	doFlash(WHITE,0.95,0.05)
+	if waitOrSkip(0.02) then cleanupAll(); return end
+	doFlash(MAIN_COLOR,0.65,0.08)
+
+	_ts(shakeScreen,10,0.25)
+	_ts(runLightBeam)
+
+	TweenService:Create(mainLabel,_TI(0.4,_ESQ),{TextColor3=MAIN_COLOR}):Play()
+	TweenService:Create(accentBar,_TI(0.5,Enum.EasingStyle.Elastic,_EDO),{Size=_U(0,420,0,3)}):Play()
+
+	if waitOrSkip(0.2) then cleanupAll(); return end
+
+	TweenService:Create(subLabel,_TI(0.4),{TextTransparency=0.05}):Play()
+	TweenService:Create(subLabel2,_TI(0.4),{TextTransparency=0.15}):Play()
+	if waitOrSkip(0.1) then cleanupAll(); return end
+
+	doFlash(WHITE,0.3,0.04)
+	TweenService:Create(subLabel,_TI(0.2),{TextSize=17}):Play()
+	if waitOrSkip(0.2) then cleanupAll(); return end
+	TweenService:Create(subLabel,_TI(0.2),{TextSize=16}):Play()
+
+	_ts(function()
+		for i=1,40 do
+			if skipped then break end
+			createParticle()
+			_tw(0.08)
+		end
+	end)
+
+	if waitOrSkip(0.9) then cleanupAll(); return end
+
+	startDripping()
+	-- max 2s for drips so it never sticks
+	local dripT0=os.clock()
+	while activeDrips>0 and not skipped and (os.clock()-dripT0)<2 do
+		_tw(0.1)
+	end
+
+	if waitOrSkip(0.45) then cleanupAll(); return end
+	fadeOutAudio(1.0)
+
+	if skipped then cleanupAll(); return end
+
+	local fadeInfo=_TI(0.85,_ESQ,Enum.EasingDirection.In)
+	pcall(function()
+		TweenService:Create(mainLabel,fadeInfo,{TextTransparency=1}):Play()
+		TweenService:Create(subLabel,fadeInfo,{TextTransparency=1}):Play()
+		TweenService:Create(subLabel2,fadeInfo,{TextTransparency=1}):Play()
+		TweenService:Create(accentBar,fadeInfo,{BackgroundTransparency=1}):Play()
+		TweenService:Create(overlay,fadeInfo,{BackgroundTransparency=1}):Play()
+		TweenService:Create(darkOverlay,fadeInfo,{BackgroundTransparency=1}):Play()
+		if blur then TweenService:Create(blur,_TI(0.85),{Size=0}):Play() end
+		TweenService:Create(dripContainer,fadeInfo,{BackgroundTransparency=1}):Play()
+	end)
+
+	if waitOrSkip(0.9) then cleanupAll(); return end
+	stopAudio()
+	cleanupAll()
+end
+
+
+-- ============================================================
+-- START
+-- ============================================================
+-- Open UI immediately so script never looks "stuck"
+switchTab("Welcome")
+setVisible(true)
+pcall(function() setAntiAfk(S.AntiAfk) end)
+pcall(function() setAutoReconnect(S.AutoReconnect) end)
+print("[KHUB] Cheating During Testing UI ready")
+
+-- Intro runs after UI is already open (can skip anytime)
+task.spawn(function()
+	-- hide main briefly while intro plays
+	pcall(function() Main.Visible = false end)
+	local ok, err = pcall(playKHUBIntro)
+	if not ok then
+		warn("[KHUB UI] Intro error: ", err)
+	end
+	-- force kill leftover intro gui + audio
+	pcall(function()
+		local pg = player:FindFirstChild("PlayerGui")
+		if pg then
+			local oldIntro = pg:FindFirstChild("KHUBIntro")
+			if oldIntro then oldIntro:Destroy() end
+		end
+	end)
+	pcall(function()
+		for _, s in ipairs(game:GetService("SoundService"):GetDescendants()) do
+			if s:IsA("Sound") and tostring(s.SoundId):find("120267378058133") then
+				s:Stop()
+				s:Destroy()
+			end
+		end
+	end)
+	setVisible(true)
+	print("[KHUB] Cheating During Testing loaded · Toggle: RightShift / RightCtrl / K")
 end)
 
-UserInputService.InputBegan:Connect(function(input,gp)
-    if gp then return end
-    if input.KeyCode==Enum.KeyCode.RightShift or
-       input.KeyCode==Enum.KeyCode.RightControl or
-       input.KeyCode==Enum.KeyCode.K then
-        setVisible(not Win.Visible)
-    end
-    -- R = show radar
-    if input.KeyCode==Enum.KeyCode.R then
-        RadarFrame.Visible=not RadarFrame.Visible
-    end
+-- absolute safety: if intro still exists after 12s, destroy it
+task.delay(12, function()
+	pcall(function()
+		local pg = player:FindFirstChild("PlayerGui")
+		if pg then
+			local oldIntro = pg:FindFirstChild("KHUBIntro")
+			if oldIntro then
+				oldIntro:Destroy()
+				warn("[KHUB] Intro force-removed after 12s")
+			end
+		end
+	end)
+	pcall(function() setVisible(true) end)
 end)
-
--- ══════════════════════════════════════════════════════════
---  BOOT
--- ══════════════════════════════════════════════════════════
-pcall(function()
-    local old = CoreGui:FindFirstChild("KHUB_Radar")
-    if old then old:Destroy() end
-    local old2 = player.PlayerGui:FindFirstChild("KHUB_Radar")
-    if old2 then old2:Destroy() end
-end)
-
-runAutoFlow()
-setPhase("idle")
-notify("KHUB v4 loaded · R = toggle radar")
-print("[KHUB v4] Loaded · Floating Radar · Box Tabs · ESP · Auto Flow · K/RShift/RCtrl toggle · R = Radar")
