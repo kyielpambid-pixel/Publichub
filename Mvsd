@@ -1,0 +1,364 @@
+--[[ Made By Khub ]]
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MVSD_Menu"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game:GetService("CoreGui")
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 320, 0, 480)
+MainFrame.Position = UDim2.new(0.5, -160, 0.5, -240)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BorderColor3 = Color3.fromRGB(60, 60, 60)
+MainFrame.Parent = ScreenGui
+
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Size = UDim2.new(1, 0, 0, 40)
+TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+
+local TitleText = Instance.new("TextLabel")
+TitleText.Size = UDim2.new(1, -10, 1, 0)
+TitleText.Position = UDim2.new(0, 10, 0, 0)
+TitleText.BackgroundTransparency = 1
+TitleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleText.TextSize = 16
+TitleText.Font = Enum.Font.SourceSansBold
+TitleText.Text = "MVSD Menu | Khub Script"
+TitleText.TextXAlignment = Enum.TextXAlignment.Left
+TitleText.Parent = TitleBar
+
+local ContentFrame = Instance.new("ScrollingFrame")
+ContentFrame.Size = UDim2.new(1, -20, 1, -55)
+ContentFrame.Position = UDim2.new(0, 10, 0, 50)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.BorderSizePixel = 0
+ContentFrame.CanvasSize = UDim2.new(0, 0, 0, 480)
+ContentFrame.ScrollBarThickness = 4
+ContentFrame.Parent = MainFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 10)
+UIListLayout.Parent = ContentFrame
+
+local function createToggle(name, callback)
+	local ToggleBtn = Instance.new("TextButton")
+	ToggleBtn.Size = UDim2.new(1, 0, 0, 40)
+	ToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	ToggleBtn.BorderColor3 = Color3.fromRGB(60, 60, 60)
+	ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	ToggleBtn.TextSize = 14
+	ToggleBtn.Font = Enum.Font.SourceSansBold
+	ToggleBtn.Text = name .. ": OFF"
+	ToggleBtn.Parent = ContentFrame
+	
+	local state = false
+	ToggleBtn.MouseButton1Click:Connect(function()
+		state = not state
+		if state then
+			ToggleBtn.Text = name .. ": ON"
+			ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+		else
+			ToggleBtn.Text = name .. ": OFF"
+			ToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+		end
+		callback(state)
+	end)
+end
+
+local fovRadius = 150
+local hitboxSize = 2
+
+local function createSlider(name, min, max, default, callback)
+	local SliderContainer = Instance.new("Frame")
+	SliderContainer.Size = UDim2.new(1, 0, 0, 55)
+	SliderContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	SliderContainer.BorderColor3 = Color3.fromRGB(60, 60, 60)
+	SliderContainer.Parent = ContentFrame
+
+	local SliderLabel = Instance.new("TextLabel")
+	SliderLabel.Size = UDim2.new(1, -10, 0, 25)
+	SliderLabel.Position = UDim2.new(0, 5, 0, 0)
+	SliderLabel.BackgroundTransparency = 1
+	SliderLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	SliderLabel.TextSize = 14
+	SliderLabel.Font = Enum.Font.SourceSansBold
+	SliderLabel.Text = name .. ": " .. default
+	SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+	SliderLabel.Parent = SliderContainer
+
+	local SliderBar = Instance.new("TextButton")
+	SliderBar.Size = UDim2.new(1, -20, 0, 10)
+	SliderBar.Position = UDim2.new(0, 10, 0, 35)
+	SliderBar.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	SliderBar.BorderColor3 = Color3.fromRGB(80, 80, 80)
+	SliderBar.Text = ""
+	SliderBar.Parent = SliderContainer
+
+	local SliderFill = Instance.new("Frame")
+	SliderFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+	SliderFill.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+	SliderFill.BorderSizePixel = 0
+	SliderFill.Parent = SliderBar
+
+	local draggingSlider = false
+
+	local function updateValue(input)
+		local pos = math.clamp((input.Position.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1)
+		local val = math.floor(min + (max - min) * pos)
+		SliderFill.Size = UDim2.new(pos, 0, 1, 0)
+		SliderLabel.Text = name .. ": " .. val
+		callback(val)
+	end
+
+	SliderBar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			draggingSlider = true
+			updateValue(input)
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			draggingSlider = false
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if draggingSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			updateValue(input)
+		end
+	end)
+end
+
+createSlider("FOV Radius", 50, 500, 150, function(val)
+	fovRadius = val
+end)
+
+createSlider("Hitbox Size", 2, 20, 2, function(val)
+	hitboxSize = val
+end)
+
+local espEnabled = false
+local espCache = {}
+
+local function createEsp(player)
+	if espCache[player] then return end
+	local box = Drawing.new("Square")
+	box.Visible = false
+	box.Color = Color3.fromRGB(255, 255, 255)
+	box.Thickness = 2
+	box.Filled = false
+	box.Transparency = 1
+
+	local name = Drawing.new("Text")
+	name.Visible = false
+	name.Color = Color3.fromRGB(255, 255, 255)
+	name.Size = 16
+	name.Center = true
+	name.Outline = true
+	name.OutlineColor = Color3.fromRGB(0, 0, 0)
+	name.Font = Drawing.Fonts.UI
+
+	espCache[player] = {Box = box, Name = name}
+end
+
+local function removeEsp(player)
+	if espCache[player] then
+		espCache[player].Box:Remove()
+		espCache[player].Name:Remove()
+		espCache[player] = nil
+	end
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+	if player ~= LocalPlayer then createEsp(player) end
+end
+Players.PlayerAdded:Connect(function(player)
+	if player ~= LocalPlayer then createEsp(player) end
+end)
+Players.PlayerRemoving:Connect(removeEsp)
+
+createToggle("Player ESP", function(state)
+	espEnabled = state
+	if not espEnabled then
+		for _, data in pairs(espCache) do
+			data.Box.Visible = false
+			data.Name.Visible = false
+		end
+	end
+end)
+
+local aimbotEnabled = false
+createToggle("Aimbot (Enemies Only)", function(state)
+	aimbotEnabled = state
+end)
+
+local hitboxEnabled = false
+createToggle("Hitbox Expander", function(state)
+	hitboxEnabled = state
+end)
+
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible = false
+fovCircle.Filled = false
+fovCircle.Thickness = 1.5
+fovCircle.Color = Color3.fromRGB(255, 255, 255)
+fovCircle.Transparency = 0.7
+
+createToggle("FOV Circle", function(state)
+	fovCircle.Visible = state
+end)
+
+local function isTeamMate(player)
+	if player.Team and LocalPlayer.Team then
+		return player.Team == LocalPlayer.Team
+	end
+	
+	local char = player.Character
+	if char then
+		for _, descendant in ipairs(char:GetDescendants()) do
+			if descendant:IsA("Highlight") and descendant.FillColor then
+				local color = descendant.FillColor
+				local r, g, b = color.R * 255, color.G * 255, color.B * 255
+				if g > 150 and r < 100 and b < 100 then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
+local function getNearestTarget()
+	local nearestTarget = nil
+	local shortestDistance = fovRadius
+	local mousePos = UserInputService:GetMouseLocation()
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			if not isTeamMate(player) then
+				local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+				local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+				if humanoid and humanoid.Health > 0 and rootPart then
+					local screenPoint, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+					if onScreen then
+						local distance = (Vector2.new(screenPoint.X, screenPoint.Y) - mousePos).Magnitude
+						if distance < shortestDistance then
+							shortestDistance = distance
+							nearestTarget = rootPart
+						end
+					end
+				end
+			end
+		end
+	end
+	return nearestTarget
+end
+
+RunService.RenderStepped:Connect(function()
+	local mousePos = UserInputService:GetMouseLocation()
+	fovCircle.Position = mousePos
+	fovCircle.Radius = fovRadius
+
+	if espEnabled then
+		for player, data in pairs(espCache) do
+			local character = player.Character
+			local hrp = character and character:FindFirstChild("HumanoidRootPart")
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			if character and hrp and humanoid and humanoid.Health > 0 then
+				local vector, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+				if onScreen then
+					local headPos = hrp.Position + Vector3.new(0, 2.5, 0)
+					local legPos = hrp.Position - Vector3.new(0, 3, 0)
+					local headScreen = Camera:WorldToViewportPoint(headPos)
+					local legScreen = Camera:WorldToViewportPoint(legPos)
+					local height = math.abs(headScreen.Y - legScreen.Y)
+					local width = height / 2
+
+					data.Box.Size = Vector2.new(width, height)
+					data.Box.Position = Vector2.new(headScreen.X - width / 2, headScreen.Y)
+					data.Box.Visible = true
+
+					data.Name.Text = player.Name
+					data.Name.Position = Vector2.new(headScreen.X, headScreen.Y - 20)
+					data.Name.Visible = true
+				else
+					data.Box.Visible = false
+					data.Name.Visible = false
+				end
+			else
+				data.Box.Visible = false
+				data.Name.Visible = false
+			end
+		end
+	end
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				if hitboxEnabled and not isTeamMate(player) then
+					hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+					hrp.Transparency = 0.7
+					hrp.CanCollide = false
+				else
+					hrp.Size = Vector3.new(2, 2, 1)
+					hrp.Transparency = 1
+					hrp.CanCollide = true
+				end
+			end
+		end
+	end
+
+	if aimbotEnabled then
+		local target = getNearestTarget()
+		if target then
+			Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Position)
+		end
+	end
+end)
+
+local dragging, dragInput, dragStart, startPos
+
+TitleBar.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = MainFrame.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+TitleBar.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.RightShift then
+		MainFrame.Visible = not MainFrame.Visible
+	end
+end)
