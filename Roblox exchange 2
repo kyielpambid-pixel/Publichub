@@ -1,0 +1,526 @@
+-- KHUB UI
+loadstring(game:HttpGet("https://raw.githubusercontent.com/kyielpambid-pixel/Khub-Premium-/refs/heads/main/Khub%20ui%20library%20m75752570oufcjljfljbpx"))()
+
+-- Stock Exchange 2 · Crypto Scalper (features)
+local K = getgenv().KHUB
+if not K then
+	warn("[KHUB RSE2] UI API missing. Upload the latest KHUB UI Library to GitHub (must export getgenv().KHUB).")
+	return
+end
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+
+local createTab = K.createTab
+local section = K.section
+local addToggle = K.addToggle
+local addButton = K.addButton
+local addSlider = K.addSlider
+local addTextbox = K.addTextbox
+local addLabel = K.addLabel
+local tabMessages = K.tabMessages
+local notify = K.notify
+local THEME = K.THEME
+
+local CONFIG_FOLDER = "KHUB_RSE2_Configs"
+
+local PriceEngine, GameConfig, MarketSeed, Client
+
+local function looksLikeClient(t)
+	return type(t) == "table" and type(t.trade) == "function" and (t.profile ~= nil or type(t.marketNow) == "function")
+end
+
+local function resolveRSE()
+	pcall(function()
+		PriceEngine = require(game.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PriceEngine"))
+	end)
+	pcall(function()
+		GameConfig = require(game.ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+	end)
+	pcall(function()
+		local st = require(LocalPlayer.PlayerScripts:WaitForChild("Client"):WaitForChild("State"))
+		if type(st) == "table" and type(st.seed) == "function" then
+			MarketSeed = st.seed()
+		else
+			MarketSeed = st
+		end
+	end)
+	pcall(function()
+		local cf = LocalPlayer.PlayerScripts:FindFirstChild("Client")
+		if not cf then return end
+		for _, m in ipairs(cf:GetDescendants()) do
+			if m:IsA("ModuleScript") then
+				local ok, mod = pcall(require, m)
+				if ok and looksLikeClient(mod) then Client = mod return end
+				if ok and type(mod) == "table" then
+					for _, v in pairs(mod) do
+						if looksLikeClient(v) then Client = v return end
+					end
+				end
+			end
+		end
+	end)
+	if not Client and type(getgc) == "function" then
+		pcall(function()
+			for _, v in ipairs(getgc(true)) do
+				if looksLikeClient(v) then Client = v break end
+			end
+		end)
+	end
+end
+resolveRSE()
+
+local Bot = {
+	running = false,
+	maxMarginPct = 95,
+	levCap = 30,
+	stopPct = 12,
+	lockPct = 10,
+	minMove = 0.3,
+	maxSim = 8,
+	impactPct = 0.1,
+}
+local TradeState = { busy = false, holds = {}, holdsLoaded = false }
+getgenv().RSECRYPTO_STATE = Bot
+
+local Logs = {}
+local function log(msg)
+	table.insert(Logs, os.date("%H:%M:%S") .. "  " .. tostring(msg))
+	if #Logs > 60 then table.remove(Logs, 1) end
+	print("[KHUB RSE2]", msg)
+end
+
+local function getCash()
+	local ok, c = pcall(function()
+		return (Client and Client.profile and Client.profile.cash) or 0
+	end)
+	return (ok and tonumber(c)) or 0
+end
+
+local function getLevMax()
+	local maxL = 1
+	pcall(function()
+		local level = (Client.profile and Client.profile.level) or 1
+		for _, row in ipairs(GameConfig.UNLOCKS.LEVERAGE) do
+			if level >= (row.level or 1) then
+				maxL = row.max or 1
+				break
+			end
+		end
+	end)
+	return maxL
+end
+
+local function getMaxPositions()
+	local n = 28
+	pcall(function()
+		n = GameConfig.maxPositionsFor(Client.profile) or 28
+	end)
+	return n
+end
+
+local function signalFor(asset)
+	if not (PriceEngine and Client and MarketSeed) then return nil end
+	local okNow, tNow = pcall(function()
+		return Client.marketNow(asset)
+	end)
+	if not okNow or not tNow then return nil end
+	local function px(off)
+		local ok, p = pcall(PriceEngine.priceAt, MarketSeed, asset, tNow + (off or 0))
+		return ok and p or nil
+	end
+	local p0, p15, p60, p120, p240 = px(0), px(15), px(60), px(120), px(240)
+	if not (p0 and p15 and p60 and p120 and p240) or p0 <= 0 then return nil end
+	local m15 = ((p15 - p0) / p0) * 100
+	local m60 = ((p60 - p0) / p0) * 100
+	local m120 = ((p120 - p0) / p0) * 100
+	local m240 = ((p240 - p0) / p0) * 100
+	if m15 >= Bot.minMove and m60 > -0.1 and m120 > -0.1 and m240 > -0.1 then
+		return { dir = 1, move = m15, entry = p0 }
+	elseif m15 <= -Bot.minMove and m60 < 0.1 and m120 < 0.1 and m240 < 0.1 then
+		return { dir = -1, move = -m15, entry = p0 }
+	end
+	return nil
+end
+
+local function impactClamp(asset, notional, entry)
+	local depth = (asset.shares or asset.supply or 0) * 1000000 * (entry or 0)
+	if depth <= 0 then return 0 end
+	local cap = depth * ((Bot.impactPct or 0.1) / 1000)
+	if notional > cap then notional = cap end
+	if notional < 50 then return 0 end
+	return notional
+end
+
+local function positionPnL(pos)
+	if not (PriceEngine and Client and MarketSeed and pos) then return 0 end
+	local asset = PriceEngine.resolveAsset(MarketSeed, pos.id)
+	if not asset then return 0 end
+	local price = PriceEngine.priceAt(MarketSeed, asset, Client.marketNow(asset))
+	local avg = pos.avg or 0
+	local dir = ((pos.qty or 0) < 0 or pos.direction == -1) and -1 or 1
+	if price and avg > 0 then
+		return ((price - avg) / avg) * 100 * (pos.lev or 1) * dir
+	end
+	return 0
+end
+
+local function closeIndex(idx)
+	if not Client then return false end
+	local ok, res = pcall(Client.trade, { action = "close", index = idx, fraction = 1 })
+	if ok and res and res.ok then return true end
+	ok, res = pcall(Client.trade, { action = "close", index = idx - 2, fraction = 1 })
+	return ok and res and res.ok
+end
+
+local function tickBot()
+	if not Bot.running or not Client or not PriceEngine or not MarketSeed then return end
+	local positions = (Client.profile and Client.profile.positions) or {}
+	local openCount, occupied = 0, {}
+
+	if not TradeState.holdsLoaded then
+		for _, pos in ipairs(positions) do
+			TradeState.holds[pos.id] = true
+		end
+		TradeState.holdsLoaded = true
+	end
+
+	for i = #positions, 1, -1 do
+		local pos = positions[i]
+		occupied[pos.id] = true
+		if TradeState.holds[pos.id] then
+			openCount = openCount + 1
+			local pnl = positionPnL(pos)
+			local asset = PriceEngine.resolveAsset(MarketSeed, pos.id)
+			local tNow = asset and Client.marketNow(asset)
+			local age = (tNow and pos.openedAt and (tNow - pos.openedAt)) or 0
+			local holdMeta = TradeState.holds[pos.id]
+			local adverse = false
+
+			if asset and tNow then
+				local px = PriceEngine.priceAt(MarketSeed, asset, tNow)
+				if px and px > 0 then
+					local dir = ((pos.qty or 0) < 0 or pos.direction == -1) and -1 or 1
+					for step = 30, 240, 30 do
+						local ok, future = pcall(PriceEngine.priceAt, MarketSeed, asset, tNow + step)
+						if ok and future and future > 0 then
+							local move = (dir == 1) and ((px - future) / px) or ((future - px) / px)
+							if move >= 0.006 then
+								adverse = true
+								break
+							end
+						end
+					end
+				end
+			end
+
+			local peakExit = type(holdMeta) == "table" and holdMeta.t and tNow and (tNow >= (holdMeta.t - 60))
+			local closed = false
+			if peakExit then
+				closed = closeIndex(i)
+				if closed then log(string.format("PEAK EXIT %s %+.1f%%", tostring(pos.id), pnl)) end
+			elseif adverse then
+				closed = closeIndex(i)
+				if closed then log(string.format("PREDICT EXIT %s %+.1f%%", tostring(pos.id), pnl)) end
+			elseif pnl <= -Bot.stopPct then
+				closed = closeIndex(i)
+				if closed then log(string.format("STOP LOSS %s %.1f%%", tostring(pos.id), pnl)) end
+			elseif pnl >= Bot.lockPct and type(holdMeta) ~= "table" then
+				closed = closeIndex(i)
+				if closed then log(string.format("PROFIT LOCK %s +%.1f%%", tostring(pos.id), pnl)) end
+			elseif age > 240 then
+				closed = closeIndex(i)
+				if closed then log(string.format("TIMEOUT %s %+.1f%%", tostring(pos.id), pnl)) end
+			end
+			if closed then
+				TradeState.holds[pos.id] = nil
+				occupied[pos.id] = nil
+				openCount = openCount - 1
+			end
+		end
+	end
+
+	local slots = Bot.maxSim - openCount
+	local cash = getCash()
+	local lev = math.min(getLevMax(), Bot.levCap)
+	local marginEach = (cash * (Bot.maxMarginPct / 100)) / math.max(slots, 1)
+	local candidates = {}
+	local listed = {}
+	pcall(function()
+		listed = PriceEngine.listedAssets() or {}
+	end)
+
+	for _, asset in ipairs(listed) do
+		if asset.class == "crypto" and not occupied[asset.id] then
+			local sig = signalFor(asset)
+			if sig then
+				local notional = impactClamp(asset, marginEach * lev, sig.entry)
+				if notional > 0 then
+					local fill = notional / math.max(marginEach * lev, 1)
+					if not (fill < 0.3 and sig.move < 0.8) then
+						candidates[#candidates + 1] = {
+							id = asset.id,
+							asset = asset,
+							dir = sig.dir,
+							entry = sig.entry,
+							move = sig.move,
+							notional = notional,
+							score = sig.move * fill,
+						}
+					end
+				end
+			end
+		end
+	end
+
+	table.sort(candidates, function(a, b)
+		return a.score > b.score
+	end)
+
+	for _, c in ipairs(candidates) do
+		if slots <= 0 then break end
+		local live = PriceEngine.priceAt(MarketSeed, c.asset, Client.marketNow(c.asset))
+		local okEntry = true
+		if live and live > 0 then
+			if ((c.entry - live) / live) * 100 * c.dir > 0.5 then
+				okEntry = false
+			end
+		end
+		if okEntry then
+			local margin = c.notional / lev
+			if margin > (cash * 0.7) / math.max(slots, 1) then
+				margin = (cash * 0.7) / math.max(slots, 1)
+			end
+			local qty = (margin * lev) / c.entry
+			TradeState.busy = true
+			local ok, res = pcall(Client.trade, {
+				action = "open",
+				id = c.id,
+				qty = qty,
+				direction = c.dir,
+				lev = lev,
+				maxOrder = false,
+			})
+			TradeState.busy = false
+			if ok and res and res.ok then
+				local entryPx = tonumber(res.price) or live or c.entry
+				local tOpen = Client.marketNow(c.asset)
+				local best, bestT, worst, worstT = entryPx, 0, entryPx, 0
+				for step = 15, 300, 15 do
+					local okp, p = pcall(PriceEngine.priceAt, MarketSeed, c.asset, tOpen + step)
+					if okp and p then
+						if p > best then best, bestT = p, tOpen + step end
+						if p < worst then worst, worstT = p, tOpen + step end
+					end
+				end
+				TradeState.holds[c.id] = { t = (c.dir == 1) and bestT or worstT }
+				slots = slots - 1
+				occupied[c.id] = true
+				log(string.format("ENTERED %s %s %dx | move %+.2f%%", c.id, c.dir == 1 and "LONG" or "SHORT", lev, c.move))
+			elseif ok and res and res.err then
+				log("ERROR " .. c.id .. ": " .. tostring(res.err))
+			end
+		end
+	end
+end
+
+local StatusLabel, AccountLabel, DashLogLabel, LogViewLabel
+
+local function refreshUI()
+	if not Client then
+		if StatusLabel then
+			StatusLabel.Text = "Client API not found — join RSE2 and re-execute"
+		end
+		return
+	end
+	pcall(function()
+		local positions = (Client.profile and Client.profile.positions) or {}
+		local parts = {}
+		for i, pos in ipairs(positions) do
+			if i > 4 then break end
+			local ok, pnl = pcall(positionPnL, pos)
+			parts[#parts + 1] = string.format("%s %+.1f%%", tostring(pos.id), ok and pnl or 0)
+		end
+		local net = getCash()
+		pcall(function()
+			net = tonumber(Client.netWorth and Client.netWorth() or getCash()) or getCash()
+		end)
+		if StatusLabel then
+			StatusLabel.Text = string.format(
+				"Bot: %s | Cash: $%.0f | Net: $%.0f\nPositions: %s",
+				Bot.running and "RUNNING" or "STOPPED",
+				getCash(),
+				net,
+				#positions > 0 and (#positions .. " open: " .. table.concat(parts, ", ")) or "none"
+			)
+		end
+		local level = (Client.profile and Client.profile.level) or 1
+		if AccountLabel then
+			AccountLabel.Text = string.format(
+				"Level: %d | Leverage Max: %dx\nMax Positions: %d | Open: %d",
+				level,
+				getLevMax(),
+				getMaxPositions(),
+				#positions
+			)
+		end
+		local recent = {}
+		for i = math.max(1, #Logs - 3), #Logs do
+			recent[#recent + 1] = Logs[i]
+		end
+		if DashLogLabel then
+			DashLogLabel.Text = #recent > 0 and table.concat(recent, "\n") or "Engine ready."
+		end
+		local hist = {}
+		for i = math.max(1, #Logs - 12), #Logs do
+			hist[#hist + 1] = Logs[i]
+		end
+		if LogViewLabel then
+			LogViewLabel.Text = #hist > 0 and table.concat(hist, "\n") or "Engine ready."
+		end
+	end)
+end
+
+_G.RSECRYPTO_ALIVE = true
+task.spawn(function()
+	while _G.RSECRYPTO_ALIVE do
+		pcall(tickBot)
+		task.wait(0.5)
+	end
+end)
+task.spawn(function()
+	while _G.RSECRYPTO_ALIVE do
+		pcall(refreshUI)
+		task.wait(1)
+	end
+end)
+
+local PageDash = createTab("Dashboard", "Dashboard", 2, "main")
+local PageRisk = createTab("Risk", "Risk", 3, "shield")
+local PageLogs = createTab("Logs", "Logs", 4, "log")
+
+do
+	tabMessages(PageDash, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Turn on Bot Running to auto-enter crypto trades from the price curve.",
+		"$ Exits: stop-loss, profit lock, peak/predict curve, and timeout.",
+		"> Must be inside Roblox Stock Exchange 2 for the client API.",
+	})
+	local st = section(PageDash, "STATUS")
+	StatusLabel = addLabel(st, "Connecting…", 12, THEME.text)
+	StatusLabel.Size = UDim2.new(1, 0, 0, 48)
+	local ac = section(PageDash, "ACCOUNT")
+	AccountLabel = addLabel(ac, "Loading…", 12, THEME.text)
+	AccountLabel.Size = UDim2.new(1, 0, 0, 40)
+	local lv = section(PageDash, "LIVE LOGS")
+	DashLogLabel = addLabel(lv, "Engine ready.", 11, THEME.dim)
+	DashLogLabel.Size = UDim2.new(1, 0, 0, 56)
+	local run = section(PageDash, "BOT")
+	addToggle(run, "Bot Running", false, function(v)
+		Bot.running = v
+		log(v and "STARTED" or "STOPPED")
+		refreshUI()
+	end)
+	addButton(run, "Refresh Status", function()
+		refreshUI()
+		notify("Status", "Refreshed", true)
+	end)
+end
+
+do
+	tabMessages(PageRisk, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Sliders drive the live engine. Account level caps still apply.",
+		"$ Higher impact % allows larger orders but more slippage.",
+		"> Start lower on margin % if you are new.",
+	})
+	local s = section(PageRisk, "RISK CONTROLS")
+	addSlider(s, "Cash % Per Trade", 10, 95, Bot.maxMarginPct, function(v) Bot.maxMarginPct = v end)
+	addSlider(s, "Leverage Cap", 1, 30, Bot.levCap, function(v) Bot.levCap = v end)
+	addSlider(s, "Stop Loss %", 3, 40, Bot.stopPct, function(v) Bot.stopPct = v end)
+	addSlider(s, "Profit Lock %", 3, 50, Bot.lockPct, function(v) Bot.lockPct = v end)
+	addSlider(s, "Min Entry Move (x0.01%)", 10, 150, math.floor(Bot.minMove * 100), function(v) Bot.minMove = v / 100 end)
+	addSlider(s, "Max Simultaneous Positions", 1, 28, Bot.maxSim, function(v) Bot.maxSim = v end)
+	addSlider(s, "Impact Budget (x0.01)", 10, 50, math.floor(Bot.impactPct * 100), function(v) Bot.impactPct = v / 100 end)
+end
+
+do
+	tabMessages(PageLogs, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Full event history for entries, exits, and errors.",
+		"> Clear logs does not stop the bot.",
+	})
+	local s = section(PageLogs, "EVENTS")
+	LogViewLabel = addLabel(s, "ready.", 11, THEME.dim)
+	LogViewLabel.Size = UDim2.new(1, 0, 0, 160)
+	addButton(s, "Clear Logs", function()
+		if table.clear then table.clear(Logs) else Logs = {} end
+		log("Logs cleared.")
+		refreshUI()
+	end)
+end
+
+local PageRSE = createTab("RSE Config", "RSE Config", 7, "settings")
+do
+	tabMessages(PageRSE, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Save bot risk settings on this device.",
+		"$ Unload stops the bot only.",
+		"> Report bugs on Discord.",
+	})
+	local cfgName = "default"
+	local cfg = section(PageRSE, "CONFIG")
+	addTextbox(cfg, "Config Name", "default", function(text)
+		cfgName = (text and text:gsub("%s+", "") ~= "") and text:gsub("%s+", "") or "default"
+	end)
+	addButton(cfg, "Save Config", function()
+		pcall(function()
+			if isfolder and not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+			if writefile then
+				writefile(CONFIG_FOLDER .. "/" .. cfgName .. ".json", HttpService:JSONEncode({
+					Bot = {
+						maxMarginPct = Bot.maxMarginPct,
+						levCap = Bot.levCap,
+						stopPct = Bot.stopPct,
+						lockPct = Bot.lockPct,
+						minMove = Bot.minMove,
+						maxSim = Bot.maxSim,
+						impactPct = Bot.impactPct,
+					},
+					savedAt = os.date("%c"),
+				}))
+			end
+		end)
+		notify("Saved", cfgName, true)
+	end, Color3.fromRGB(30, 80, 55))
+	addButton(cfg, "Load Config", function()
+		local ok, raw = pcall(function()
+			return readfile(CONFIG_FOLDER .. "/" .. cfgName .. ".json")
+		end)
+		if ok and raw then
+			local ok2, data = pcall(function()
+				return HttpService:JSONDecode(raw)
+			end)
+			if ok2 and type(data) == "table" and type(data.Bot) == "table" then
+				for k, v in pairs(data.Bot) do
+					if Bot[k] ~= nil then Bot[k] = v end
+				end
+				notify("Loaded", cfgName, true)
+			else
+				notify("Error", "Invalid", false)
+			end
+		else
+			notify("Error", "Not found", false)
+		end
+	end)
+	addButton(cfg, "Stop Bot", function()
+		Bot.running = false
+		_G.RSECRYPTO_ALIVE = false
+		notify("Stopped", "Bot stopped", false)
+	end, Color3.fromRGB(80, 30, 40))
+end
+
+log(string.format("KHUB RSE2 ready | Cash $%.0f | Client=%s", getCash(), Client and "OK" or "MISSING"))
+pcall(refreshUI)
+print("[KHUB] Stock Exchange 2 features loaded")
