@@ -1,0 +1,783 @@
+-- KHUB UI
+loadstring(game:HttpGet("https://raw.githubusercontent.com/kyielpambid-pixel/Khub-Premium-/refs/heads/main/Khub%20ui%20library%20m75752570oufcjljfljbpx"))()
+
+-- Tribes 3v3
+local K = getgenv().KHUB
+if not K then
+	warn("[KHUB Tribes] UI API missing. Update KHUB UI Library on GitHub.")
+	return
+end
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local CoreGui = game:GetService("CoreGui")
+local VirtualUser = game:GetService("VirtualUser")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local createTab = K.createTab
+local section = K.section
+local addToggle = K.addToggle
+local addButton = K.addButton
+local addSlider = K.addSlider
+local addLabel = K.addLabel
+local tabMessages = K.tabMessages
+local notify = K.notify
+local THEME = K.THEME
+
+-- Title = game name
+pcall(function()
+	local function setTitle(root)
+		if not root then return end
+		for _, d in ipairs(root:GetDescendants()) do
+			if d:IsA("TextLabel") and (d.Name == "TitleLbl" or d.Text == "KHUB UI" or d.Text == "KHUB") then
+				d.Text = "Tribes 3v3"
+			end
+		end
+	end
+	setTitle(K.ScreenGui)
+	setTitle(K.Main)
+end)
+
+local CFG = {
+	ESPEnabled = false,
+	ESPTeamCheck = true,
+	ESPNames = true,
+	ESPHealth = true,
+	ESPDistance = false,
+	ESPProjectiles = false,
+	AimLock = false,
+	AimLockTeamCheck = true,
+	AimLockWallCheck = true,
+	AimLockFOV = 150,
+	AimLockSmooth = 0.3,
+	AimLockPart = "Head",
+	WalkSpeed = false,
+	WSpeed = 30,
+	JumpPower = false,
+	JPower = 60,
+	InfiniteJump = false,
+	Fly = false,
+	FlySpeed = 60,
+	Noclip = false,
+	AntiAFK = false,
+}
+
+local Match = {
+	myTeam = nil,
+	teams = {},
+	phase = "Unknown",
+	round = 0,
+}
+
+local Remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage:WaitForChild("Remotes", 10)
+
+local function getMyTeamKey()
+	for key, team in pairs(Match.teams) do
+		for _, member in pairs(team.members or {}) do
+			if member.userId == LocalPlayer.UserId then
+				return key
+			end
+		end
+	end
+	return nil
+end
+
+if Remotes then
+	local matchState = Remotes:FindFirstChild("MatchState")
+	if matchState then
+		matchState.OnClientEvent:Connect(function(data)
+			if type(data) ~= "table" then return end
+			if data.teams then
+				Match.teams = data.teams
+				Match.myTeam = getMyTeamKey()
+			end
+			if data.phase then Match.phase = data.phase end
+			if data.round then Match.round = data.round end
+		end)
+	end
+end
+
+local function isAlive(plr)
+	for _, team in pairs(Match.teams) do
+		for _, member in pairs(team.members or {}) do
+			if member.userId == plr.UserId then
+				return member.alive == true
+			end
+		end
+	end
+	return nil
+end
+
+local function getTeamKey(plr)
+	for key, team in pairs(Match.teams) do
+		for _, member in pairs(team.members or {}) do
+			if member.userId == plr.UserId then
+				return key
+			end
+		end
+	end
+	return nil
+end
+
+local function isEnemy(plr, teamCheck)
+	if plr == LocalPlayer then return false end
+	if not teamCheck then return true end
+	local myTeam = Match.myTeam
+	local theirTeam = getTeamKey(plr)
+	if not myTeam or not theirTeam then return true end
+	return myTeam ~= theirTeam
+end
+
+local function getHum()
+	local char = LocalPlayer.Character
+	return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function getHRP()
+	local char = LocalPlayer.Character
+	return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getAimPart(char)
+	if not char then return nil end
+	return char:FindFirstChild(CFG.AimLockPart)
+		or char:FindFirstChild("Head")
+		or char:FindFirstChild("HumanoidRootPart")
+end
+
+-- FOV circle
+local FovGui = Instance.new("ScreenGui")
+FovGui.Name = "KHUB_Tribes_FOV"
+FovGui.ResetOnSpawn = false
+FovGui.IgnoreGuiInset = true
+FovGui.DisplayOrder = 997
+pcall(function() FovGui.Parent = CoreGui end)
+if not FovGui.Parent then FovGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+local FovRing = Instance.new("Frame")
+FovRing.AnchorPoint = Vector2.new(0.5, 0.5)
+FovRing.Position = UDim2.new(0.5, 0, 0.5, 0)
+FovRing.Size = UDim2.new(0, CFG.AimLockFOV * 2, 0, CFG.AimLockFOV * 2)
+FovRing.BackgroundTransparency = 1
+FovRing.Visible = false
+FovRing.Parent = FovGui
+local FovCorner = Instance.new("UICorner")
+FovCorner.CornerRadius = UDim.new(1, 0)
+FovCorner.Parent = FovRing
+local FovStroke = Instance.new("UIStroke")
+FovStroke.Thickness = 2
+FovStroke.Color = Color3.fromRGB(175, 110, 255)
+FovStroke.Transparency = 0.4
+FovStroke.Parent = FovRing
+
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
+rayParams.IgnoreWater = true
+
+local function canSee(part)
+	local char = LocalPlayer.Character
+	local origin = char and (char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart"))
+	if not origin or not part then return false end
+	rayParams.FilterDescendantsInstances = { char, part.Parent }
+	return workspace:Raycast(origin.Position, part.Position - origin.Position, rayParams) == nil
+end
+
+local AimState = { currentTarget = nil, holdActive = false }
+
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		AimState.holdActive = true
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		AimState.holdActive = false
+		AimState.currentTarget = nil
+	end
+end)
+
+local function screenCenter()
+	local vs = Camera.ViewportSize
+	return Vector2.new(vs.X * 0.5, vs.Y * 0.5)
+end
+
+local function validAimTarget(plr, part, fov)
+	if not plr or not plr.Character or not part then return false, math.huge end
+	local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 then return false, math.huge end
+	if isAlive(plr) == false then return false, math.huge end
+	if CFG.AimLockWallCheck and not canSee(part) then return false, math.huge end
+	local sp, onScreen = Camera:WorldToViewportPoint(part.Position)
+	if not onScreen or sp.Z <= 0 then return false, math.huge end
+	local dist = (Vector2.new(sp.X, sp.Y) - screenCenter()).Magnitude
+	if dist > fov then return false, math.huge end
+	return true, dist
+end
+
+local function getBestTarget()
+	local sticky = AimState.currentTarget
+	if sticky and sticky.Parent then
+		local plr = Players:GetPlayerFromCharacter(sticky)
+		if plr and isEnemy(plr, CFG.AimLockTeamCheck) then
+			local part = getAimPart(sticky)
+			if validAimTarget(plr, part, CFG.AimLockFOV * 1.5) then
+				return plr, part
+			end
+		end
+		AimState.currentTarget = nil
+	end
+
+	local bestDist, bestPlr, bestPart = CFG.AimLockFOV, nil, nil
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and isEnemy(plr, CFG.AimLockTeamCheck) and plr.Character then
+			local part = getAimPart(plr.Character)
+			local ok, dist = validAimTarget(plr, part, CFG.AimLockFOV)
+			if ok and dist < bestDist then
+				bestDist, bestPlr, bestPart = dist, plr, part
+			end
+		end
+	end
+	if bestPlr then
+		AimState.currentTarget = bestPlr.Character
+	end
+	return bestPlr, bestPart
+end
+
+RunService.RenderStepped:Connect(function()
+	if not CFG.AimLock or not AimState.holdActive then return end
+	local plr, part = getBestTarget()
+	if not plr or not part then return end
+	local camPos = Camera.CFrame.Position
+	local dir = (part.Position - camPos).Unit
+	local targetCF = CFrame.new(camPos, camPos + dir)
+	local alpha = math.clamp(0.08 + (CFG.AimLockSmooth - 0.05) * 0.96842105263158, 0.08, 1)
+	if Camera.CFrame.LookVector:Dot(dir) > 0.9995 then
+		Camera.CFrame = targetCF
+	else
+		Camera.CFrame = Camera.CFrame:Lerp(targetCF, alpha)
+	end
+end)
+
+-- Player ESP
+local EspGui = Instance.new("ScreenGui")
+EspGui.Name = "KHUB_Tribes_ESP"
+EspGui.ResetOnSpawn = false
+EspGui.IgnoreGuiInset = true
+EspGui.DisplayOrder = 998
+pcall(function() EspGui.Parent = CoreGui end)
+if not EspGui.Parent then EspGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+local EspPool = { pool = {}, active = {} }
+local RED = Color3.fromRGB(220, 70, 70)
+local VIOLET = Color3.fromRGB(175, 110, 255)
+
+local function releaseEsp(obj)
+	if not obj then return end
+	obj.Box.Visible = false
+	obj.Name.Visible = false
+	obj.Dist.Visible = false
+	obj.HealthBg.Visible = false
+	obj.HealthBar.Visible = false
+	if #EspPool.pool < 100 then
+		table.insert(EspPool.pool, obj)
+	else
+		obj.Box:Destroy()
+		obj.Name:Destroy()
+		obj.Dist:Destroy()
+		obj.HealthBg:Destroy()
+		obj.HealthBar:Destroy()
+	end
+end
+
+local function hideEsp(obj)
+	obj.Box.Visible = false
+	obj.Name.Visible = false
+	obj.Dist.Visible = false
+	obj.HealthBg.Visible = false
+	obj.HealthBar.Visible = false
+end
+
+local function makeEspLabel(size, textSize)
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.Font = Enum.Font.RobotoMono
+	l.TextSize = textSize
+	l.TextStrokeTransparency = 0
+	l.TextStrokeColor3 = Color3.new(0, 0, 0)
+	l.Size = size
+	l.TextXAlignment = Enum.TextXAlignment.Center
+	l.Visible = false
+	l.Parent = EspGui
+	return l
+end
+
+local function acquireEsp()
+	local obj = table.remove(EspPool.pool)
+	if obj then
+		hideEsp(obj)
+		return obj
+	end
+	local box = Instance.new("Frame")
+	box.BackgroundTransparency = 1
+	box.BorderSizePixel = 0
+	box.Visible = false
+	box.Parent = EspGui
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 1
+	stroke.Parent = box
+	local name = makeEspLabel(UDim2.new(0, 240, 0, 14), 12)
+	local dist = makeEspLabel(UDim2.new(0, 120, 0, 12), 10)
+	local hbg = Instance.new("Frame")
+	hbg.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	hbg.BorderSizePixel = 0
+	hbg.Visible = false
+	hbg.Parent = EspGui
+	local hbar = Instance.new("Frame")
+	hbar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+	hbar.BorderSizePixel = 0
+	hbar.Visible = false
+	hbar.Parent = EspGui
+	return { Box = box, Stroke = stroke, Name = name, Dist = dist, HealthBg = hbg, HealthBar = hbar }
+end
+
+RunService.RenderStepped:Connect(function()
+	local hrp = getHRP()
+	if not hrp then
+		for char, obj in pairs(EspPool.active) do
+			releaseEsp(obj)
+			EspPool.active[char] = nil
+		end
+		return
+	end
+
+	local still = {}
+	if CFG.ESPEnabled then
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= LocalPlayer then
+				if not (CFG.ESPTeamCheck and not isEnemy(plr, true)) then
+					local char = plr.Character
+					if char then
+						local root = char:FindFirstChild("HumanoidRootPart")
+						local hum = char:FindFirstChildOfClass("Humanoid")
+						if root and hum and hum.Health > 0 and isAlive(plr) ~= false then
+							local col = isEnemy(plr, true) and RED or VIOLET
+							local mag = (root.Position - hrp.Position).Magnitude
+							local obj = EspPool.active[char]
+							if not obj then
+								obj = acquireEsp()
+								EspPool.active[char] = obj
+							end
+							still[char] = true
+							local sp, onScreen = Camera:WorldToViewportPoint(root.Position)
+							if onScreen and sp.Z > 0 then
+								local scale = math.clamp(3 * (1000 / math.max(mag, 1)), 12, 220)
+								local h = scale * 1.5
+								obj.Box.Size = UDim2.new(0, scale, 0, h)
+								obj.Box.Position = UDim2.new(0, sp.X - scale * 0.5, 0, sp.Y - h * 0.5)
+								obj.Stroke.Color = col
+								obj.Box.Visible = true
+								if CFG.ESPNames then
+									obj.Name.Text = plr.Name
+									obj.Name.TextColor3 = col
+									obj.Name.Position = UDim2.new(0, sp.X - 120, 0, sp.Y - h * 0.5 - 16)
+									obj.Name.Visible = true
+								else
+									obj.Name.Visible = false
+								end
+								if CFG.ESPDistance then
+									obj.Dist.Text = string.format("%dm", math.floor(mag))
+									obj.Dist.TextColor3 = col
+									obj.Dist.Position = UDim2.new(0, sp.X - 60, 0, sp.Y + h * 0.5 + 2)
+									obj.Dist.Visible = true
+								else
+									obj.Dist.Visible = false
+								end
+								if CFG.ESPHealth then
+									local pct = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
+									local bx = sp.X - scale * 0.5 - 6
+									obj.HealthBg.Size = UDim2.new(0, 4, 0, h + 2)
+									obj.HealthBg.Position = UDim2.new(0, bx - 1, 0, sp.Y - h * 0.5 - 1)
+									obj.HealthBg.Visible = true
+									local bh = h * pct
+									obj.HealthBar.Size = UDim2.new(0, 4, 0, bh)
+									obj.HealthBar.Position = UDim2.new(0, bx, 0, sp.Y + h * 0.5 - bh)
+									obj.HealthBar.BackgroundColor3 = pct > 0.6 and Color3.fromRGB(0, 255, 0)
+										or pct > 0.3 and Color3.fromRGB(255, 255, 0)
+										or Color3.fromRGB(255, 0, 0)
+									obj.HealthBar.Visible = true
+								else
+									obj.HealthBg.Visible = false
+									obj.HealthBar.Visible = false
+								end
+							else
+								hideEsp(obj)
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	for char, obj in pairs(EspPool.active) do
+		if not still[char] or not char.Parent then
+			releaseEsp(obj)
+			EspPool.active[char] = nil
+		end
+	end
+end)
+
+-- Projectile ESP
+local Projectiles = {}
+local ProjVisuals = {}
+local ProjPool = {}
+
+local function releaseProj(frame)
+	frame.Visible = false
+	table.insert(ProjPool, frame)
+end
+
+local function acquireProj()
+	local f = table.remove(ProjPool)
+	if f then return f end
+	f = Instance.new("Frame")
+	f.BackgroundTransparency = 0.3
+	f.BorderSizePixel = 0
+	f.AnchorPoint = Vector2.new(0, 0.5)
+	f.Visible = false
+	f.Parent = EspGui
+	return f
+end
+
+if Remotes then
+	local combatFX = Remotes:FindFirstChild("CombatFX")
+	if combatFX then
+		combatFX.OnClientEvent:Connect(function(kind, data)
+			if kind == "Projectile" and type(data) == "table" then
+				if data.origin and data.velocity then
+					table.insert(Projectiles, {
+						origin = data.origin,
+						velocity = data.velocity,
+						shooter = data.shooter,
+						kind = data.kind,
+						spawnedAt = tick(),
+						key = data.key,
+					})
+					if #Projectiles > 50 then table.remove(Projectiles, 1) end
+				end
+			elseif kind == "ProjectileHit" and type(data) == "table" and data.key then
+				for i, p in ipairs(Projectiles) do
+					if p.key == data.key then
+						table.remove(Projectiles, i)
+						break
+					end
+				end
+			end
+		end)
+	end
+end
+
+RunService.RenderStepped:Connect(function()
+	local now = tick()
+	for i = #Projectiles, 1, -1 do
+		if now - Projectiles[i].spawnedAt > 5 then
+			table.remove(Projectiles, i)
+		end
+	end
+
+	if not CFG.ESPProjectiles then
+		for _, f in pairs(ProjVisuals) do
+			releaseProj(f)
+		end
+		ProjVisuals = {}
+		return
+	end
+
+	local keep = {}
+	for i, proj in ipairs(Projectiles) do
+		local age = now - proj.spawnedAt
+		local pos = proj.origin + proj.velocity * age + Vector3.new(0, -27.5 * age * age, 0)
+		local sp, onScreen = Camera:WorldToViewportPoint(pos)
+		if onScreen and sp.Z > 0 then
+			local frame = ProjVisuals[i]
+			if not frame then
+				frame = acquireProj()
+				ProjVisuals[i] = frame
+			end
+			local tip = pos + proj.velocity * 0.05 + Vector3.new(0, -55 * age * 0.05, 0)
+			local tipSp, tipOn = Camera:WorldToViewportPoint(tip)
+			if tipOn then
+				local dx = tipSp.X - sp.X
+				local dy = tipSp.Y - sp.Y
+				local len = math.sqrt(dx * dx + dy * dy)
+				if len < 1 then len = 1 end
+				local ang = math.deg(math.atan2(dy, dx))
+				local enemy = false
+				if proj.shooter and proj.shooter.Parent then
+					local shooterPlr = Players:GetPlayerFromCharacter(proj.shooter)
+					if shooterPlr then
+						enemy = isEnemy(shooterPlr, CFG.ESPTeamCheck)
+					end
+				end
+				frame.Size = UDim2.new(0, math.clamp(len, 20, 400), 0, 2)
+				frame.Position = UDim2.new(0, sp.X, 0, sp.Y)
+				frame.Rotation = ang
+				frame.BackgroundColor3 = enemy and RED or VIOLET
+				frame.Visible = true
+				keep[i] = true
+			end
+		end
+	end
+	for i, f in pairs(ProjVisuals) do
+		if not keep[i] then
+			releaseProj(f)
+			ProjVisuals[i] = nil
+		end
+	end
+end)
+
+-- Movement loops
+RunService.Stepped:Connect(function()
+	if not CFG.Noclip then return end
+	local char = LocalPlayer.Character
+	if not char then return end
+	for _, p in ipairs(char:GetDescendants()) do
+		if p:IsA("BasePart") and p.CanCollide then
+			p.CanCollide = false
+		end
+	end
+end)
+
+RunService.Heartbeat:Connect(function()
+	local hum = getHum()
+	if not hum then return end
+	if CFG.WalkSpeed and hum.WalkSpeed ~= CFG.WSpeed then
+		hum.WalkSpeed = CFG.WSpeed
+	end
+	if CFG.JumpPower then
+		hum.UseJumpPower = true
+		if hum.JumpPower ~= CFG.JPower then
+			hum.JumpPower = CFG.JPower
+		end
+	end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+	if not CFG.InfiniteJump then return end
+	local hum = getHum()
+	if hum then
+		hum:ChangeState(Enum.HumanoidStateType.Jumping)
+	end
+end)
+
+local FlyBV, FlyBG
+local function startFly()
+	local hrp = getHRP()
+	if not hrp then return end
+	FlyBV = Instance.new("BodyVelocity")
+	FlyBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+	FlyBV.Velocity = Vector3.zero
+	FlyBV.Parent = hrp
+	FlyBG = Instance.new("BodyGyro")
+	FlyBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+	FlyBG.P = 10000
+	FlyBG.CFrame = hrp.CFrame
+	FlyBG.Parent = hrp
+end
+
+local function stopFly()
+	if FlyBV then FlyBV:Destroy() FlyBV = nil end
+	if FlyBG then FlyBG:Destroy() FlyBG = nil end
+end
+
+RunService.Heartbeat:Connect(function()
+	if not CFG.Fly then
+		if FlyBV then stopFly() end
+		return
+	end
+	if not getHRP() then return end
+	if not FlyBV then startFly() return end
+	local move = Vector3.zero
+	local cf = Camera.CFrame
+	if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + cf.LookVector end
+	if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - cf.LookVector end
+	if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - cf.RightVector end
+	if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + cf.RightVector end
+	if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
+	if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move = move - Vector3.new(0, 1, 0) end
+	if move.Magnitude > 0 then move = move.Unit end
+	FlyBV.Velocity = move * CFG.FlySpeed
+	FlyBG.CFrame = cf
+end)
+
+task.spawn(function()
+	while true do
+		if CFG.AntiAFK then
+			pcall(function()
+				VirtualUser:CaptureController()
+				VirtualUser:ClickButton2(Vector2.new())
+			end)
+		end
+		task.wait(60)
+	end
+end)
+
+-- UI tabs
+local PageAim = createTab("Aim", "Aim", 2, "main")
+local PageVisuals = createTab("Visuals", "Visuals", 3, "info")
+local PageMove = createTab("Movement", "Movement", 4, "player")
+local PageMisc = createTab("Misc", "Misc", 5, "settings")
+
+do
+	tabMessages(PageAim, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Hold Right Click to aim lock on the closest enemy in FOV.",
+		"$ Wall check + team check filter targets.",
+		"> Aim Speed: 5 = slow, 100 = instant.",
+	})
+	local s = section(PageAim, "AIM LOCK")
+	addToggle(s, "Enable Aim Lock", false, function(v)
+		CFG.AimLock = v
+		FovRing.Visible = v
+	end)
+	addToggle(s, "Team Check", true, function(v) CFG.AimLockTeamCheck = v end)
+	addToggle(s, "Wall Check", true, function(v) CFG.AimLockWallCheck = v end)
+	addSlider(s, "Aim Speed (5-100)", 5, 100, 30, function(v)
+		CFG.AimLockSmooth = v / 100
+	end)
+	addSlider(s, "Aim Lock FOV", 30, 500, 150, function(v)
+		CFG.AimLockFOV = v
+		FovRing.Size = UDim2.new(0, v * 2, 0, v * 2)
+	end)
+	local t = section(PageAim, "TARGET PART")
+	addButton(t, "Target: Head", function()
+		CFG.AimLockPart = "Head"
+		notify("Aim", "Target = Head", true)
+	end)
+	addButton(t, "Target: HumanoidRootPart", function()
+		CFG.AimLockPart = "HumanoidRootPart"
+		notify("Aim", "Target = HRP", true)
+	end)
+	addButton(t, "Target: Torso", function()
+		CFG.AimLockPart = "Torso"
+		notify("Aim", "Target = Torso", true)
+	end)
+end
+
+do
+	tabMessages(PageVisuals, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Player ESP shows enemies red and teammates violet.",
+		"$ Projectile ESP tracks shots from CombatFX.",
+		"> Team check hides same-team players.",
+	})
+	local s = section(PageVisuals, "PLAYER ESP")
+	addToggle(s, "ESP Enabled", false, function(v) CFG.ESPEnabled = v end)
+	addToggle(s, "Team Check", true, function(v) CFG.ESPTeamCheck = v end)
+	addToggle(s, "Show Names", true, function(v) CFG.ESPNames = v end)
+	addToggle(s, "Show Health", true, function(v) CFG.ESPHealth = v end)
+	addToggle(s, "Show Distance", false, function(v) CFG.ESPDistance = v end)
+	local p = section(PageVisuals, "PROJECTILE ESP")
+	addToggle(p, "Projectile ESP", false, function(v) CFG.ESPProjectiles = v end)
+end
+
+do
+	tabMessages(PageMove, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> WalkSpeed / JumpPower apply while toggled on.",
+		"$ Fly uses WASD + Space / LeftShift.",
+		"> Noclip disables collisions on your character.",
+	})
+	local s = section(PageMove, "SPEED")
+	addToggle(s, "WalkSpeed", false, function(v)
+		CFG.WalkSpeed = v
+		local hum = getHum()
+		if hum then hum.WalkSpeed = v and CFG.WSpeed or 16 end
+	end)
+	addSlider(s, "WalkSpeed Value", 16, 200, 30, function(v)
+		CFG.WSpeed = v
+		if CFG.WalkSpeed then
+			local hum = getHum()
+			if hum then hum.WalkSpeed = v end
+		end
+	end)
+	addToggle(s, "JumpPower", false, function(v)
+		CFG.JumpPower = v
+		local hum = getHum()
+		if hum then
+			hum.UseJumpPower = true
+			hum.JumpPower = v and CFG.JPower or 50
+		end
+	end)
+	addSlider(s, "JumpPower Value", 50, 300, 60, function(v)
+		CFG.JPower = v
+		if CFG.JumpPower then
+			local hum = getHum()
+			if hum then
+				hum.UseJumpPower = true
+				hum.JumpPower = v
+			end
+		end
+	end)
+	local m = section(PageMove, "MOVEMENT")
+	addToggle(m, "Infinite Jump", false, function(v) CFG.InfiniteJump = v end)
+	addToggle(m, "Fly", false, function(v)
+		CFG.Fly = v
+		if not v then stopFly() end
+	end)
+	addSlider(m, "Fly Speed", 20, 200, 60, function(v) CFG.FlySpeed = v end)
+	addToggle(m, "Noclip", false, function(v) CFG.Noclip = v end)
+end
+
+do
+	tabMessages(PageMisc, {
+		"<> Script made by KHUB · Kyiel Pambid",
+		"<> Anti-AFK clicks every 60s while enabled.",
+		"$ Server hop finds a less full public server.",
+		"> Unload removes ESP / FOV helpers for this script.",
+	})
+	local s = section(PageMisc, "UTILITY")
+	addToggle(s, "Anti-AFK", false, function(v) CFG.AntiAFK = v end)
+	addButton(s, "Server Hop", function()
+		local ok, data = pcall(function()
+			return HttpService:JSONDecode(game:HttpGet(
+				"https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+			))
+		end)
+		if not ok or not data or not data.data then
+			notify("Server Hop", "Failed", false)
+			return
+		end
+		for _, server in ipairs(data.data) do
+			if server.playing < server.maxPlayers and server.id ~= game.JobId then
+				TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
+				return
+			end
+		end
+		notify("Server Hop", "No server found", false)
+	end)
+	addButton(s, "Rejoin Server", function()
+		TeleportService:Teleport(game.PlaceId, LocalPlayer)
+	end)
+	addButton(s, "Unload Script", function()
+		CFG.AimLock = false
+		CFG.ESPEnabled = false
+		CFG.ESPProjectiles = false
+		CFG.Fly = false
+		CFG.Noclip = false
+		stopFly()
+		pcall(function() EspGui:Destroy() end)
+		pcall(function() FovGui:Destroy() end)
+		notify("Unload", "Tribes helpers removed", false)
+	end, Color3.fromRGB(80, 30, 40))
+end
+
+print("[KHUB] Tribes 3v3 loaded · Hold RMB for aim lock")
