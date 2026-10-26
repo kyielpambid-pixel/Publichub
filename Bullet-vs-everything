@@ -1,0 +1,40 @@
+-- KHUB API LOADER PRO (Executor)
+local LOADER_SLUG = "bullet-vs-everything" 
+local API_URL = "https://pocket-json-postbox.lovable.app/api/bin/b79c1e5b"
+local MASTER_KEY = "c747b13d30b2d34e7891855a5719c5251adf0409ab1aa7cc"
+local HttpService = game:GetService("HttpService")
+
+local success, response = pcall(function()
+    return game:HttpGet(API_URL, true, { ["X-Master-Key"] = MASTER_KEY, ["Content-Type"] = "application/json" })
+end)
+if not success then warn("[KHUB Loader] API Connection Failed.") return end
+
+local decoded
+pcall(function()
+    local data = HttpService:JSONDecode(response)
+    if data.record then decoded = data.record else decoded = data end
+end)
+if not decoded then warn("[KHUB Loader] Invalid JSON.") return end
+
+local targetLoader = nil
+for _, loader in pairs(decoded.loaders or {}) do
+    if loader.slug == LOADER_SLUG then targetLoader = loader break end
+end
+if not targetLoader then warn("[KHUB Loader] Slug not found: " .. LOADER_SLUG) return end
+
+local publishedCode = nil
+for _, ver in pairs(targetLoader.versions or {}) do
+    if tonumber(ver.version) == tonumber(targetLoader.publishedVersion) then
+        publishedCode = ver.obfuscated break
+    end
+end
+if not publishedCode then warn("[KHUB Loader] Code missing.") return end
+
+print("[KHUB Loader] Executing: " .. targetLoader.name .. " (v" .. tostring(targetLoader.publishedVersion) .. ")")
+local func, err = loadstring(publishedCode)
+if func then
+    local execSuccess, execErr = pcall(func)
+    if not execSuccess then warn("[KHUB Loader] Execution Error: " .. tostring(execErr)) end
+else
+    warn("[KHUB Loader] Compile Error: " .. tostring(err))
+end
