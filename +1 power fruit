@@ -1,0 +1,6 @@
+-- Khub Loadstring
+-- Hosted: https://pastefy.app/KFNgmwHf/raw
+
+getgenv().KhubKey = "KHUBhttps://discord.gg/DghhdTkGft"
+
+loadstring(game:HttpGet("https://pastefy.app/KFNgmwHf/raw"))()
