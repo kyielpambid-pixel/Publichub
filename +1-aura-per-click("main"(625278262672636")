@@ -1,6 +1,108 @@
--- Khub Loadstring
--- Hosted: https://pastefy.app/MH8aIdtM/raw
+-- KHUB UNIVERSAL FAST LOADER
+-- Supports PC & Mobile Executors (Delta, Wave, Xeno, Fluxus, Krnl, etc.)
+local LOADER_SLUG = "ca484527" 
+local API_URL = "https://pocket-json-postbox.lovable.app/api/bin/22833504"
+local MASTER_KEY = "2e25049a9c88458e1fbf6567b6209071abee94a03bbfe5c3"
+local HttpService = game:GetService("HttpService")
 
-getgenv().KhubKey = "KHUBhttps://discord.gg/DghhdTkGft"
+-- Gagamit tayo ng coroutine para hindi mag-stuck yung game (Non-blocking)
+task.spawn(function()
+    local success, response = pcall(function()
+        -- 1. Try syn.request (Synapse, PC)
+        if syn and syn.request then
+            local res = syn.request({
+                Url = API_URL, 
+                Method = "GET", 
+                Headers = {["X-Master-Key"] = MASTER_KEY}
+            })
+            if res and res.Body then return res.Body end
+        end
+        
+        -- 2. Try http_request (Krnl, Fluxus, PC)
+        if http_request then
+            local res = http_request({
+                Url = API_URL, 
+                Method = "GET", 
+                Headers = {["X-Master-Key"] = MASTER_KEY}
+            })
+            if res and res.Body then return res.Body end
+        end
+        
+        -- 3. Try request (Delta, Wave, AWP, Solara - Mobile & PC)
+        if request then
+            local res = request({
+                Url = API_URL, 
+                Method = "GET", 
+                Headers = {["X-Master-Key"] = MASTER_KEY}
+            })
+            if res and res.Body then return res.Body end
+        end
+        
+        -- 4. Try HttpGet with Headers (Xeno, Newer Executors)
+        local isSuccess, res = pcall(function()
+            return game:HttpGet(API_URL, true, {["X-Master-Key"] = MASTER_KEY})
+        end)
+        if isSuccess and res then return res end
+        
+        -- 5. Fallback sa normal HttpGet (Kung naka-public yung JSON)
+        return game:HttpGet(API_URL)
+    end)
 
-loadstring(game:HttpGet("https://pastefy.app/MH8aIdtM/raw"))()
+    if not success or not response then
+        warn("[KHUB] API Connection Failed. Check if executor supports Headers.")
+        return
+    end
+
+    -- Parse JSON
+    local decoded
+    pcall(function()
+        local data = HttpService:JSONDecode(response)
+        if data.record then decoded = data.record else decoded = data end
+    end)
+
+    if not decoded then 
+        warn("[KHUB] Invalid JSON.") 
+        return 
+    end
+
+    -- Find Loader by Slug
+    local targetLoader = nil
+    for _, loader in pairs(decoded.loaders or {}) do
+        if loader.slug == LOADER_SLUG then 
+            targetLoader = loader 
+            break 
+        end
+    end
+
+    if not targetLoader then 
+        warn("[KHUB] Slug not found: " .. LOADER_SLUG) 
+        return 
+    end
+
+    -- Get Version Code
+    local publishedCode = nil
+    for _, ver in pairs(targetLoader.versions or {}) do
+        if tonumber(ver.version) == tonumber(targetLoader.publishedVersion) then
+            publishedCode = ver.obfuscated 
+            break
+        end
+    end
+
+    if not publishedCode then 
+        warn("[KHUB] Code missing for version " .. tostring(targetLoader.publishedVersion)) 
+        return 
+    end
+
+    -- Execute
+    print("[KHUB] Executing: " .. targetLoader.name .. " (v" .. tostring(targetLoader.publishedVersion) .. ")")
+    local func, err = loadstring(publishedCode)
+    
+    if func then
+        local execSuccess, execErr = pcall(func)
+        if not execSuccess then 
+            warn("[KHUB] Execution Error: " .. tostring(execErr)) 
+        end
+    else
+        warn("[KHUB] Compile Error: " .. tostring(err))
+    end
+end)
