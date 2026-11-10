@@ -1,0 +1,1275 @@
+repeat task.wait() until game:IsLoaded()
+
+local Library = loadstring(game:HttpGet("https://carbonpanel.x10.mx/api/loader.php?script=Khubv2ui"))()
+if not Library or type(Library.CreateWindow) ~= "function" then
+	warn("[KHUB] UI library failed to load")
+	return
+end
+pcall(function()
+	Library:PreloadIcons("Lucide")
+end)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local CollectionService = game:GetService("CollectionService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local TeleportService = game:GetService("TeleportService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local LocalPlayer = Players.LocalPlayer
+
+local DISCORD = "https://discord.gg/CTqBhzTGHV"
+local YOUTUBE = "https://www.youtube.com/@kyielpambid"
+
+local State = {
+	GuardFling = false,
+	AntiRagdoll = true,
+	auraRadius = 100,
+	pushVelocity = 600,
+	isRunning = false,
+	pathQueue = {},
+	currentTargetItem = nil,
+	runVelocity = nil,
+	flingCooldowns = {},
+	arrivalTime = 0,
+	MAX_WAIT_TIME = 3,
+	statusText = "Idle",
+	statusLabel = nil,
+}
+
+local SKY_LAUNCH_VELOCITY = 9000
+local SKY_DRIVE_STEP = 35
+local SKY_DRIVE_DURATION = 2.5
+
+local function setStatus(text)
+	State.statusText = text
+	pcall(function()
+		if State.statusLabel and State.statusLabel.SetText then
+			State.statusLabel:SetText("Status: " .. text)
+		end
+	end)
+end
+
+local function getTierName(item)
+	local keywords = {
+		rare = "Rare", epic = "Epic", legendary = "Legendary",
+		mythic = "Mythic", secret = "Secret", divine = "Divine",
+		common = "Common", uncommon = "Uncommon", godly = "Godly",
+	}
+	for _, tag in ipairs(CollectionService:GetTags(item)) do
+		local lowerTag = string.lower(tag)
+		for k, v in pairs(keywords) do
+			if string.find(lowerTag, k) then return v end
+		end
+	end
+	for _, attrValue in pairs(item:GetAttributes()) do
+		local lowerAttr = string.lower(tostring(attrValue))
+		for k, v in pairs(keywords) do
+			if string.find(lowerAttr, k) then return v end
+		end
+	end
+	for _, desc in ipairs(item:GetDescendants()) do
+		if desc:IsA("StringValue") then
+			local lowerVal = string.lower(desc.Value)
+			for k, v in pairs(keywords) do
+				if string.find(lowerVal, k) then return v end
+			end
+		elseif desc:IsA("TextLabel") or desc:IsA("TextButton") then
+			local lowerText = string.lower(desc.Text)
+			for k, v in pairs(keywords) do
+				if string.find(lowerText, k) then return v end
+			end
+		end
+	end
+	local lowerName = string.lower(item.Name)
+	for k, v in pairs(keywords) do
+		if string.find(lowerName, k) then return v end
+	end
+	return item.Name
+end
+
+local function getBasePart(item)
+	if item:IsA("BasePart") then return item end
+	if item:IsA("Model") or item:IsA("Tool") then
+		return item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")
+	end
+	return nil
+end
+
+local function getItemPosition(item)
+	if not item or not item.Parent then return nil end
+	local basePart = getBasePart(item)
+	if basePart then return basePart.Position end
+	if item:IsA("Model") then
+		local ok, pivot = pcall(function() return item:GetPivot() end)
+		if ok and pivot then return pivot.Position end
+	end
+	return nil
+end
+
+local function stopAutoRun()
+	if not State.isRunning then return end
+	State.isRunning = false
+	State.currentTargetItem = nil
+	State.pathQueue = {}
+	State.arrivalTime = 0
+	if State.runVelocity then
+		pcall(function() State.runVelocity:Destroy() end)
+		State.runVelocity = nil
+	end
+	local char = LocalPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hum and hrp then
+		pcall(function() hum:MoveTo(hrp.Position) end)
+	end
+	setStatus("Stopped (Manual Move)")
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+		stopAutoRun()
+	end
+end)
+
+local function flingTarget(targetChar, myRoot)
+	local hum = targetChar:FindFirstChildOfClass("Humanoid")
+	local targetRoot = targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChildWhichIsA("BasePart")
+	if not (hum and targetRoot and hum.Health > 0) then return false end
+
+	local now = tick()
+	if State.flingCooldowns[targetChar] and now - State.flingCooldowns[targetChar] < 2 then
+		return false
+	end
+	State.flingCooldowns[targetChar] = now
+
+	for _, desc in pairs(targetChar:GetDescendants()) do
+		if desc:IsA("AlignPosition") or desc:IsA("LinearVelocity") or desc:IsA("BodyPosition")
+			or desc:IsA("BodyVelocity") or desc:IsA("BodyGyro") then
+			pcall(function() desc:Destroy() end)
+		end
+		if desc:IsA("BasePart") then
+			desc.Anchored = false
+			pcall(function() desc:SetNetworkOwner(LocalPlayer) end)
+		end
+	end
+
+	hum.PlatformStand = true
+	hum.Sit = true
+	hum.WalkSpeed = 0
+
+	local direction = (targetRoot.Position - myRoot.Position).Unit
+	if direction.Y < 0.1 then
+		direction = (direction + Vector3.new(0, 0.5, 0)).Unit
+	end
+	targetRoot.AssemblyLinearVelocity = direction * State.pushVelocity
+	targetRoot.CFrame = targetRoot.CFrame + (direction * 5)
+
+	task.delay(1.5, function()
+		if hum and hum.Parent then
+			hum.PlatformStand = false
+			hum.Sit = false
+		end
+	end)
+	return true
+end
+
+local function flingGuard(guard, myRoot)
+	if not guard or not guard.Parent then return false end
+	if guard == LocalPlayer.Character then return false end
+	if Players:GetPlayerFromCharacter(guard) then return false end
+
+	local hum = guard:FindFirstChildOfClass("Humanoid")
+	local targetRoot = guard:FindFirstChild("HumanoidRootPart")
+		or (guard:IsA("BasePart") and guard)
+		or guard:FindFirstChildWhichIsA("BasePart")
+	if not targetRoot then return false end
+
+	local now = tick()
+	if State.flingCooldowns[guard] and now - State.flingCooldowns[guard] < 1.5 then return false end
+	State.flingCooldowns[guard] = now
+
+	for _, desc in pairs(guard:GetDescendants()) do
+		if desc:IsA("AlignPosition") or desc:IsA("AlignOrientation")
+			or desc:IsA("LinearVelocity") or desc:IsA("AngularVelocity")
+			or desc:IsA("BodyPosition") or desc:IsA("BodyVelocity")
+			or desc:IsA("BodyGyro") or desc:IsA("BodyAngularVelocity")
+			or desc:IsA("BodyForce") or desc:IsA("BodyThrust") then
+			pcall(function() desc:Destroy() end)
+		end
+		if desc:IsA("BasePart") then
+			pcall(function() desc:SetNetworkOwner(LocalPlayer) end)
+			pcall(function() desc.Anchored = false end)
+			pcall(function() desc.CanCollide = false end)
+		end
+	end
+
+	if hum then
+		pcall(function() hum.PlatformStand = true end)
+		pcall(function() hum.Sit = true end)
+		pcall(function() hum.WalkSpeed = 0 end)
+		pcall(function() hum.JumpPower = 0 end)
+	end
+
+	local offset = targetRoot.Position - myRoot.Position
+	local direction = Vector3.new(offset.X, 0, offset.Z)
+	if direction.Magnitude < 1 then
+		direction = myRoot.CFrame.LookVector
+	else
+		direction = direction.Unit
+	end
+	direction = (direction + Vector3.new(0, 0.55, 0)).Unit
+
+	pcall(function() targetRoot.AssemblyLinearVelocity = direction * 2200 end)
+	pcall(function()
+		targetRoot.AssemblyAngularVelocity = Vector3.new(
+			math.random(-250, 250), math.random(-250, 250), math.random(-250, 250)
+		)
+	end)
+
+	task.spawn(function()
+		local startT = tick()
+		while tick() - startT < 1.5 do
+			if not targetRoot or not targetRoot.Parent then return end
+			pcall(function() targetRoot.AssemblyLinearVelocity = direction * 2200 end)
+			pcall(function() targetRoot.CFrame = targetRoot.CFrame + direction * 12 end)
+			task.wait(0.03)
+		end
+	end)
+
+	if hum then
+		task.delay(1.5, function()
+			if hum and hum.Parent then
+				pcall(function() hum.PlatformStand = false end)
+				pcall(function() hum.Sit = false end)
+			end
+		end)
+	end
+	return true
+end
+
+local function superFlingMarites(marites, myRoot)
+	if not marites or not marites.Parent then return false end
+	if marites == LocalPlayer.Character then return false end
+
+	local hum = marites:FindFirstChildOfClass("Humanoid")
+	local targetRoot = marites:FindFirstChild("HumanoidRootPart")
+		or marites:FindFirstChildWhichIsA("BasePart")
+	if not targetRoot then return false end
+
+	local now = tick()
+	if State.flingCooldowns[marites] and now - State.flingCooldowns[marites] < 2 then return false end
+	State.flingCooldowns[marites] = now
+
+	for _, desc in pairs(marites:GetDescendants()) do
+		if desc:IsA("AlignPosition") or desc:IsA("AlignOrientation")
+			or desc:IsA("LinearVelocity") or desc:IsA("AngularVelocity")
+			or desc:IsA("BodyPosition") or desc:IsA("BodyVelocity")
+			or desc:IsA("BodyGyro") or desc:IsA("BodyAngularVelocity")
+			or desc:IsA("BodyForce") or desc:IsA("BodyThrust") then
+			pcall(function() desc:Destroy() end)
+		end
+		if desc:IsA("BasePart") then
+			pcall(function() desc:SetNetworkOwner(LocalPlayer) end)
+			pcall(function() desc.Anchored = false end)
+			pcall(function() desc.CanCollide = false end)
+		end
+	end
+
+	if hum then
+		pcall(function() hum.PlatformStand = true end)
+		pcall(function() hum.Sit = true end)
+		pcall(function() hum.WalkSpeed = 0 end)
+		pcall(function() hum.JumpPower = 0 end)
+	end
+
+	local up = Vector3.new(0, 1, 0)
+	pcall(function() targetRoot.AssemblyLinearVelocity = up * SKY_LAUNCH_VELOCITY end)
+	pcall(function()
+		targetRoot.AssemblyAngularVelocity = Vector3.new(
+			math.random(-400, 400), math.random(-400, 400), math.random(-400, 400)
+		)
+	end)
+
+	task.spawn(function()
+		local startT = tick()
+		while tick() - startT < SKY_DRIVE_DURATION do
+			if not targetRoot or not targetRoot.Parent then return end
+			pcall(function() targetRoot.AssemblyLinearVelocity = up * SKY_LAUNCH_VELOCITY end)
+			pcall(function() targetRoot.CFrame = targetRoot.CFrame + (up * SKY_DRIVE_STEP) end)
+			task.wait(0.03)
+		end
+	end)
+
+	if hum then
+		task.delay(SKY_DRIVE_DURATION, function()
+			if hum and hum.Parent then
+				pcall(function() hum.PlatformStand = false end)
+				pcall(function() hum.Sit = false end)
+			end
+		end)
+	end
+	return true
+end
+
+local function collectGuards()
+	local result = {}
+	local seen = {}
+	local map = Workspace:FindFirstChild("Map")
+	if not map then return result end
+
+	local folders = {}
+	local function tryAdd(parent)
+		if not parent then return end
+		for _, name in ipairs({"Guards", "Guard", "Guardians", "Guardian"}) do
+			local f = parent:FindFirstChild(name)
+			if f then table.insert(folders, f) end
+		end
+	end
+	tryAdd(map:FindFirstChild("Decor"))
+	tryAdd(map)
+
+	for _, folder in ipairs(folders) do
+		for _, child in ipairs(folder:GetChildren()) do
+			if not seen[child] then
+				if child:IsA("Model") or child:IsA("BasePart") then
+					seen[child] = true
+					table.insert(result, child)
+				elseif child:IsA("Folder") then
+					for _, gc in ipairs(child:GetChildren()) do
+						if not seen[gc] and (gc:IsA("Model") or gc:IsA("BasePart")) then
+							seen[gc] = true
+							table.insert(result, gc)
+						end
+					end
+				end
+			end
+		end
+	end
+	return result
+end
+
+local function getZoneEggs(zoneIndex)
+	local eggs = {}
+	local map = Workspace:FindFirstChild("Map")
+	local eggSpawns = map and map:FindFirstChild("EggSpawns")
+	if not eggSpawns then return eggs end
+	local zone = eggSpawns:FindFirstChild("Zone" .. zoneIndex)
+	if not zone then return eggs end
+	for _, item in pairs(zone:GetDescendants()) do
+		if item:IsA("Model") or item:IsA("Tool") then
+			table.insert(eggs, item)
+		elseif item:IsA("BasePart") and item.Parent and not item.Parent:IsA("Model") then
+			table.insert(eggs, item)
+		end
+	end
+	return eggs
+end
+
+local function runZone(zoneIndex)
+	local eggs = getZoneEggs(zoneIndex)
+	State.pathQueue = {}
+	for _, egg in ipairs(eggs) do
+		table.insert(State.pathQueue, egg)
+	end
+	if #State.pathQueue > 0 then
+		State.currentTargetItem = State.pathQueue[1]
+		State.arrivalTime = 0
+		State.isRunning = true
+		setStatus("Running Zone " .. zoneIndex)
+		return true
+	end
+	setStatus("Zone " .. zoneIndex .. " empty")
+	return false
+end
+
+-- Guard fling loop
+task.spawn(function()
+	local overlapParams = OverlapParams.new()
+	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+	while true do
+		task.wait(0.25)
+		if State.GuardFling then
+			local character = LocalPlayer.Character
+			local myRoot = character and character:FindFirstChild("HumanoidRootPart")
+			if myRoot then
+				overlapParams.FilterDescendantsInstances = { character }
+				local pushed = 0
+				local processed = {}
+
+				local parts = Workspace:GetPartBoundsInRadius(myRoot.Position, State.auraRadius, overlapParams)
+				for _, part in pairs(parts) do
+					local targetChar = part.Parent
+					if targetChar and targetChar:FindFirstChildOfClass("Humanoid")
+						and targetChar ~= character and not processed[targetChar] then
+						processed[targetChar] = true
+						if flingTarget(targetChar, myRoot) then
+							pushed = pushed + 1
+						end
+					end
+				end
+
+				for _, guard in ipairs(collectGuards()) do
+					if not processed[guard] then
+						local gRoot = guard:FindFirstChild("HumanoidRootPart")
+							or (guard:IsA("BasePart") and guard)
+							or guard:FindFirstChildWhichIsA("BasePart")
+						if gRoot and (gRoot.Position - myRoot.Position).Magnitude <= (State.auraRadius * 1.5) then
+							processed[guard] = true
+							local ok = false
+							if guard.Name == "Marites" then
+								ok = superFlingMarites(guard, myRoot)
+								if ok then setStatus("SENT Marites TO THE SKY") end
+							else
+								ok = flingGuard(guard, myRoot)
+							end
+							if ok then pushed = pushed + 1 end
+						end
+					end
+				end
+
+				if pushed > 0 and not State.isRunning then
+					setStatus("Repelling " .. pushed)
+				end
+			end
+		end
+	end
+end)
+
+-- Anti ragdoll + auto run
+RunService.Heartbeat:Connect(function()
+	local character = LocalPlayer.Character
+	if not character then return end
+	local hum = character:FindFirstChildOfClass("Humanoid")
+	local myRoot = character:FindFirstChild("HumanoidRootPart")
+	if not hum or not myRoot then return end
+
+	if State.AntiRagdoll then
+		if hum.PlatformStand then hum.PlatformStand = false end
+		local st = hum:GetState()
+		if st == Enum.HumanoidStateType.Physics or st == Enum.HumanoidStateType.FallingDown then
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end
+		if myRoot.AssemblyAngularVelocity.Magnitude > 5 then
+			myRoot.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+
+	if not State.isRunning then
+		if State.runVelocity then
+			pcall(function() State.runVelocity:Destroy() end)
+			State.runVelocity = nil
+		end
+		return
+	end
+
+	if State.currentTargetItem and not State.currentTargetItem.Parent then
+		table.remove(State.pathQueue, 1)
+		if #State.pathQueue > 0 then
+			State.currentTargetItem = State.pathQueue[1]
+			State.arrivalTime = 0
+			setStatus("Moving to next...")
+		else
+			State.isRunning = false
+			State.currentTargetItem = nil
+			pcall(function() hum:MoveTo(myRoot.Position) end)
+			if State.runVelocity then
+				pcall(function() State.runVelocity:Destroy() end)
+				State.runVelocity = nil
+			end
+			setStatus("Finished Zone!")
+			return
+		end
+	end
+
+	if not State.currentTargetItem then return end
+	local targetPos = getItemPosition(State.currentTargetItem)
+	if not targetPos then
+		table.remove(State.pathQueue, 1)
+		if #State.pathQueue > 0 then
+			State.currentTargetItem = State.pathQueue[1]
+			State.arrivalTime = 0
+		else
+			State.isRunning = false
+			State.currentTargetItem = nil
+			if State.runVelocity then
+				pcall(function() State.runVelocity:Destroy() end)
+				State.runVelocity = nil
+			end
+		end
+		return
+	end
+
+	local distance = (myRoot.Position - targetPos).Magnitude
+	if distance < 6 then
+		if State.arrivalTime == 0 then State.arrivalTime = tick() end
+		if tick() - State.arrivalTime > State.MAX_WAIT_TIME then
+			table.remove(State.pathQueue, 1)
+			if #State.pathQueue > 0 then
+				State.currentTargetItem = State.pathQueue[1]
+				State.arrivalTime = 0
+				setStatus("Force moving to next...")
+			else
+				State.isRunning = false
+				State.currentTargetItem = nil
+				pcall(function() hum:MoveTo(myRoot.Position) end)
+				if State.runVelocity then
+					pcall(function() State.runVelocity:Destroy() end)
+					State.runVelocity = nil
+				end
+				setStatus("Zone Finished!")
+			end
+			return
+		end
+		if not State.runVelocity then
+			State.runVelocity = Instance.new("BodyVelocity")
+			State.runVelocity.MaxForce = Vector3.new(math.huge, 0, math.huge)
+			State.runVelocity.Parent = myRoot
+		end
+		State.runVelocity.Velocity = Vector3.zero
+		hum:MoveTo(myRoot.Position)
+		setStatus(string.format("Waiting for hatch... (%.1fs)", State.MAX_WAIT_TIME - (tick() - State.arrivalTime)))
+	else
+		if not State.runVelocity then
+			for _, desc in pairs(character:GetDescendants()) do
+				if desc:IsA("BodyPosition") or desc:IsA("BodyVelocity") or desc:IsA("AlignPosition") then
+					pcall(function() desc:Destroy() end)
+				end
+			end
+			State.runVelocity = Instance.new("BodyVelocity")
+			State.runVelocity.MaxForce = Vector3.new(math.huge, 0, math.huge)
+			State.runVelocity.Parent = myRoot
+		end
+		hum:MoveTo(targetPos)
+		hum:ChangeState(Enum.HumanoidStateType.Running)
+		local direction = (targetPos - myRoot.Position).Unit
+		State.runVelocity.Velocity = direction * 125
+	end
+end)
+
+pcall(function()
+	LocalPlayer.Idled:Connect(function()
+		pcall(function()
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton2(Vector2.new())
+		end)
+	end)
+end)
+
+local function playKHUBIntro()
+	local _I,_U,_C,_TI,_Us,_tw,_ts,_UD,_mc,_mf,_ma,_mh,_mx,_mn,_ti,_tr,_EGB,_ESQ,_ESB,_EDO,_EDI,_BgT,_BgC,_BSP,_TC3,_ZI,_TSz=Instance.new,UDim2.new,Color3.fromRGB,TweenInfo.new,UDim2.fromScale,task.wait,task.spawn,UDim.new,math.clamp,math.floor,math.abs,math.huge,math.max,math.min,table.insert,table.remove,Enum.Font.GothamBold,Enum.EasingStyle.Quad,Enum.EasingStyle.Back,Enum.EasingDirection.Out,Enum.EasingDirection.InOut,"BackgroundTransparency","BackgroundColor3","BorderSizePixel","TextColor3","ZIndex","TextSize"
+
+	local Players=game:GetService("Players")
+	local TweenService=game:GetService("TweenService")
+	local Lighting=game:GetService("Lighting")
+	local RunService=game:GetService("RunService")
+	local TextService=game:GetService("TextService")
+	local UserInputService=game:GetService("UserInputService")
+
+	local player=Players.LocalPlayer
+	local playerGui=player:WaitForChild("PlayerGui")
+
+	pcall(function()
+		local old=playerGui:FindFirstChild("KHUBIntro")
+		if old then old:Destroy() end
+	end)
+
+	local screenGui=_I("ScreenGui")
+	screenGui.Name="KHUBIntro"
+	screenGui.IgnoreGuiInset=true
+	screenGui.ResetOnSpawn=false
+	screenGui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+	screenGui.DisplayOrder=2000
+	screenGui.Parent=playerGui
+
+	local introSound,blur,skipConn=nil,nil,nil
+	local skipped,finished=false,false
+	local SOUND_ID=(_G and _G.__KHUBIntroSoundId and tonumber(_G.__KHUBIntroSoundId)) or 120267378058133
+	local SKIP_SECONDS=10
+	local MAIN_COLOR=_C(157,78,221)
+	local GLOW_COLOR=_C(110,40,180)
+	local LIGHT_COLOR=_C(210,140,255)
+	local ACCENT_COLOR=_C(247,215,148)
+	local WHITE=_C(255,255,255)
+	local BLACK=_C(0,0,0)
+
+	local function cleanupAll()
+		if finished then return end
+		finished=true
+		skipped=true
+		pcall(function() if introSound then introSound:Stop(); introSound:Destroy(); introSound=nil end end)
+		pcall(function() if blur then blur:Destroy(); blur=nil end end)
+		pcall(function() if screenGui then screenGui:Destroy(); screenGui=nil end end)
+		pcall(function() if skipConn then skipConn:Disconnect(); skipConn=nil end end)
+		pcall(function()
+			local pg=player:FindFirstChild("PlayerGui")
+			if pg then local o=pg:FindFirstChild("KHUBIntro"); if o then o:Destroy() end end
+		end)
+	end
+
+	local function requestSkip()
+		if skipped then return end
+		skipped=true
+		cleanupAll()
+	end
+
+	local function waitOrSkip(sec)
+		local t0=os.clock()
+		while not skipped and (os.clock()-t0)<sec do task.wait(0.03) end
+		return skipped
+	end
+
+	task.delay(8, function()
+		if not finished then cleanupAll() end
+	end)
+
+	do
+		local skipBtn=_I("TextButton")
+		skipBtn.Size=_U(0,100,0,36)
+		skipBtn.Position=_U(1,-118,0,20)
+		skipBtn.BackgroundColor3=_C(20,16,32)
+		skipBtn.BackgroundTransparency=0.1
+		skipBtn.BorderSizePixel=0
+		skipBtn.Text="SKIP  ›"
+		skipBtn.Font=Enum.Font.GothamBold
+		skipBtn.TextSize=14
+		skipBtn.TextColor3=_C(245,247,255)
+		skipBtn.ZIndex=100
+		skipBtn.Parent=screenGui
+		local sc=_I("UICorner"); sc.CornerRadius=_UD(0,8); sc.Parent=skipBtn
+		local ss=_I("UIStroke"); ss.Color=MAIN_COLOR; ss.Thickness=1.5; ss.Transparency=0.2; ss.Parent=skipBtn
+		skipBtn.MouseButton1Click:Connect(requestSkip)
+		skipConn=UserInputService.InputBegan:Connect(function(input,gp)
+			if gp then return end
+			if input.KeyCode==Enum.KeyCode.Space or input.KeyCode==Enum.KeyCode.Return then requestSkip() end
+		end)
+	end
+
+	blur=_I("BlurEffect"); blur.Size=0; blur.Parent=Lighting
+
+	local overlay=_I("Frame"); overlay.Size=_Us(1,1); overlay[_BgC]=_C(0,0,0); overlay[_BgT]=0.3; overlay[_BSP]=0; overlay[_ZI]=1; overlay.Parent=screenGui
+	local darkOverlay=_I("Frame"); darkOverlay.Size=_Us(1,1); darkOverlay[_BgC]=_C(8,3,18); darkOverlay[_BgT]=0.5; darkOverlay[_BSP]=0; darkOverlay[_ZI]=1; darkOverlay.Parent=screenGui
+	local vignette=_I("ImageLabel"); vignette.Size=_Us(1,1); vignette[_BgT]=1; vignette.Image="rbxassetid://195611797"; vignette.ImageColor3=BLACK; vignette.ImageTransparency=0.35; vignette[_ZI]=2; vignette.Parent=screenGui
+
+	local container=_I("Frame")
+	container.Size=_U(0,900,0,200)
+	container.AnchorPoint=Vector2.new(0.5,0.5)
+	container.Position=_U(0.5,0,0.5,0)
+	container[_BgT]=1; container[_BSP]=0; container.ClipsDescendants=false; container[_ZI]=5; container.Parent=screenGui
+
+	local particleContainer=_I("Frame"); particleContainer.Size=_Us(1,1); particleContainer[_BgT]=1; particleContainer[_ZI]=8; particleContainer.Parent=screenGui
+
+	local function createParticle()
+		if skipped or not screenGui then return end
+		local p=_I("Frame")
+		p.Size=_U(0,math.random(3,6),0,math.random(3,6))
+		p.Position=_U(0.5+math.random(-30,30)/100,0,0.5+math.random(-20,20)/100,0)
+		p[_BgC]=math.random()<0.5 and MAIN_COLOR or LIGHT_COLOR
+		p[_BgT]=0; p[_BSP]=0; p[_ZI]=8; p.Parent=particleContainer
+		local c=_I("UICorner"); c.CornerRadius=_UD(1,0); c.Parent=p
+		local tw=TweenService:Create(p,_TI(1.5+math.random()*1.5,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),{
+			Position=_U(0.5+math.random(-40,40)/100,0,0.5+math.random(-40,20)/100,0),
+			BackgroundTransparency=1, Size=_U(0,0,0,0)
+		})
+		tw:Play(); tw.Completed:Connect(function() p:Destroy() end)
+	end
+
+	local leftLabel=_I("TextLabel")
+	leftLabel.Size=_U(0,550,1,0); leftLabel.AnchorPoint=Vector2.new(1,0.5); leftLabel.Position=_U(0.5,-12,0.5,0)
+	leftLabel[_BgT]=1; leftLabel.Text="KHUB"; leftLabel[_TC3]=WHITE; leftLabel.TextStrokeColor3=BLACK; leftLabel.TextStrokeTransparency=0
+	leftLabel.Font=Enum.Font.GothamBlack; leftLabel[_TSz]=92; leftLabel.TextXAlignment=Enum.TextXAlignment.Right
+	leftLabel.TextTransparency=1; leftLabel[_ZI]=5; leftLabel.Parent=container
+
+	local rightLabel=_I("TextLabel")
+	rightLabel.Size=_U(0,450,1,0); rightLabel.AnchorPoint=Vector2.new(0,0.5); rightLabel.Position=_U(0.5,-12,0.5,0)
+	rightLabel[_BgT]=1; rightLabel.Text="BALUT"; rightLabel[_TC3]=MAIN_COLOR; rightLabel.TextStrokeColor3=BLACK; rightLabel.TextStrokeTransparency=0
+	rightLabel.Font=Enum.Font.GothamBlack; rightLabel[_TSz]=72; rightLabel.TextXAlignment=Enum.TextXAlignment.Left
+	rightLabel.TextTransparency=1; rightLabel[_ZI]=5; rightLabel.Parent=container
+
+	local mainLabel=_I("TextLabel")
+	mainLabel.Size=_U(1,0,1,0); mainLabel.AnchorPoint=Vector2.new(0.5,0.5); mainLabel.Position=_U(0.5,0,0.5,0)
+	mainLabel[_BgT]=1; mainLabel.Text="KHUB BALUT"; mainLabel[_TC3]=WHITE; mainLabel.TextStrokeColor3=BLACK; mainLabel.TextStrokeTransparency=0
+	mainLabel.Font=Enum.Font.GothamBlack; mainLabel[_TSz]=72; mainLabel.TextXAlignment=Enum.TextXAlignment.Center
+	mainLabel.TextTransparency=1; mainLabel[_ZI]=5; mainLabel.Parent=container
+
+	local lightBeam=_I("Frame"); lightBeam.Size=_U(0,0,1.1,0); lightBeam.AnchorPoint=Vector2.new(0,0.5); lightBeam.Position=_U(0,-20,0.5,0)
+	lightBeam[_BgC]=MAIN_COLOR; lightBeam[_BgT]=0.5; lightBeam[_BSP]=0; lightBeam[_ZI]=6; lightBeam.Parent=container
+	local beamGlow=_I("Frame"); beamGlow.Size=_U(0,0,1.3,0); beamGlow.AnchorPoint=Vector2.new(0,0.5); beamGlow.Position=_U(0,-20,0.5,0)
+	beamGlow[_BgC]=GLOW_COLOR; beamGlow[_BgT]=0.7; beamGlow[_BSP]=0; beamGlow[_ZI]=5; beamGlow.Parent=container
+	local beamSparkles=_I("Frame"); beamSparkles.Size=_U(0,0,1,0); beamSparkles.AnchorPoint=Vector2.new(0,0.5); beamSparkles.Position=_U(0,-20,0.5,0)
+	beamSparkles[_BgC]=WHITE; beamSparkles[_BgT]=0.8; beamSparkles[_BSP]=0; beamSparkles[_ZI]=7; beamSparkles.Parent=container
+
+	local subLabel=_I("TextLabel"); subLabel.Size=_U(1,0,0,45); subLabel.AnchorPoint=Vector2.new(0.5,0); subLabel.Position=_U(0.5,0,0.5,85)
+	subLabel[_BgT]=1; subLabel.Text="STEAL A BALUT"; subLabel[_TC3]=MAIN_COLOR; subLabel.Font=Enum.Font.GothamBold; subLabel[_TSz]=16
+	subLabel.TextXAlignment=Enum.TextXAlignment.Center; subLabel.TextTransparency=1; subLabel[_ZI]=5; subLabel.Parent=screenGui
+
+	local subLabel2=_I("TextLabel"); subLabel2.Size=_U(1,0,0,28); subLabel2.AnchorPoint=Vector2.new(0.5,0); subLabel2.Position=_U(0.5,0,0.5,120)
+	subLabel2[_BgT]=1; subLabel2.Text="BY KYIEL PAMBID"; subLabel2[_TC3]=ACCENT_COLOR; subLabel2.Font=Enum.Font.GothamBold; subLabel2[_TSz]=13
+	subLabel2.TextXAlignment=Enum.TextXAlignment.Center; subLabel2.TextTransparency=1; subLabel2[_ZI]=5; subLabel2.Parent=screenGui
+
+	local accentBar=_I("Frame"); accentBar.Size=_U(0,0,0,3); accentBar.AnchorPoint=Vector2.new(0.5,0); accentBar.Position=_U(0.5,0,0.5,78)
+	accentBar[_BgC]=MAIN_COLOR; accentBar[_BgT]=0; accentBar[_BSP]=0; accentBar[_ZI]=5; accentBar.Parent=screenGui
+	local ac=_I("UICorner"); ac.CornerRadius=_UD(0,3); ac.Parent=accentBar
+
+	local flashFrame=_I("Frame"); flashFrame.Size=_Us(1,1); flashFrame[_BgC]=WHITE; flashFrame[_BgT]=1; flashFrame[_BSP]=0; flashFrame[_ZI]=10; flashFrame.Parent=screenGui
+	local glitchContainer=_I("Frame"); glitchContainer.Size=_U(1,0,1,0); glitchContainer[_BgT]=1; glitchContainer[_ZI]=6; glitchContainer.Parent=screenGui
+	local dripContainer=_I("Frame"); dripContainer.Size=_U(1,0,1,0); dripContainer[_BgT]=1; dripContainer[_ZI]=7; dripContainer.Parent=screenGui
+
+	local function doFlash(color,alpha,duration)
+		if skipped or not screenGui then return end
+		flashFrame[_BgC]=color or WHITE
+		flashFrame[_BgT]=1-(alpha or 0.85)
+		task.delay(duration or 0.06, function()
+			if skipped or not screenGui then return end
+			pcall(function() TweenService:Create(flashFrame,_TI(0.1,_ESQ),{BackgroundTransparency=1}):Play() end)
+		end)
+	end
+
+	local function runLightBeam()
+		if skipped or not screenGui then return end
+		lightBeam.Size=_U(0,50,1.1,0); beamGlow.Size=_U(0,75,1.3,0); beamSparkles.Size=_U(0,50,1,0)
+		lightBeam[_BgT]=0.35; beamGlow[_BgT]=0.55; beamSparkles[_BgT]=0.75
+		local beamTween=TweenService:Create(lightBeam,_TI(0.8,_ESQ,_EDI),{Position=_U(1,20,0.5,0)})
+		beamTween:Play()
+		TweenService:Create(beamGlow,_TI(0.8,_ESQ,_EDI),{Position=_U(1,20,0.5,0)}):Play()
+		TweenService:Create(beamSparkles,_TI(0.8,_ESQ,_EDI),{Position=_U(1,20,0.5,0)}):Play()
+		local pulseCount=0
+		local pulseConnection
+		pulseConnection=RunService.Heartbeat:Connect(function()
+			if skipped then if pulseConnection then pulseConnection:Disconnect() end return end
+			pulseCount=pulseCount+1
+			if pulseCount%3==0 then
+				local p=0.3+math.sin(pulseCount*0.5)*0.15
+				lightBeam[_BgT]=0.3-(p*0.2); beamGlow[_BgT]=0.5-(p*0.1); beamSparkles[_BgT]=0.7-(p*0.15)
+			end
+		end)
+		local t0=os.clock()
+		while beamTween.PlaybackState==Enum.PlaybackState.Playing and not skipped and (os.clock()-t0)<1.2 do task.wait(0.03) end
+		if pulseConnection then pulseConnection:Disconnect() end
+		if skipped or not screenGui then return end
+		pcall(function()
+			TweenService:Create(lightBeam,_TI(0.25),{BackgroundTransparency=1,Size=_U(0,0,1.1,0)}):Play()
+			TweenService:Create(beamGlow,_TI(0.25),{BackgroundTransparency=1,Size=_U(0,0,1.3,0)}):Play()
+			TweenService:Create(beamSparkles,_TI(0.25),{BackgroundTransparency=1,Size=_U(0,0,1,0)}):Play()
+		end)
+	end
+
+	local glitchChars={"!","#","%","/","[","]","=","*","^","~"}
+	local function glitchText(lbl,original)
+		if skipped or not screenGui then return end
+		for i=1,4 do
+			if skipped then return end
+			local s=""
+			for c in original:gmatch(".") do s=s..(math.random()<0.35 and glitchChars[math.random(#glitchChars)] or c) end
+			lbl.Text=s; _tw(0.03)
+		end
+		if not skipped then lbl.Text=original end
+	end
+
+	local function addGlitchBar()
+		if skipped or not screenGui then return end
+		local bar=_I("Frame")
+		bar.Size=_U(1,0,0,math.random(2,12)); bar.Position=_U(0,0,math.random(10,90)/100,0)
+		bar[_BgC]=MAIN_COLOR; bar[_BgT]=math.random(45,70)/100; bar[_BSP]=0; bar[_ZI]=6; bar.Parent=glitchContainer
+		task.delay(0.1, function()
+			if bar and bar.Parent then
+				TweenService:Create(bar,_TI(0.1),{BackgroundTransparency=1}):Play()
+				task.delay(0.1, function() bar:Destroy() end)
+			end
+		end)
+	end
+
+	local function shakeScreen(intensity,duration)
+		if skipped or not screenGui then return end
+		local startTime=tick()
+		local steps=math.ceil(duration/0.05)
+		for _=1,steps do
+			if skipped then return end
+			local elapsed=tick()-startTime
+			local cur=intensity*(1-(elapsed/duration)); if cur<1 then cur=1 end
+			local ox=math.random(-_mf(cur),_mf(cur))
+			local oy=math.random(-_mf(cur*0.5),_mf(cur*0.5))
+			leftLabel.Position=_U(0.5,-12+ox,0.5,oy)
+			rightLabel.Position=_U(0.5,12+ox,0.5,oy)
+			_tw(0.05)
+		end
+		if skipped or not screenGui then return end
+		pcall(function()
+			TweenService:Create(leftLabel,_TI(0.05),{Position=_U(0.5,-12,0.5,0)}):Play()
+			TweenService:Create(rightLabel,_TI(0.05),{Position=_U(0.5,12,0.5,0)}):Play()
+		end)
+	end
+
+	local function setupAudio()
+		introSound=_I("Sound")
+		introSound.SoundId="rbxassetid://"..SOUND_ID
+		introSound.Volume=0.7; introSound.Looped=false; introSound.Parent=screenGui
+		local loaded=false
+		pcall(function()
+			if introSound.IsLoaded then loaded=true else
+				local conn; conn=introSound.Loaded:Connect(function() loaded=true; if conn then conn:Disconnect() end end)
+				local t0=os.clock()
+				while not loaded and not skipped and (os.clock()-t0)<3 do task.wait(0.05) end
+				if conn then pcall(function() conn:Disconnect() end) end
+			end
+		end)
+		if skipped then return end
+		pcall(function() introSound:Play(); introSound.TimePosition=SKIP_SECONDS end)
+	end
+
+	local function fadeOutAudio(duration)
+		if not introSound then return end
+		local startVolume=introSound.Volume
+		for i=1,10 do
+			if skipped or not introSound then break end
+			introSound.Volume=startVolume*(1-(i/10)); _tw(duration/10)
+		end
+		if introSound then introSound.Volume=0; pcall(function() introSound:Stop() end) end
+	end
+
+	local function stopAudio()
+		if introSound then pcall(function() introSound:Stop() end); pcall(function() introSound:Destroy() end); introSound=nil end
+	end
+
+	local activeDrips=0
+	local function createDrip(startX,startY,width,height,duration,delay)
+		if skipped then return end
+		_tw(delay)
+		if skipped or not screenGui then return end
+		activeDrips=activeDrips+1
+		local drip=_I("Frame")
+		drip.Size=_U(0,width,0,height); drip.Position=_U(0.5,startX,0.5,startY)
+		drip[_BgC]=MAIN_COLOR; drip[_BgT]=0.25; drip[_BSP]=0; drip[_ZI]=7; drip.Parent=dripContainer
+		local dc=_I("UICorner"); dc.CornerRadius=_UD(0,4); dc.Parent=drip
+		TweenService:Create(drip,_TI(duration*0.35),{Size=_U(0,width,0,height+22),BackgroundTransparency=0.1}):Play()
+		_tw(duration*0.35)
+		if skipped then pcall(function() drip:Destroy() end); activeDrips=math.max(0,activeDrips-1); return end
+		local fall=TweenService:Create(drip,_TI(duration*0.65,_ESQ,Enum.EasingDirection.In),{
+			Position=_U(0.5,startX+math.random(-3,3),0.5,startY+90), BackgroundTransparency=1
+		})
+		fall:Play()
+		fall.Completed:Connect(function() drip:Destroy(); activeDrips=math.max(0,activeDrips-1) end)
+	end
+
+	local function startDripping()
+		if skipped or not screenGui then return end
+		local fullText="KHUB"
+		local font=Enum.Font.GothamBlack
+		local textSize=92
+		local textBoundsFull=TextService:GetTextSize(fullText,textSize,font,Vector2.new(_mh,_mh))
+		local textHeight=textBoundsFull.Y
+		local delayCounter=0
+		local drips={}
+		for i=1,#fullText do
+			local char=fullText:sub(i,i)
+			local charBounds=TextService:GetTextSize(char,textSize,font,Vector2.new(_mh,_mh))
+			local charWidth=charBounds.X
+			local precedingWidth=0
+			if i>1 then precedingWidth=TextService:GetTextSize(fullText:sub(1,i-1),textSize,font,Vector2.new(_mh,_mh)).X end
+			local totalTextWidth=textBoundsFull.X
+			local charCenterX=-totalTextWidth/2+precedingWidth+charWidth/2
+			_ti(drips,{
+				startX=charCenterX+math.random(-2,2),
+				startY=textHeight/2+3+math.random(0,4),
+				width=_mc(_mf(charWidth*0.35),3,7),
+				height=math.random(4,7),
+				duration=0.5+math.random()*0.2,
+				delay=delayCounter*0.07
+			})
+			delayCounter=delayCounter+1
+		end
+		for _,d in ipairs(drips) do
+			if skipped then break end
+			createDrip(d.startX,d.startY,d.width,d.height,d.duration,d.delay)
+		end
+	end
+
+	setupAudio()
+	if skipped then cleanupAll(); return end
+
+	leftLabel.Position=_U(-0.9,0,-0.6,0); rightLabel.Position=_U(1.9,0,1.6,0)
+	leftLabel.Rotation=-30; rightLabel.Rotation=30
+
+	pcall(function()
+		TweenService:Create(blur,_TI(0.7),{Size=18}):Play()
+		TweenService:Create(overlay,_TI(0.7),{BackgroundTransparency=0.2}):Play()
+		TweenService:Create(darkOverlay,_TI(0.7),{BackgroundTransparency=0.4}):Play()
+	end)
+
+	if waitOrSkip(0.35) then cleanupAll(); return end
+	TweenService:Create(leftLabel,_TI(0.45),{TextTransparency=0}):Play()
+	TweenService:Create(rightLabel,_TI(0.45),{TextTransparency=0}):Play()
+	TweenService:Create(leftLabel,_TI(0.55,Enum.EasingStyle.Elastic,_EDO),{Position=_U(0.5,-240,0.5,-80),Rotation=-15}):Play()
+	TweenService:Create(rightLabel,_TI(0.55,Enum.EasingStyle.Elastic,_EDO),{Position=_U(0.5,140,0.5,80),Rotation=15}):Play()
+	if waitOrSkip(0.45) then cleanupAll(); return end
+
+	local smooth=_TI(0.4,_ESQ,_EDO)
+	TweenService:Create(leftLabel,smooth,{Position=_U(0.5,-180,0.5,-50),Rotation=-8}):Play()
+	TweenService:Create(rightLabel,smooth,{Position=_U(0.5,90,0.5,50),Rotation=8}):Play()
+	if waitOrSkip(0.35) then cleanupAll(); return end
+	TweenService:Create(leftLabel,smooth,{Position=_U(0.5,-120,0.5,-25),Rotation=-4}):Play()
+	TweenService:Create(rightLabel,smooth,{Position=_U(0.5,40,0.5,25),Rotation=4}):Play()
+	if waitOrSkip(0.3) then cleanupAll(); return end
+	TweenService:Create(leftLabel,smooth,{Position=_U(0.5,-60,0.5,-10),Rotation=-2}):Play()
+	TweenService:Create(rightLabel,smooth,{Position=_U(0.5,-10,0.5,10),Rotation=2}):Play()
+	if waitOrSkip(0.25) then cleanupAll(); return end
+
+	_ts(function() for i=1,30 do if skipped then break end createParticle(); _tw(0.05) end end)
+
+	local glitchEnd=tick()+1.1
+	while tick()<glitchEnd do
+		if skipped then cleanupAll(); return end
+		local ox=math.random(-20,20); local oy=math.random(-10,10)
+		leftLabel.Position=_U(0.5,-60+ox,0.5,-10+oy)
+		rightLabel.Position=_U(0.5,-10+ox,0.5,10+oy)
+		if math.random()<0.35 then _ts(glitchText,leftLabel,"KHUB") end
+		if math.random()<0.35 then _ts(glitchText,rightLabel,"BALUT") end
+		if math.random()<0.4 then addGlitchBar() end
+		if math.random()<0.1 then doFlash(MAIN_COLOR,0.2,0.03) end
+		_tw(0.045)
+	end
+	if skipped then cleanupAll(); return end
+
+	leftLabel.Visible=false; rightLabel.Visible=false; mainLabel.TextTransparency=0
+	doFlash(MAIN_COLOR,0.5,0.05)
+	if waitOrSkip(0.08) then cleanupAll(); return end
+	TweenService:Create(mainLabel,_TI(0.15,_ESB,Enum.EasingDirection.In),{TextSize=78}):Play()
+	if waitOrSkip(0.15) then cleanupAll(); return end
+	TweenService:Create(mainLabel,_TI(0.1),{TextSize=72}):Play()
+	doFlash(WHITE,0.95,0.05)
+	if waitOrSkip(0.02) then cleanupAll(); return end
+	doFlash(MAIN_COLOR,0.65,0.08)
+	_ts(shakeScreen,10,0.25)
+	_ts(runLightBeam)
+	TweenService:Create(mainLabel,_TI(0.4,_ESQ),{TextColor3=MAIN_COLOR}):Play()
+	TweenService:Create(accentBar,_TI(0.5,Enum.EasingStyle.Elastic,_EDO),{Size=_U(0,420,0,3)}):Play()
+	if waitOrSkip(0.2) then cleanupAll(); return end
+	TweenService:Create(subLabel,_TI(0.4),{TextTransparency=0.05}):Play()
+	TweenService:Create(subLabel2,_TI(0.4),{TextTransparency=0.15}):Play()
+	if waitOrSkip(0.1) then cleanupAll(); return end
+	doFlash(WHITE,0.3,0.04)
+	TweenService:Create(subLabel,_TI(0.2),{TextSize=17}):Play()
+	if waitOrSkip(0.2) then cleanupAll(); return end
+	TweenService:Create(subLabel,_TI(0.2),{TextSize=16}):Play()
+	_ts(function() for i=1,40 do if skipped then break end createParticle(); _tw(0.08) end end)
+	if waitOrSkip(0.9) then cleanupAll(); return end
+	startDripping()
+	local dripT0=os.clock()
+	while activeDrips>0 and not skipped and (os.clock()-dripT0)<2 do _tw(0.1) end
+	if waitOrSkip(0.45) then cleanupAll(); return end
+	fadeOutAudio(1.0)
+	if skipped then cleanupAll(); return end
+	local fadeInfo=_TI(0.85,_ESQ,Enum.EasingDirection.In)
+	pcall(function()
+		TweenService:Create(mainLabel,fadeInfo,{TextTransparency=1}):Play()
+		TweenService:Create(subLabel,fadeInfo,{TextTransparency=1}):Play()
+		TweenService:Create(subLabel2,fadeInfo,{TextTransparency=1}):Play()
+		TweenService:Create(accentBar,fadeInfo,{BackgroundTransparency=1}):Play()
+		TweenService:Create(overlay,fadeInfo,{BackgroundTransparency=1}):Play()
+		TweenService:Create(darkOverlay,fadeInfo,{BackgroundTransparency=1}):Play()
+		if blur then TweenService:Create(blur,_TI(0.85),{Size=0}):Play() end
+		TweenService:Create(dripContainer,fadeInfo,{BackgroundTransparency=1}):Play()
+	end)
+	if waitOrSkip(0.9) then cleanupAll(); return end
+	stopAudio()
+	cleanupAll()
+end
+
+print("[KHUB] Playing intro...")
+local _introOk, _introErr = pcall(playKHUBIntro)
+if not _introOk then
+	warn("[KHUB Intro ERROR]", _introErr)
+end
+pcall(function()
+	local pg = LocalPlayer:FindFirstChild("PlayerGui")
+	if pg then
+		local o = pg:FindFirstChild("KHUBIntro")
+		if o then o:Destroy() end
+	end
+end)
+pcall(function()
+	for _, s in ipairs(game:GetService("SoundService"):GetDescendants()) do
+		if s:IsA("Sound") and tostring(s.SoundId):find("120267378058133") then
+			s:Stop()
+			s:Destroy()
+		end
+	end
+end)
+print("[KHUB] Intro done")
+
+local preferredStyle = "MacLauncher"
+pcall(function()
+	if Library.GetStyles then
+		local styles = Library:GetStyles()
+		-- order: Perplexity, MacLauncher, OperaGX, ClaudeCode
+		-- auto-pick the one after Perplexity when available
+		local ids = {}
+		for _, info in ipairs(styles) do
+			table.insert(ids, info.Id or info.Name or info.Display)
+		end
+		for i, id in ipairs(ids) do
+			if tostring(id):lower():find("perplex") and ids[i + 1] then
+				preferredStyle = ids[i + 1]
+				break
+			end
+		end
+		if preferredStyle == "MacLauncher" then
+			for _, id in ipairs(ids) do
+				if tostring(id) == "MacLauncher" then
+					preferredStyle = "MacLauncher"
+					break
+				end
+			end
+		end
+	end
+end)
+
+local Window = Library:CreateWindow({
+	Title = "KHUB · Steal a Balut",
+	Version = "v1",
+	Icon = "egg",
+	Style = preferredStyle,
+	ForceStyle = true,
+	Folder = "KHUB_StealABalut_v2",
+	MenuKey = Enum.KeyCode.RightShift,
+	Status = "KHUB",
+	AdvancedSettings = true,
+	Blur = true,
+	Palette = true,
+	AutoScale = true,
+})
+
+pcall(function()
+	if Window.SetStyle then
+		Window:SetStyle(preferredStyle)
+	end
+end)
+pcall(function()
+	if Window.SetAccent then
+		Window:SetAccent(Color3.fromRGB(139, 92, 246))
+	end
+end)
+pcall(function()
+	if Window.SetAdvancedSettings then
+		Window:SetAdvancedSettings(true)
+	end
+end)
+
+local function notify(title, content, ok)
+	pcall(function()
+		Window:Notify({
+			Title = title or "KHUB",
+			Content = content or "",
+			Type = ok and "Success" or "Warning",
+			Duration = 3,
+		})
+	end)
+end
+
+local HomeTab = Window:AddTab({ Title = "Home", Icon = "home" })
+local MainTab = Window:AddTab({ Title = "Main", Icon = "shield" })
+local ZonesTab = Window:AddTab({ Title = "Zones", Icon = "map" })
+local ServerTab = Window:AddTab({ Title = "Server", Icon = "server" })
+local CreditsTab = Window:AddTab({ Title = "Credits", Icon = "star" })
+
+do
+	local Welcome = HomeTab:AddSection({ Title = "Welcome", Icon = "sparkles" })
+	Welcome:AddParagraph({
+		Title = "KHUB",
+		Content = "<> Script by KHUB · Kyiel Pambid\n$ Toggle UI: RightShift\n> Steal a Balut automations",
+	})
+	local Profile = HomeTab:AddSection({ Title = "Profile", Icon = "user" })
+	Profile:AddParagraph({
+		Title = "Playing as",
+		Content = "<> " .. tostring(LocalPlayer.DisplayName),
+	})
+	local How = HomeTab:AddSection({ Title = "How to use", Icon = "info" })
+	How:AddParagraph({
+		Title = "Quick start",
+		Content = "<> Main = Guard Fling + Anti-Ragdoll\n$ Zones = run Zone 1-7 egg path\n> Click/touch stops auto run",
+	})
+end
+
+do
+	local Info = MainTab:AddSection({ Title = "Instructions", Icon = "info" })
+	Info:AddParagraph({
+		Title = "Combat",
+		Content = "<> Guard Fling pushes players + guards in radius\n$ Marites gets sky launch\n> Anti-Ragdoll keeps you standing\n<> Click/touch cancels auto zone run",
+	})
+	local Combat = MainTab:AddSection({ Title = "Combat", Icon = "shield" })
+	Combat:AddToggle({
+		Text = "Guard Fling",
+		Description = "Aura fling players and guards",
+		Icon = "shield",
+		Default = false,
+		Flag = "GuardFling",
+		Callback = function(v)
+			State.GuardFling = v == true
+			notify("Guard Fling", State.GuardFling and "ON" or "OFF", State.GuardFling)
+		end,
+	})
+	Combat:AddToggle({
+		Text = "Anti-Ragdoll",
+		Description = "Always recover from physics states",
+		Icon = "heart",
+		Default = true,
+		Flag = "AntiRagdoll",
+		Callback = function(v)
+			State.AntiRagdoll = v == true
+			notify("Anti-Ragdoll", State.AntiRagdoll and "ON" or "OFF", State.AntiRagdoll)
+		end,
+	})
+	Combat:AddSlider({
+		Text = "Aura Radius",
+		Icon = "circle",
+		Min = 20,
+		Max = 200,
+		Step = 5,
+		Default = 100,
+		Flag = "AuraRadius",
+		Callback = function(v)
+			State.auraRadius = tonumber(v) or 100
+		end,
+	})
+	Combat:AddButton({
+		Text = "Stop Auto Run",
+		Callback = function()
+			stopAutoRun()
+			notify("Run", "Stopped", true)
+		end,
+	})
+	State.statusLabel = Combat:AddLabel({ Text = "Status: Idle", Icon = "activity" })
+end
+
+do
+	local Info = ZonesTab:AddSection({ Title = "Instructions", Icon = "info" })
+	Info:AddParagraph({
+		Title = "Zones",
+		Content = "<> Runs all eggs in selected zone\n$ Waits at each egg then moves next\n> Manual click/touch cancels path",
+	})
+	local Sec = ZonesTab:AddSection({ Title = "Zone Runner", Icon = "map" })
+	for zi = 1, 7 do
+		local zoneNum = zi
+		Sec:AddButton({
+			Text = "Run Zone " .. zoneNum,
+			Callback = function()
+				if runZone(zoneNum) then
+					notify("Zone " .. zoneNum, "Running", true)
+				else
+					notify("Zone " .. zoneNum, "Empty or missing", false)
+				end
+			end,
+		})
+	end
+	Sec:AddButton({
+		Text = "Stop Run",
+		Callback = function()
+			stopAutoRun()
+			notify("Zones", "Stopped", true)
+		end,
+	})
+	local Scan = ZonesTab:AddSection({ Title = "Scan", Icon = "search" })
+	Scan:AddButton({
+		Text = "Scan All Zones",
+		Callback = function()
+			local lines = {}
+			for i = 1, 7 do
+				table.insert(lines, "Z" .. i .. "=" .. #getZoneEggs(i))
+			end
+			notify("Zones", table.concat(lines, " · "), true)
+		end,
+	})
+end
+
+do
+	local Sec = ServerTab:AddSection({ Title = "Links", Icon = "link" })
+	Sec:AddButton({
+		Text = "Copy Discord Invite",
+		Callback = function()
+			pcall(function()
+				if setclipboard then setclipboard(DISCORD)
+				elseif toclipboard then toclipboard(DISCORD) end
+			end)
+			notify("Copied", "Discord", true)
+		end,
+	})
+	Sec:AddButton({
+		Text = "Copy YouTube Channel",
+		Callback = function()
+			pcall(function()
+				if setclipboard then setclipboard(YOUTUBE)
+				elseif toclipboard then toclipboard(YOUTUBE) end
+			end)
+			notify("Copied", "YouTube", true)
+		end,
+	})
+	local Sess = ServerTab:AddSection({ Title = "Session", Icon = "server" })
+	Sess:AddButton({
+		Text = "Rejoin",
+		Callback = function()
+			pcall(function()
+				TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+			end)
+		end,
+	})
+	Sess:AddButton({
+		Text = "Server Hop",
+		Callback = function()
+			pcall(function()
+				local HttpService = game:GetService("HttpService")
+				local req = (syn and syn.request) or (http and http.request) or request or http_request
+				if not req then
+					notify("Server Hop", "Request not supported", false)
+					return
+				end
+				local res = req({
+					Url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100",
+					Method = "GET",
+				})
+				local body = res and (res.Body or res.body)
+				local data = body and HttpService:JSONDecode(body)
+				if data and data.data then
+					for _, s in ipairs(data.data) do
+						if s.id ~= game.JobId and s.playing < s.maxPlayers then
+							TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
+							return
+						end
+					end
+				end
+				notify("Server Hop", "No server found", false)
+			end)
+		end,
+	})
+end
+
+do
+	local Sec = CreditsTab:AddSection({ Title = "Credits", Icon = "star" })
+	Sec:AddParagraph({
+		Title = "KHUB",
+		Content = "<> Made by Kyiel Pambid\n$ Owner of KHUB\n> Thanks for using the script",
+	})
+	Sec:AddButton({
+		Text = "Copy Discord",
+		Callback = function()
+			pcall(function() if setclipboard then setclipboard(DISCORD) end end)
+			notify("Copied", "Discord", true)
+		end,
+	})
+	Sec:AddButton({
+		Text = "Copy YouTube",
+		Callback = function()
+			pcall(function() if setclipboard then setclipboard(YOUTUBE) end end)
+			notify("Copied", "YouTube", true)
+		end,
+	})
+end
+
+pcall(function()
+	Window:SelectTab(HomeTab)
+end)
+
+print("[KHUB] Steal a Balut loaded · Toggle: RightShift")
+notify("KHUB · Steal a Balut", "Loaded", true)
