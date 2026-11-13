@@ -1,0 +1,57 @@
+--[[
+  Khub Obfuscator � Protected Output
+  Tier: 10 layers
+  Seed: ea8bf9fe65a4
+  Built: 2026-11-13T00:41:44.672Z
+]]
+
+local __chunks = {"/7LxIG0p4lc9JCEgN66pfrhpIp/2+KFCnDdWccjrXuTrtbY2fCH7QjdwdHQwp6crsm4ly/ymqkfMPAYkm7tR6L+yvWUvI6RMLA==","SMtNHvw/CKRbW0a0mQT8oawnJOUdH7gAn8W1Tha3aMlcmAAI7DcZvwAKTeHMXf31oCRz4RoauFWak7RPGbQ7zQydX1u7Zx2yQA==","4vXMQ+21QVHC8r7YwKSJLdhKTx5sBncc+YNHV1vFYDKkpYpV/eoHF8H15NGT+o592BhMT24KcUj6hUABAJNkY6mlgVCpv1NB0A==","dv0cEc87Ce4lV71fcU2GxFby2i2OWDXWEC2vHveoCBMwqV8F32Ib/nVWsFkkHonOAvXaLdJfYNUQdvVErKZcRGGtDlWPZhr0Zg==","3+U+DJE+pSOIrI+EdEPSEyZjw7skMefS3q78LofJRQib5XpIgDazMI/9gociHtQRKzCS53cx64eA/6l+0pdAXJmxekjSYrc3ng==","POstlPfGKnKXg9mVXjb4WVdoqKA8OqivujNK+XhnKhV+6D+EvZk6Z8uFj5ZeYPtYUDn5pmhor6e6O0uuIjUkRHzqboTjy2xh0A==","mctzDbWC55MIZ6u1Pce1ZPhMb3DoKhrQUiryWRtLmsbSzDUb/tWkg1owquc6yOcw/hw7e+t9GNtWLv1dFR/NlNKeP07/iqXVSw==","0SNdOZGHXfsMAVbCrBj4oA07Y8P1KyaUH6a9J6K+7ImUd00t0thKvFxXA8eqHaz0CT5nwflxe8VKr7J99Le8ipp1TC7T3hy/HQ==","TlAA3n06uc3lSRymQ+8hGqbAdzN5IWjmIb3gU/LdY5lZU0aYNmH/3uVNSaBC6CIao8UnZilwbuV6vLcC8t5lzg5UQZo/Y/uJ8g==","fWYFRqiLNWrNcseynFfnmDrKOBDYQKdEs4HA3hBxb8skO1Y379EnK/Jpw7CWDfSBJIIDW78ih1yTkYrISyYNtTcuUWqlkCFiqDPtvppB3pQtjQ8d1yunfoKd0c5aIj2Qfy9MfqORJS6vesH5q0T9mTD5WXqTFM0hypnK204ic805JUIlp586L7tV0qKfZPCFfI9aSYEQnBHv2tXbWSVi2SllRH2w0WYsy1/OobxHuoM12hAU3EjG"}
+local __keys = {"8dd785551f47c2750e45404504979f1c800c17aec4c09974aa056013ff8d66d0","3aae396b8e512886626b7f84fb3ccf97954140872b2e8f33f9f7d6782e800df9","9090b8369fdb6173f2c687e0f69cbf19ba2e7a2b5e3f147fcdb7746463f05654","04986864bd5529cc4433856f452cb1fd33c1ef1db66d05e7724ecc27959f6d22","ad804a79e3508501bcc9b7e1417ab7221e56a2831450d2e2b89c991fe5f12338","4e8e59e185a80a50f2e1b8f06e01cf61345fcdc35f0dca9e8c0a7fcd41011226","ebae0778c7ecc7b169549f830ffe81079d7f0a49df4e7ee9614cc46b2d7efcf1","a346294ce3e97dd93f6265f79b2c99c23d5d56f7cc1243f27b968a1e90868fbd","3c3574ab0f5499efd07928c471da117ec5f011564c165c87198cd13793eb07af","504b250dc0fe574a811da6d6ef2395f154ad323df560ef2bc0f5a5ba2a5107bf"}
+local __count = #__chunks
+local function __dec(b, khex)
+  local alpha="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  local kk={}
+  for i=1,#khex,2 do kk[#kk+1]=tonumber(khex:sub(i,i+1),16) end
+  local bin={}
+  local i=1
+  while i<=#b do
+    local c1=alpha:find(b:sub(i,i),1,true) or 1
+    local c2=alpha:find(b:sub(i+1,i+1),1,true) or 1
+    local c3=alpha:find(b:sub(i+2,i+2),1,true) or 1
+    local c4=alpha:find(b:sub(i+3,i+3),1,true) or 1
+    local n=(c1-1)*262144+(c2-1)*4096+(c3-1)*64+(c4-1)
+    bin[#bin+1]=math.floor(n/65536)%256
+    if b:sub(i+2,i+2)~="=" then bin[#bin+1]=math.floor(n/256)%256 end
+    if b:sub(i+3,i+3)~="=" then bin[#bin+1]=n%256 end
+    i=i+4
+  end
+  local r={}
+  local xb
+  if bit32 and bit32.bxor then xb=bit32.bxor
+  else
+    xb=function(a,c)
+      local res,bit=0,1
+      while a>0 or c>0 do
+        local ab,ac=a%2,c%2
+        if ab~=ac then res=res+bit end
+        a=math.floor(a/2); c=math.floor(c/2); bit=bit*2
+      end
+      return res
+    end
+  end
+  for j=1,#bin do
+    local kb=kk[((j-1)%#kk)+1] or 0
+    r[j]=string.char(xb(bin[j],kb))
+  end
+  return table.concat(r)
+end
+local __fn = load or loadstring
+if not __fn then error("[Khub] no loadstring") end
+local __result
+for __i = 1, __count do
+  local __plain = __dec(__chunks[__i], __keys[__i])
+  local __chunk, __err = __fn(__plain)
+  if not __chunk then error("[Khub] L"..__i.." "..tostring(__err)) end
+  __result = __chunk()
+end
+return __result
